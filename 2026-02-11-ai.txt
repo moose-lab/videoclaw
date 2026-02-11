@@ -1,0 +1,1805 @@
+
+           Claude Code v2.1.37
+ ▐▛███▜▌   Opus 4.6 · Claude Pro
+▝▜█████▛▘  /Volumes/MindDockSSD/projects/opensource
+  ▘▘ ▝▝    Opus 4.6 is here · Most capable for ambitious work
+
+❯ /usage 
+  ⎿  Status dialog dismissed
+
+❯ 你是一名资深AI系统架构师和开源项目创始人。                                
+                                                                            
+  我要设计一个开源项目，名字叫 VideoClaw。                                  
+                                                                            
+  项目目标：                                                                
+  构建一个可编排的 AI 视频生成自动化系统。                                  
+  不是做视频模型本身，而是做视频生成的“Agent操作系统”。                     
+                                                                            
+  核心理念：                                                                
+  - 多模型接入（Sora API / Runway / AnimateDiff / CogVideo / SD）           
+  - 脚本自动生成                                                            
+  - 分镜拆解                                                                
+  - 自动视频拼接                                                            
+  - 字幕 / 音乐 / 配音生成                                                  
+  - 自动发布到不同平台                                                      
+                                                                            
+  我希望这个项目：                                                          
+  1. 架构先进（类 OpenClaw(https://github.com/openclaw/openclaw) 的 Agent   
+  架构）                                                                    
+  2. 可插拔模型设计                                                         
+  3. 可扩展行业应用                                                         
+  4. 支持本地推理 + 云端API混合模式                                         
+  5. 工程结构清晰，适合长期迭代                                             
+                                                                            
+  请帮我：                                                                  
+  1. 设计整体系统架构图（模块拆解）                                         
+  2. 定义核心模块职责                                                       
+  3. 设计目录结构                                                           
+  4. 给出技术栈建议（Python / Node / FastAPI / Celery等）                   
+  5. 设计一个可扩展的模型适配接口规范                                       
+  6. 提出开源爆点策略（如何让它在GitHub火）                                 
+                                                                            
+  要求：                                                                    
+  不要写完整代码。                                                          
+  先做架构设计。                                                            
+  用工程思维回答。                                                          
+                                                                            
+
+⏺ Let me first research the OpenClaw project to understand the Agent
+  architecture pattern you referenced, then design the full architecture.
+
+⏺ Fetch(https://github.com/openclaw/openclaw)
+  ⎿  Received 828.6KB (200 OK)
+  ⎿  Running PostToolUse hooks…
+
+⏺ Web Search("OpenClaw github agent architecture orchestration system 2025
+            2026")
+  ⎿  Did 1 search in 33s
+  ⎿  Running PostToolUse hooks…
+
+⏺ 研究完成。OpenClaw 的核心思想是 分离传输/路由/认知三层，用 WebSocket
+  控制平面统一协调。164k stars 的爆发力来自"Agent身份+记忆+自我迭代"的完整框架。
+
+  下面是 VideoClaw 的完整架构设计。
+
+  ---
+  VideoClaw — 架构设计文档
+
+  一、系统定位
+
+  VideoClaw ≠ 视频生成模型
+  VideoClaw = 视频生成的 Agent 操作系统
+
+  类比：
+    OpenClaw 之于 聊天Agent = VideoClaw 之于 视频生产Agent
+    Kubernetes 之于 容器    = VideoClaw 之于 视频生成任务
+
+  二、整体系统架构
+
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                      Interface Layer                            │
+  │  ┌─────────┐  ┌──────────┐  ┌──────────┐  ┌────────────────┐   │
+  │  │   CLI   │  │  Web UI  │  │ REST API │  │  Python SDK    │   │
+  │  └────┬────┘  └────┬─────┘  └────┬─────┘  └───────┬────────┘   │
+  └───────┼────────────┼────────────┼──────────────────┼────────────┘
+          │            │            │                  │
+          ▼            ▼            ▼                  ▼
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                     Gateway (FastAPI)                            │
+  │  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────┐  │
+  │  │ Project Mgr  │  │ Auth/Config  │  │  WebSocket EventBus   │  │
+  │  └──────┬───────┘  └──────────────┘  └───────────┬───────────┘  │
+  └─────────┼────────────────────────────────────────┼──────────────┘
+            │                                        │
+            ▼                                        ▼
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                     Agent Runtime                                │
+  │                                                                  │
+  │  ┌────────────┐   ┌──────────────┐   ┌────────────────────┐     │
+  │  │  Director   │──▶│  Planner     │──▶│  DAG Executor      │     │
+  │  │  (LLM Brain)│   │ (Task Graph) │   │  (Pipeline Engine) │     │
+  │  └────────────┘   └──────────────┘   └─────────┬──────────┘     │
+  │                                                  │               │
+  │  ┌──────────────────────────────────────────────┐│               │
+  │  │              State Store                      ││               │
+  │  │  (Project State / Checkpoints / Resume)       ││               │
+  │  └──────────────────────────────────────────────┘│               │
+  └──────────────────────────────────────────────────┼───────────────┘
+                                                     │
+            ┌──────────────┬──────────────┬──────────┼──────┐
+            ▼              ▼              ▼          ▼      ▼
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                    Generation Layer (Workers)                     │
+  │                                                                  │
+  │  ┌───────────┐ ┌───────────┐ ┌──────────┐ ┌──────────────────┐  │
+  │  │  Script   │ │ Storyboard│ │  Video   │ │     Audio        │  │
+  │  │ Generator │ │ Decomposer│ │ Generator│ │  ┌─────┐┌──────┐ │  │
+  │  │  (LLM)   │ │  (LLM+CV) │ │ (Models) │ │  │Music││Voice │ │  │
+  │  └───────────┘ └───────────┘ └──────────┘ │  └─────┘└──────┘ │  │
+  │                                            └──────────────────┘  │
+  │  ┌───────────────┐  ┌──────────────────────────────────────┐     │
+  │  │ Post-Processor│  │         Asset Manager                │     │
+  │  │ (FFmpeg/合成)  │  │  (素材库 / 字幕 / 转场 / 水印)       │     │
+  │  └───────────────┘  └──────────────────────────────────────┘     │
+  └──────────────────────────────────────────────────────────────────┘
+            │              │              │              │
+            ▼              ▼              ▼              ▼
+  ┌──────────────────────────────────────────────────────────────────┐
+  │                   Model Adapter Layer                             │
+  │                                                                   │
+  │  ┌────────┐ ┌────────┐ ┌───────────┐ ┌─────────┐ ┌───────────┐  │
+  │  │  Sora  │ │ Runway │ │AnimateDiff│ │CogVideo │ │ ComfyUI   │  │
+  │  │  API   │ │  API   │ │  Local    │ │  Local  │ │  Local    │  │
+  │  └────────┘ └────────┘ └───────────┘ └─────────┘ └───────────┘  │
+  │  ┌────────┐ ┌────────┐ ┌───────────┐ ┌─────────────────────┐    │
+  │  │  Kling │ │ Pika   │ │  Stable   │ │  Custom (用户自定义) │    │
+  │  │  API   │ │  API   │ │  Video    │ │                     │    │
+  │  └────────┘ └────────┘ └───────────┘ └─────────────────────┘    │
+  └──────────────────────────────────────────────────────────────────┘
+            │
+            ▼
+  ┌──────────────────────────────────────────────────────────────────┐
+  │                   Distribution Layer                              │
+  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐            │
+  │  │ YouTube  │ │  TikTok  │ │ Bilibili │ │ 小红书   │ ...        │
+  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘            │
+  └──────────────────────────────────────────────────────────────────┘
+
+  三、核心模块职责定义
+
+  1. Director（导演 Agent）
+
+  整个系统的"大脑"。接收用户意图，拆解为可执行的生产计划。
+  ┌──────────┬──────────────────────────────────────────────────┐
+  │   职责   │                       说明                       │
+  ├──────────┼──────────────────────────────────────────────────┤
+  │ 意图理解 │ 解析用户输入（一句话/脚本/参考视频）为结构化需求 │
+  ├──────────┼──────────────────────────────────────────────────┤
+  │ 生产规划 │ 调用 LLM 生成完整的视频生产方案                  │
+  ├──────────┼──────────────────────────────────────────────────┤
+  │ 模型选择 │ 根据场景、质量、成本自动选择最优模型组合         │
+  ├──────────┼──────────────────────────────────────────────────┤
+  │ 质量审查 │ 对生成结果进行自动评审，决定是否需要重试         │
+  ├──────────┼──────────────────────────────────────────────────┤
+  │ 异常处理 │ 模型失败时的降级策略和路由切换                   │
+  └──────────┴──────────────────────────────────────────────────┘
+  用户: "做一个30秒的产品介绍视频，科技风格"
+           │
+           ▼
+  Director 输出:
+    ├── 脚本: 5段文案 (LLM生成)
+    ├── 分镜: 6个镜头 (每镜头5秒)
+    ├── 风格: cyberpunk, 深蓝主色调
+    ├── 配音: 中文男声, 沉稳风格
+    ├── 配乐: 电子音乐, 120BPM
+    └── 模型分配:
+         ├── 镜头1-3: Sora API (复杂运镜)
+         ├── 镜头4-5: CogVideo (产品特写)
+         └── 镜头6: AnimateDiff (Logo动画)
+
+  2. Planner（任务规划器）
+
+  将 Director 的方案转化为 DAG（有向无环图） 任务流。
+
+             ┌─────────┐
+             │  Script  │
+             │ Generate │
+             └────┬────┘
+                  │
+             ┌────▼────┐
+             │Storyboard│
+             │ Decompose│
+             └────┬────┘
+                  │
+      ┌───────────┼───────────┐
+      ▼           ▼           ▼
+  ┌───────┐  ┌───────┐  ┌───────┐
+  │Shot 1 │  │Shot 2 │  │Shot 3 │    ◀── 并行生成
+  │ Sora  │  │Runway │  │CogVid │
+  └───┬───┘  └───┬───┘  └───┬───┘
+      │          │          │
+      └──────────┼──────────┘
+                 ▼
+           ┌───────────┐
+           │  Compose   │     ◀── 依赖所有镜头完成
+           │ (拼接+转场) │
+           └─────┬─────┘
+                 │
+       ┌─────────┼─────────┐
+       ▼         ▼         ▼
+  ┌─────────┐┌────────┐┌────────┐
+  │Subtitle ││ Music  ││ Voice  │   ◀── 并行生成
+  └────┬────┘└───┬────┘└───┬────┘
+       │         │         │
+       └─────────┼─────────┘
+                 ▼
+           ┌───────────┐
+           │   Render   │     ◀── 最终合成
+           │  (FFmpeg)  │
+           └─────┬─────┘
+                 ▼
+           ┌───────────┐
+           │  Publish   │     ◀── 多平台分发
+           └───────────┘
+
+  关键设计：每个节点都是幂等的、可重试的、可检查点恢复的。
+
+  3. DAG Executor（流水线引擎）
+  ┌──────────┬─────────────────────────────────────────┐
+  │   特性   │                  说明                   │
+  ├──────────┼─────────────────────────────────────────┤
+  │ 并行调度 │ 无依赖的节点自动并行执行                │
+  ├──────────┼─────────────────────────────────────────┤
+  │ 断点续跑 │ 任何节点失败后可从该点恢复              │
+  ├──────────┼─────────────────────────────────────────┤
+  │ 资源感知 │ 本地 GPU 忙时自动路由到云端 API         │
+  ├──────────┼─────────────────────────────────────────┤
+  │ 回调通知 │ 每个节点完成后触发事件（WebSocket推送） │
+  ├──────────┼─────────────────────────────────────────┤
+  │ 超时控制 │ 每个节点有独立超时和重试策略            │
+  └──────────┴─────────────────────────────────────────┘
+  4. Model Adapter Layer（模型适配层）
+
+  这是系统的核心可扩展点。 详见第五节接口规范。
+
+  5. State Store（状态存储）
+
+  project_abc123/
+  ├── manifest.json          # 项目元数据
+  ├── state.json             # DAG执行状态快照
+  ├── script.json            # 生成的脚本
+  ├── storyboard/
+  │   ├── shot_001.json      # 镜头描述
+  │   ├── shot_001.png       # 参考图（可选）
+  │   └── shot_002.json
+  ├── assets/
+  │   ├── shot_001.mp4       # 生成的视频片段
+  │   ├── shot_002.mp4
+  │   ├── voice.wav          # 配音
+  │   ├── music.mp3          # 配乐
+  │   └── subtitles.srt      # 字幕
+  ├── output/
+  │   └── final.mp4          # 最终输出
+  └── logs/
+      └── execution.jsonl    # 执行日志（可审计）
+
+  6. Distribution Layer（分发层）
+
+  每个平台是一个 Publisher 插件，处理：
+  - 视频格式/分辨率转码（竖版/横版）
+  - 平台特定元数据（标题、标签、描述）
+  - API 上传 + 发布调度
+  - 发布状态追踪
+
+  四、目录结构
+
+  videoclaw/
+  ├── README.md
+  ├── LICENSE                          # Apache 2.0
+  ├── pyproject.toml                   # 项目配置 (uv/poetry)
+  ├── Makefile                         # 常用命令快捷入口
+  ├── docker-compose.yml               # 一键启动
+  ├── .env.example                     # 环境变量模板
+  │
+  ├── src/
+  │   └── videoclaw/
+  │       ├── __init__.py
+  │       ├── cli.py                   # CLI入口 (Typer)
+  │       │
+  │       ├── core/                    # ── 核心引擎 ──
+  │       │   ├── __init__.py
+  │       │   ├── director.py          # 导演Agent（意图→方案）
+  │       │   ├── planner.py           # 任务规划（方案→DAG）
+  │       │   ├── executor.py          # DAG执行引擎
+  │       │   ├── state.py             # 项目状态管理
+  │       │   ├── scheduler.py         # 资源调度（本地/云端）
+  │       │   └── events.py            # 事件总线
+  │       │
+  │       ├── agents/                  # ── Agent 定义 ──
+  │       │   ├── __init__.py
+  │       │   ├── base.py              # Agent基类
+  │       │   ├── script_agent.py      # 脚本生成Agent
+  │       │   ├── storyboard_agent.py  # 分镜Agent
+  │       │   ├── review_agent.py      # 质量审查Agent
+  │       │   └── publish_agent.py     # 发布Agent
+  │       │
+  │       ├── models/                  # ── 模型适配层 ──
+  │       │   ├── __init__.py
+  │       │   ├── registry.py          # 模型注册中心
+  │       │   ├── protocol.py          # 适配器协议定义
+  │       │   ├── router.py            # 智能路由（成本/质量/速度）
+  │       │   ├── adapters/
+  │       │   │   ├── __init__.py
+  │       │   │   ├── sora.py          # OpenAI Sora
+  │       │   │   ├── runway.py        # Runway Gen-3
+  │       │   │   ├── kling.py         # 快手可灵
+  │       │   │   ├── cogvideo.py      # CogVideoX (本地)
+  │       │   │   ├── animatediff.py   # AnimateDiff (本地)
+  │       │   │   ├── comfyui.py       # ComfyUI工作流
+  │       │   │   └── stable_video.py  # Stability AI
+  │       │   └── llm/
+  │       │       ├── __init__.py
+  │       │       ├── openai.py        # GPT/o系列
+  │       │       ├── anthropic.py     # Claude
+  │       │       └── local.py         # Ollama/vLLM
+  │       │
+  │       ├── generation/              # ── 生成模块 ──
+  │       │   ├── __init__.py
+  │       │   ├── script.py            # 脚本生成
+  │       │   ├── storyboard.py        # 分镜拆解
+  │       │   ├── video.py             # 视频生成调度
+  │       │   ├── audio/
+  │       │   │   ├── __init__.py
+  │       │   │   ├── tts.py           # 语音合成
+  │       │   │   ├── music.py         # 音乐生成
+  │       │   │   └── sfx.py           # 音效
+  │       │   ├── subtitle.py          # 字幕生成
+  │       │   └── compose.py           # 视频合成（FFmpeg封装）
+  │       │
+  │       ├── publishers/              # ── 分发模块 ──
+  │       │   ├── __init__.py
+  │       │   ├── base.py              # Publisher基类
+  │       │   ├── youtube.py
+  │       │   ├── tiktok.py
+  │       │   ├── bilibili.py
+  │       │   ├── xiaohongshu.py
+  │       │   └── douyin.py
+  │       │
+  │       ├── server/                  # ── API服务 ──
+  │       │   ├── __init__.py
+  │       │   ├── app.py               # FastAPI应用
+  │       │   ├── routes/
+  │       │   │   ├── projects.py      # 项目CRUD
+  │       │   │   ├── generation.py    # 生成任务
+  │       │   │   └── ws.py            # WebSocket实时推送
+  │       │   └── middleware.py
+  │       │
+  │       ├── storage/                 # ── 存储抽象 ──
+  │       │   ├── __init__.py
+  │       │   ├── local.py             # 本地文件系统
+  │       │   ├── s3.py                # S3兼容存储
+  │       │   └── project_store.py     # 项目状态持久化
+  │       │
+  │       └── utils/                   # ── 工具 ──
+  │           ├── __init__.py
+  │           ├── ffmpeg.py            # FFmpeg操作封装
+  │           ├── media.py             # 媒体文件处理
+  │           └── templates.py         # Prompt模板管理
+  │
+  ├── web/                             # ── 前端 ──
+  │   ├── package.json
+  │   ├── src/
+  │   │   ├── app/                     # Next.js App Router
+  │   │   ├── components/
+  │   │   │   ├── Timeline.tsx         # 时间线编辑器
+  │   │   │   ├── StoryboardView.tsx   # 分镜板可视化
+  │   │   │   ├── VideoPreview.tsx     # 视频预览
+  │   │   │   └── DAGViewer.tsx        # 任务流可视化
+  │   │   └── lib/
+  │   │       └── api.ts               # API客户端
+  │   └── public/
+  │
+  ├── plugins/                         # ── 社区插件示例 ──
+  │   ├── README.md
+  │   └── example_adapter/
+  │       └── my_model_adapter.py
+  │
+  ├── templates/                       # ── 视频模板 ──
+  │   ├── product_intro.yaml           # 产品介绍模板
+  │   ├── news_summary.yaml            # 新闻摘要模板
+  │   └── tutorial.yaml                # 教程视频模板
+  │
+  ├── tests/
+  │   ├── unit/
+  │   ├── integration/
+  │   └── fixtures/
+  │
+  └── docs/
+      ├── architecture.md
+      ├── adapter-guide.md             # 如何写模型适配器
+      ├── template-guide.md            # 如何写视频模板
+      └── api-reference.md
+
+  五、模型适配接口规范
+
+  这是整个系统的可扩展性基石。采用
+  Protocol（结构子类型）而非抽象基类，降低接入门槛。
+
+  # src/videoclaw/models/protocol.py
+
+  from typing import Protocol, AsyncIterator, runtime_checkable
+  from dataclasses import dataclass
+  from enum import Enum
+
+  class ModelCapability(Enum):
+      TEXT_TO_VIDEO = "t2v"
+      IMAGE_TO_VIDEO = "i2v"
+      VIDEO_TO_VIDEO = "v2v"
+      TEXT_TO_IMAGE = "t2i"
+      INPAINTING = "inpaint"
+      UPSCALE = "upscale"
+
+  class ExecutionMode(Enum):
+      LOCAL = "local"       # 本地GPU推理
+      CLOUD = "cloud"       # 云端API调用
+      HYBRID = "hybrid"     # 自动选择
+
+  @dataclass
+  class GenerationRequest:
+      prompt: str
+      negative_prompt: str = ""
+      width: int = 1280
+      height: int = 720
+      duration_seconds: float = 5.0
+      fps: int = 24
+      seed: int | None = None
+      reference_image: bytes | None = None    # i2v场景
+      reference_video: bytes | None = None    # v2v场景
+      style_preset: str | None = None
+      extra: dict = field(default_factory=dict)  # 模型特定参数
+
+  @dataclass
+  class GenerationResult:
+      video_data: bytes                    # 视频二进制
+      format: str = "mp4"
+      duration_seconds: float = 0.0
+      metadata: dict = field(default_factory=dict)
+      cost_usd: float = 0.0               # 本次调用成本
+      model_id: str = ""
+
+  @dataclass
+  class ProgressEvent:
+      progress: float          # 0.0 ~ 1.0
+      stage: str               # "queued" | "generating" | "encoding"
+      preview_frame: bytes | None = None   # 中间预览帧
+
+  @runtime_checkable
+  class VideoModelAdapter(Protocol):
+      """任何视频模型只需实现这个协议即可接入 VideoClaw"""
+
+      @property
+      def model_id(self) -> str:
+          """唯一标识符，如 'sora-v1', 'cogvideo-x-5b'"""
+          ...
+
+      @property
+      def capabilities(self) -> list[ModelCapability]:
+          """声明支持的能力"""
+          ...
+
+      @property
+      def execution_mode(self) -> ExecutionMode:
+          """声明执行模式"""
+          ...
+
+      async def generate(self, request: GenerationRequest) -> GenerationResult:
+          """核心生成方法"""
+          ...
+
+      async def generate_stream(
+          self, request: GenerationRequest
+      ) -> AsyncIterator[ProgressEvent | GenerationResult]:
+          """流式生成（支持进度回调）"""
+          ...
+
+      async def estimate_cost(self, request: GenerationRequest) -> float:
+          """成本预估（USD），用于智能路由决策"""
+          ...
+
+      async def health_check(self) -> bool:
+          """健康检查，用于故障转移"""
+          ...
+
+  适配器注册（声明式，零配置发现）：
+
+  # 适配器元数据 (adapter.yaml)
+  id: sora-v1
+  name: OpenAI Sora
+  version: "1.0"
+  capabilities: [t2v, i2v]
+  execution_mode: cloud
+  max_duration: 20
+  max_resolution: [1920, 1080]
+  cost_per_second: 0.05
+  auth:
+    type: api_key
+    env_var: OPENAI_API_KEY
+
+  # 适配器注册 - 两种方式
+
+  # 方式1: 装饰器注册
+  @register_adapter
+  class SoraAdapter:
+      ...
+
+  # 方式2: Entry Point 自动发现 (pyproject.toml)
+  [project.entry-points."videoclaw.adapters"]
+  sora = "videoclaw.models.adapters.sora:SoraAdapter"
+
+  智能路由决策矩阵：
+
+  Router 决策因子:
+    ┌──────────┬──────────┬──────────┬──────────┐
+    │  质量权重 │  速度权重 │  成本权重 │  可用性   │
+    ├──────────┼──────────┼──────────┼──────────┤
+    │  Sora    │ 9/10     │  3/10    │  8/10    │  ◀ 高质量首选
+    │  Runway  │ 8/10     │  5/10    │  7/10    │
+    │  Kling   │ 7/10     │  7/10    │  6/10    │
+    │  CogVideo│ 6/10     │  8/10    │  10/10   │  ◀ 本地首选
+    └──────────┴──────────┴──────────┴──────────┘
+
+    用户策略: "quality_first" | "cost_first" | "speed_first" | "auto"
+
+  六、技术栈建议
+  层级: 语言
+  技术: Python 3.12+
+  理由: AI生态核心，异步支持成熟
+  ────────────────────────────────────────
+  层级: 包管理
+  技术: uv
+  理由: 极快，已成为Python社区新标准
+  ────────────────────────────────────────
+  层级: API框架
+  技术: FastAPI
+  理由: 异步原生、自动文档、WebSocket支持
+  ────────────────────────────────────────
+  层级: 任务引擎
+  技术: 自研DAG + asyncio
+  理由: 轻量启动，不依赖Celery/Redis，降低入门门槛
+  ────────────────────────────────────────
+  层级: 重度任务
+  技术: Celery + Redis（可选）
+  理由: 生产环境横向扩展时启用
+  ────────────────────────────────────────
+  层级: 数据库
+  技术: SQLite（默认）→ PostgreSQL
+  理由: 单机零配置，规模化可切换
+  ────────────────────────────────────────
+  层级: 视频处理
+  技术: FFmpeg (via python-ffmpeg)
+  理由: 工业标准，无可替代
+  ────────────────────────────────────────
+  层级: 前端
+  技术: Next.js 15 + Tailwind + shadcn/ui
+  理由: 现代前端标配
+  ────────────────────────────────────────
+  层级: 实时通信
+  技术: WebSocket (FastAPI native)
+  理由: 生成进度实时推送
+  ────────────────────────────────────────
+  层级: 容器化
+  技术: Docker Compose
+  理由: 一键启动所有依赖
+  ────────────────────────────────────────
+  层级: 本地推理
+  技术: ComfyUI API / diffusers
+  理由: 复用成熟的本地推理生态
+  ────────────────────────────────────────
+  层级: LLM接入
+  技术: LiteLLM
+  理由: 一个接口兼容100+模型
+  ────────────────────────────────────────
+  层级: 配置
+  技术: Pydantic Settings + YAML
+  理由: 类型安全 + 人类可读
+  为什么不用 Celery 做核心？
+
+  Celery 适合: 独立、同构的任务队列
+  VideoClaw 需要: DAG编排、条件分支、断点续跑、资源感知路由
+
+  自研轻量DAG引擎 + asyncio 提供:
+    ✓ 零外部依赖启动 (pip install videoclaw && videoclaw run)
+    ✓ DAG原生支持（并行/串行/条件）
+    ✓ 检查点恢复
+    ✓ 进程内调度（开发）+ 分布式调度（生产）可切换
+
+  七、开源爆点策略
+
+  核心原则：降低体验门槛，放大传播势能
+
+  1. "一句话生成视频"——30秒体验闭环
+
+  pip install videoclaw
+  export OPENAI_API_KEY=sk-...
+  videoclaw generate "一只柯基在海滩上奔跑，慢动作，电影质感"
+  # → 30秒后输出 output.mp4
+
+  这是 star 的第一驱动力。用户在 README 看到就想试。
+
+  2. 模板市场（Template Gallery）——社区飞轮
+
+  videoclaw template list
+  videoclaw template use product-intro --topic "我的SaaS产品"
+
+  预置模板：产品介绍 / 新闻播报 / 短剧 / 教程 / Vlog /
+  带货。社区可贡献模板，形成 Awesome-VideoClaw-Templates 生态。
+
+  3. 可视化 DAG——"看得见"的工程力
+
+  Web UI 中展示任务 DAG
+  实时执行状态，每个节点显示进度、预览帧、耗时、成本。这种可视化截图天生适合
+  Twitter/即刻传播。
+
+  4. 成本对比表——击中痛点
+
+  在 README 放一张表：
+
+  同一个30秒视频:
+    纯 Sora API:        $2.50,  等待 3 分钟
+    VideoClaw 混合路由:  $0.80,  等待 1.5 分钟 (简单镜头用本地模型)
+    VideoClaw 全本地:    $0.00,  等待 5 分钟
+
+  5. 行业模板——垂直渗透
+  ┌────────┬──────────────┬──────────────────────┐
+  │  行业  │     模板     │         钩子         │
+  ├────────┼──────────────┼──────────────────────┤
+  │ 电商   │ 产品展示视频 │ 输入商品链接自动生成 │
+  ├────────┼──────────────┼──────────────────────┤
+  │ 自媒体 │ 新闻摘要视频 │ 输入RSS自动日更      │
+  ├────────┼──────────────┼──────────────────────┤
+  │ 教育   │ 课件转视频   │ 输入PPT/PDF          │
+  ├────────┼──────────────┼──────────────────────┤
+  │ 房产   │ 楼盘宣传片   │ 输入户型图           │
+  ├────────┼──────────────┼──────────────────────┤
+  │ 游戏   │ 预告片生成   │ 输入游戏截图         │
+  └────────┴──────────────┴──────────────────────┘
+  6. 发布时机和传播渠道
+
+  Phase 1 (Week 1-2):  核心引擎 + CLI + Sora/CogVideo两个适配器
+                        → 发 Hacker News "Show HN"
+  Phase 2 (Week 3-4):  Web UI + 3个模板
+                        → 发 Twitter/X demo视频 + Reddit r/LocalLLaMA
+  Phase 3 (Month 2):   模板市场 + 5个适配器
+                        → ProductHunt Launch
+  Phase 4 (Month 3):   插件SDK + 社区适配器
+                        → 开发者博客 + YouTube教程
+
+  7. 命名和品牌——VideoClaw 很好
+
+  - "Claw" 暗示抓取、掌控，与 OpenClaw 形成认知关联
+  - 容易记忆，搜索唯一性好
+  - Logo 建议：一个机械爪夹着胶卷/视频图标
+
+  ---
+  八、关键设计决策总结
+  ┌────────────┬────────────────────┬────────────────────────────────────┐
+  │    决策    │        选择        │                理由                │
+  ├────────────┼────────────────────┼────────────────────────────────────┤
+  │ 架构模式   │ Agent + DAG        │ 比纯流水线灵活，比纯Agent可控      │
+  ├────────────┼────────────────────┼────────────────────────────────────┤
+  │ 模型接入   │ Protocol 而非 ABC  │ 鸭子类型，第三方接入零侵入         │
+  ├────────────┼────────────────────┼────────────────────────────────────┤
+  │ 默认存储   │ SQLite + 本地文件  │ 零配置启动，pip install 即用       │
+  ├────────────┼────────────────────┼────────────────────────────────────┤
+  │ 任务引擎   │ 自研轻量DAG        │ 避免 Celery/Redis 硬依赖           │
+  ├────────────┼────────────────────┼────────────────────────────────────┤
+  │ LLM接入    │ LiteLLM            │ 一层抽象覆盖所有LLM提供商          │
+  ├────────────┼────────────────────┼────────────────────────────────────┤
+  │ 前后端通信 │ WebSocket          │ 生成类任务需要实时进度             │
+  ├────────────┼────────────────────┼────────────────────────────────────┤
+  │ 配置风格   │ YAML模板 + env变量 │ 模板人类可读，密钥走环境变量       │
+  ├────────────┼────────────────────┼────────────────────────────────────┤
+  │ 插件发现   │ Entry Points       │ Python标准机制，pip install 即注册 │
+  └────────────┴────────────────────┴────────────────────────────────────┘
+  ---
+  下一步建议：选择 Phase 1 的最小可行范围（CLI + Director + 单模型适配器 +
+  FFmpeg合成），我可以帮你落地具体代码结构和核心模块实现。
+
+  Sources:
+  - https://github.com/openclaw/openclaw
+  - https://medium.com/@gemQueenx/what-is-openclaw-open-source-ai-agent-in-2026-
+  setup-features-8e020db20e5e
+  - https://medium.com/@procoder/i-replaced-my-entire-ai-workflow-with-an-org-ch
+  art-of-7-agents-heres-the-complete-technical-eda367b91b39
+  - https://agor.live/blog/openclaw
+
+✻ Worked for 3m 20s
+
+❯ 基于上面的架构设计，请帮我进一步升级这个项目，使它具有以下爆点：          
+                                                                            
+  1. 视频生成流程可视化编排（类似 n8n / Langflow）                          
+  2. 支持“视频Agent”概念（任务拆解 + 多模型协作）                           
+  3. 支持插件市场（模型插件 / 行业插件）                                    
+  4. 内置成本计算模块（每条视频生成成本统计）                               
+  5. 可运行在Mac本地（Apple Silicon优化）                                   
+                                                                            
+  请给我：                                                                  
+  - 爆点功能清单                                                            
+  - 差异化定位                                                              
+  - 与现有视频生成工具的对比                                                
+  - 一段适合GitHub首页的项目介绍文案                                        
+                                                                            
+
+⏺ Let me first research the current competitive landscape to make the
+  positioning sharp.
+
+⏺ Web Search("AI video generation orchestration platform open source 2026
+            comparison")
+  ⎿  Did 1 search in 11s
+  ⎿  Running PostToolUse hooks…
+
+⏺ Web Search("n8n langflow visual workflow AI video automation tool 2026")
+  ⎿  Did 1 search in 8s
+  ⎿  Running PostToolUse hooks…
+
+⏺ Web Search("Dify ComfyUI video generation workflow orchestration comparison
+            2025 2026")
+  ⎿  Did 1 search in 9s
+  ⎿  Running PostToolUse hooks…
+
+⏺ Web Search("MoneyPrinterTurbo AI video generation automation github open
+            source")
+  ⎿  Did 1 search in 8s
+  ⎿  Running PostToolUse hooks…
+
+⏺ Web Search("AI video batch generation tool pipeline automation NarratoAI
+            Pixverse 2025 2026 github")
+  ⎿  Did 1 search in 8s
+  ⎿  Running PostToolUse hooks…
+
+⏺ 竞品调研完成。现在基于完整的市场理解来设计升级方案。
+
+  ---
+  VideoClaw 升级方案 — 五大爆点 + 差异化定位
+
+  一、爆点功能清单
+
+  爆点 1：可视化流程编排引擎 (ClawFlow)
+
+  不是简单拖拽，是视频领域的 n8n——每个节点都"看得见结果"。
+
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                    ClawFlow Editor                               │
+  │                                                                  │
+  │  ┌──────────┐    ┌───────────┐    ┌───────────┐                 │
+  │  │ 📝 Script │───▶│ 🎬 Split  │───▶│ 🎨 Style  │                │
+  │  │          │    │  Scenes   │    │  Transfer │                 │
+  │  │ "一只猫..."│    │ Scene 1   │    │ Ghibli   │                 │
+  │  │          │    │ Scene 2   │    │          │                 │
+  │  └──────────┘    │ Scene 3   │    └─────┬─────┘                 │
+  │                  └───────────┘      ┌───┴───┐                   │
+  │                              ┌──────┤ Route ├──────┐            │
+  │                              │      └───────┘      │            │
+  │                              ▼                     ▼            │
+  │                     ┌──────────────┐     ┌──────────────┐       │
+  │                     │ 🎥 Sora API  │     │ 🖥 CogVideo  │       │
+  │                     │ ████████░░ 80%│    │ ██████████ Done│      │
+  │                     │ [预览帧]     │     │ [预览帧]     │       │
+  │                     │ $0.12       │     │ $0.00 本地   │       │
+  │                     └──────┬───────┘     └──────┬───────┘       │
+  │                            └────────┬───────────┘               │
+  │                                     ▼                           │
+  │                            ┌──────────────┐                     │
+  │                            │ 🔗 Compose   │                     │
+  │                            │ + 转场 + 字幕 │                     │
+  │                            └──────┬───────┘                     │
+  │                         ┌─────────┼─────────┐                   │
+  │                         ▼         ▼         ▼                   │
+  │                    ┌────────┐┌────────┐┌────────┐               │
+  │                    │🎵 Music││🗣 Voice ││📝 Sub  │               │
+  │                    └────┬───┘└────┬───┘└────┬───┘               │
+  │                         └────────┼─────────┘                    │
+  │                                  ▼                              │
+  │                         ┌──────────────┐                        │
+  │                         │ 📤 Publish   │                        │
+  │                         │ YT │ TT │ BL │                        │
+  │                         └──────────────┘                        │
+  │                                                                  │
+  │  [💰 Total: $0.12]  [⏱ ETA: 2m30s]  [📊 6/8 nodes done]       │
+  └─────────────────────────────────────────────────────────────────┘
+
+  与 n8n / Langflow / ComfyUI 的关键差异：
+  ┌──────────┬────────────┬───────────┬───────────────┬───────────────────┐
+  │   特性   │    n8n     │ Langflow  │    ComfyUI    │     ClawFlow      │
+  ├──────────┼────────────┼───────────┼───────────────┼───────────────────┤
+  │ 领域     │ 通用自动化 │ LLM编排   │ 图像/视频生成 │ 视频全流程        │
+  ├──────────┼────────────┼───────────┼───────────────┼───────────────────┤
+  │ 节点粒度 │ API调用级  │ LLM组件级 │ 张量操作级    │ 视频生产任务级    │
+  ├──────────┼────────────┼───────────┼───────────────┼───────────────────┤
+  │ 实时预览 │ 无         │ 文本      │ 图像          │ 视频帧 + 音频波形 │
+  ├──────────┼────────────┼───────────┼───────────────┼───────────────────┤
+  │ 成本追踪 │ 无         │ 无        │ 无            │ 每节点实时计费    │
+  ├──────────┼────────────┼───────────┼───────────────┼───────────────────┤
+  │ 断点续跑 │ 部分       │ 无        │ 无            │ 原生支持          │
+  ├──────────┼────────────┼───────────┼───────────────┼───────────────────┤
+  │ 上手难度 │ 中         │ 低        │ 高            │ 低（预设模板）    │
+  └──────────┴────────────┴───────────┴───────────────┴───────────────────┘
+  核心节点类型（预置约30个）：
+
+  输入节点:    TextInput / ImageInput / VideoInput / URLInput / FileInput
+  AI节点:     ScriptGen / StoryboardGen / StyleTransfer / SceneDetect
+  生成节点:    Text2Video / Image2Video / Video2Video / Text2Image / Upscale
+  音频节点:    TTS / MusicGen / SFXGen / AudioMix / VoiceClone
+  后处理节点:  Compose / Transition / Subtitle / Watermark / Crop / Speed
+  条件节点:    Router / QualityGate / ABTest / Switch
+  输出节点:    FileOutput / Publish / Webhook / Preview
+
+  Flow 文件格式（YAML，版本控制友好）：
+
+  # flows/product_intro.claw.yaml
+  name: product-intro
+  version: "1.0"
+  description: "30秒产品介绍视频"
+
+  nodes:
+    script:
+      type: script_gen
+      model: claude-sonnet
+      params:
+        template: product_intro
+        duration: 30s
+        tone: professional
+
+    storyboard:
+      type: storyboard_gen
+      depends_on: [script]
+      params:
+        shots_per_scene: 2
+        aspect_ratio: "16:9"
+
+    generate_shots:
+      type: text2video
+      depends_on: [storyboard]
+      strategy:
+        mode: parallel
+        router: cost_optimized    # 自动选模型
+        fallback: cogvideo-local  # 失败降级
+
+    voice:
+      type: tts
+      depends_on: [script]
+      params:
+        provider: fish-speech
+        voice_id: professional_male_zh
+
+    music:
+      type: music_gen
+      params:
+        style: corporate
+        bpm: 110
+        duration: from_video
+
+    compose:
+      type: compose
+      depends_on: [generate_shots, voice, music]
+      params:
+        transitions: dissolve
+        subtitle: true
+
+    publish:
+      type: publish
+      depends_on: [compose]
+      targets: [youtube, bilibili]
+
+  爆点 2：Video Agent 系统
+
+  不是简单的流水线，是会思考、会纠错、会协作的 Agent 团队。
+
+  ┌─────────────────────────────────────────────────────────┐
+  │                   Agent 协作架构                          │
+  │                                                          │
+  │                  ┌─────────────┐                         │
+  │                  │  Director   │  总导演                  │
+  │                  │  Agent      │  理解意图、分配任务        │
+  │                  └──────┬──────┘                         │
+  │                         │                                │
+  │          ┌──────────────┼──────────────┐                 │
+  │          ▼              ▼              ▼                 │
+  │  ┌──────────────┐┌────────────┐┌─────────────┐          │
+  │  │  Scriptwriter ││  Cameraman ││  Producer   │          │
+  │  │  Agent       ││  Agent     ││  Agent      │          │
+  │  │              ││            ││             │          │
+  │  │ • 写脚本     ││ • 选模型   ││ • 控成本    │          │
+  │  │ • 拆分镜     ││ • 定参数   ││ • 排计划    │          │
+  │  │ • 改文案     ││ • 调构图   ││ • 管资源    │          │
+  │  └──────┬───────┘└─────┬──────┘└──────┬──────┘          │
+  │         │              │              │                  │
+  │         └──────────────┼──────────────┘                  │
+  │                        ▼                                 │
+  │              ┌──────────────────┐                        │
+  │              │   Reviewer Agent │  质检员                 │
+  │              │                  │                        │
+  │              │ • 检查连贯性      │                        │
+  │              │ • 评估质量分      │                        │
+  │              │ • 决定是否重拍    │                        │
+  │              └────────┬─────────┘                        │
+  │                       │                                  │
+  │              ┌────────▼─────────┐                        │
+  │              │ quality < 7/10?  │                        │
+  │              │   ↓ YES    ↓ NO  │                        │
+  │              │ 重新生成   发布   │                        │
+  │              └──────────────────┘                        │
+  └─────────────────────────────────────────────────────────┘
+
+  Agent 协议定义：
+
+  class VideoAgent(Protocol):
+      """视频Agent协议 — 可思考、可使用工具、可协作"""
+
+      @property
+      def role(self) -> str:
+          """角色名称 (director / scriptwriter / cameraman / ...)"""
+          ...
+
+      @property
+      def tools(self) -> list[Tool]:
+          """该Agent可使用的工具集"""
+          ...
+
+      async def think(self, context: ProjectContext) -> AgentPlan:
+          """分析当前项目状态，输出行动计划"""
+          ...
+
+      async def act(self, plan: AgentPlan) -> AgentResult:
+          """执行计划，调用工具完成任务"""
+          ...
+
+      async def review(self, result: AgentResult) -> ReviewVerdict:
+          """审查结果，决定通过/重做/修改"""
+          ...
+
+      async def collaborate(self, message: AgentMessage) -> AgentMessage:
+          """接收其他Agent的消息，回复协作"""
+          ...
+
+  Agent 自我纠错循环（关键差异点）：
+
+  Director: "生成一个日落海滩场景"
+       │
+       ▼
+  Cameraman → Sora API → 生成结果
+       │
+       ▼
+  Reviewer: "画面偏暗，色调不对，打分 5/10"
+       │
+       ▼
+  Director: "调整 prompt，增加 golden hour lighting"
+       │
+       ▼
+  Cameraman → Sora API → 新结果
+       │
+       ▼
+  Reviewer: "质量合格，打分 8/10，通过"
+
+  最大3轮重试，每轮 prompt 由 LLM 自动优化。不是盲目重试，是带推理的迭代。
+
+  爆点 3：插件市场 (ClawHub)
+
+  ┌─────────────────────────────────────────────────────────┐
+  │                    ClawHub Architecture                   │
+  │                                                          │
+  │  ┌──────────────────────────────────────────────────┐    │
+  │  │                Plugin Registry                    │    │
+  │  │                                                   │    │
+  │  │  ┌─────────────┐  ┌─────────────┐  ┌───────────┐ │   │
+  │  │  │ Model Plugin│  │Industry     │  │ Flow      │ │   │
+  │  │  │             │  │Plugin       │  │ Template  │ │   │
+  │  │  │ • sora      │  │             │  │           │ │   │
+  │  │  │ • kling     │  │ • ecommerce │  │ • product │ │   │
+  │  │  │ • wan2.2    │  │ • education │  │ • news    │ │   │
+  │  │  │ • fish-tts  │  │ • realestate│  │ • vlog    │ │   │
+  │  │  │ • suno      │  │ • gaming    │  │ • ad      │ │   │
+  │  │  └─────────────┘  └─────────────┘  └───────────┘ │   │
+  │  └──────────────────────────────────────────────────┘    │
+  │                          │                               │
+  │                          ▼                               │
+  │  ┌──────────────────────────────────────────────────┐    │
+  │  │              Plugin Manifest                      │    │
+  │  │  (clawhub.yaml — 标准化声明)                       │    │
+  │  └──────────────────────────────────────────────────┘    │
+  └─────────────────────────────────────────────────────────┘
+
+  三类插件：
+  类型: Model Plugin
+  作用: 接入新的生成模型
+  示例: claw install @videoclaw/adapter-kling
+  ────────────────────────────────────────
+  类型: Industry Plugin
+  作用: 行业专用流程+模板
+  示例: claw install @community/ecommerce-video
+  ────────────────────────────────────────
+  类型: Flow Template
+  作用: 可复用的编排流程
+  示例: claw install @community/news-digest-flow
+  插件声明规范：
+
+  # clawhub.yaml
+  name: "@videoclaw/adapter-kling"
+  version: "1.2.0"
+  type: model_adapter
+  description: "Kuaishou Kling video generation adapter"
+  author: "videoclaw-community"
+
+  capabilities:
+    - text_to_video
+    - image_to_video
+
+  requirements:
+    api_key: KLING_API_KEY
+    python: ">=3.12"
+
+  config_schema:
+    base_url:
+      type: string
+      default: "https://api.klingai.com"
+    default_quality:
+      type: enum
+      options: [draft, standard, high]
+      default: standard
+
+  cost:
+    text_to_video:
+      unit: second
+      price_usd: 0.03
+
+  # 插件操作 CLI
+  claw plugin search "video generation"
+  claw plugin install @videoclaw/adapter-kling
+  claw plugin list
+  claw plugin info @community/ecommerce-video
+  claw plugin create --type model_adapter    # 脚手架生成
+
+  行业插件示例（电商）：
+
+  # plugins/ecommerce/clawhub.yaml
+  name: "@community/ecommerce-video"
+  type: industry
+  description: "电商产品展示视频一键生成"
+
+  flows:
+    - product_showcase     # 产品展示
+    - comparison_video     # 对比测评
+    - unboxing            # 开箱视频
+
+  custom_nodes:
+    - ProductInfoExtractor  # 从商品链接提取信息
+    - PriceOverlay          # 价格标签覆盖层
+    - CTAGenerator          # Call-to-Action生成
+
+  prompts:
+    script_system: |
+      你是一个电商视频文案专家...
+
+  爆点 4：实时成本计算引擎 (CostTracker)
+
+  ┌─────────────────────────────────────────────────────────┐
+  │              Cost Dashboard (实时)                        │
+  │                                                          │
+  │  Project: "Q1产品宣传片"        Total: $1.47 / Budget $5 │
+  │  ═══════════════════════════════════════════════════════  │
+  │                                                          │
+  │  ┌─────────────┬────────┬────────┬───────┬────────┐     │
+  │  │ Task        │ Model  │ Mode   │ Cost  │ Status │     │
+  │  ├─────────────┼────────┼────────┼───────┼────────┤     │
+  │  │ Script Gen  │ Claude │ Cloud  │ $0.02 │ ✅     │     │
+  │  │ Shot 1      │ Sora   │ Cloud  │ $0.50 │ ✅     │     │
+  │  │ Shot 2      │ Sora   │ Cloud  │ $0.50 │ ✅     │     │
+  │  │ Shot 3      │ CogVid │ Local  │ $0.00 │ ✅     │     │
+  │  │ Shot 4      │ Kling  │ Cloud  │ $0.35 │ 🔄 80% │     │
+  │  │ TTS         │ Fish   │ Local  │ $0.00 │ ⏳     │     │
+  │  │ Music       │ Suno   │ Cloud  │ $0.10 │ ⏳     │     │
+  │  │ Compose     │ FFmpeg │ Local  │ $0.00 │ ⏳     │     │
+  │  └─────────────┴────────┴────────┴───────┴────────┘     │
+  │                                                          │
+  │  📊 Cost Breakdown          ⚡ Optimization Hint         │
+  │  ┌─────────────────┐       ┌─────────────────────────┐   │
+  │  │ Cloud API: $1.47│       │ Shot 1-2 用本地 Wan2.2  │   │
+  │  │ Local GPU: $0.00│       │ 可省 $0.85 (+3min)     │   │
+  │  │ (电费估算: $0.03)│       │ [一键切换本地] 按钮     │   │
+  │  └─────────────────┘       └─────────────────────────┘   │
+  │                                                          │
+  │  📈 历史趋势: 本月已生成 47个视频，总成本 $23.50          │
+  │             平均 $0.50/视频，比上月降低 32%               │
+  └─────────────────────────────────────────────────────────┘
+
+  成本计算核心逻辑：
+
+  @dataclass
+  class CostRecord:
+      task_id: str
+      model_id: str
+      execution_mode: str          # "local" | "cloud"
+      api_cost_usd: float          # API调用费用
+      compute_cost_usd: float      # 本地计算费用（GPU电费估算）
+      duration_seconds: float      # 执行耗时
+      input_tokens: int = 0        # LLM输入token
+      output_tokens: int = 0       # LLM输出token
+      video_seconds: float = 0.0   # 生成视频时长
+      retries: int = 0             # 重试次数（计入总成本）
+      timestamp: datetime
+
+  class CostTracker:
+      """每个Project内嵌的成本追踪器"""
+
+      def track(self, record: CostRecord) -> None: ...
+      def get_project_total(self) -> ProjectCostSummary: ...
+      def get_optimization_hints(self) -> list[CostHint]: ...
+      def estimate_remaining(self, pending_tasks) -> float: ...
+      def check_budget(self, budget_usd: float) -> bool: ...
+
+  差异化功能：预算守卫
+
+  # project config
+  budget:
+    max_usd: 5.00
+    strategy: pause_and_ask    # pause_and_ask | switch_to_local | hard_stop
+    alert_at: 80%              # 80%时预警
+
+  当成本接近预算时：
+  - pause_and_ask: 暂停并询问用户
+  - switch_to_local: 自动切换到本地模型继续
+  - hard_stop: 硬停止
+
+  爆点 5：Apple Silicon 原生优化
+
+  ┌─────────────────────────────────────────────────────────┐
+  │              Mac 本地推理架构                              │
+  │                                                          │
+  │  ┌────────────────────────────────────────────────┐      │
+  │  │           VideoClaw Runtime                    │      │
+  │  │                                                │      │
+  │  │  ┌──────────────────────────────────────────┐  │      │
+  │  │  │         Model Manager (本地)              │  │      │
+  │  │  │                                          │  │      │
+  │  │  │  ┌────────┐ ┌─────────┐ ┌────────────┐  │  │      │
+  │  │  │  │MLX     │ │CoreML   │ │ MPS        │  │  │      │
+  │  │  │  │Backend │ │Backend  │ │ (PyTorch)  │  │  │      │
+  │  │  │  │        │ │         │ │            │  │  │      │
+  │  │  │  │LLM推理 │ │视频模型  │ │通用GPU推理  │  │  │      │
+  │  │  │  │Wan2.2  │ │量化加速  │ │CogVideoX  │  │  │      │
+  │  │  │  └────────┘ └─────────┘ └────────────┘  │  │      │
+  │  │  └──────────────────────────────────────────┘  │      │
+  │  │                                                │      │
+  │  │  ┌──────────────────────────────────────────┐  │      │
+  │  │  │      Resource Monitor                    │  │      │
+  │  │  │  RAM: 24GB/36GB  │  GPU: 65%  │  Swap: 2G│ │      │
+  │  │  │  ──────────────────────────────────────  │  │      │
+  │  │  │  Auto-offload: Cloud when GPU > 90%      │  │      │
+  │  │  └──────────────────────────────────────────┘  │      │
+  │  └────────────────────────────────────────────────┘      │
+  │                                                          │
+  │  Supported Hardware Matrix:                              │
+  │  ┌──────────────┬────────────┬────────────────────┐      │
+  │  │ Chip         │ RAM        │ 推荐配置            │      │
+  │  ├──────────────┼────────────┼────────────────────┤      │
+  │  │ M1/M2        │ 16GB       │ 轻量模型+云端混合    │      │
+  │  │ M2 Pro/Max   │ 32GB       │ 中等模型本地优先     │      │
+  │  │ M3 Pro/Max   │ 36-48GB    │ 大模型全本地         │      │
+  │  │ M4 Pro/Max   │ 48-128GB   │ 14B模型无压力       │      │
+  │  │ M3/M4 Ultra  │ 192GB      │ 所有模型全本地       │      │
+  │  └──────────────┴────────────┴────────────────────┘      │
+  └─────────────────────────────────────────────────────────┘
+
+  自动硬件感知配置：
+
+  $ claw doctor
+
+  🔍 VideoClaw System Check
+  ─────────────────────────────────
+  Hardware:  Apple M4 Pro, 48GB Unified Memory
+  GPU:       19-core GPU, Metal 3
+  OS:        macOS 15.3
+
+  🎯 Recommended Configuration:
+     LLM:        Qwen2.5-14B via MLX (本地)
+     Video:      Wan2.2-5B via MPS (本地)
+     TTS:        Fish-Speech via MLX (本地)
+     Music:      Suno API (云端, 本地模型尚不成熟)
+     Upscale:    RealESRGAN via CoreML (本地)
+
+     预计本地可处理: 80% 任务
+     预计云端消耗:   ~$0.10/视频
+
+  ✅ FFmpeg 7.1 installed
+  ✅ Python 3.12.8
+  ✅ Metal Performance Shaders available
+  ⚠️  Missing: fish-speech model (运行 claw model pull fish-speech)
+
+  本地模型管理：
+
+  claw model list                     # 查看可用模型
+  claw model pull wan2.2-5b           # 下载模型（自动选MLX/MPS格式）
+  claw model pull cogvideo-x-5b
+  claw model pull fish-speech-1.5
+  claw model info wan2.2-5b           # 查看VRAM需求、性能数据
+  claw model bench                    # 本地跑分，生成推荐配置
+
+  ---
+  二、差异化定位
+
+                      自动化程度
+                         ▲
+                         │
+           VideoClaw ◆   │
+          (Agent编排)    │
+                         │
+       MoneyPrinter ●    │        ● Dify+ComfyUI
+        (脚本自动化)     │        (通用AI编排)
+                         │
+                         │    ● n8n
+                         │   (通用自动化)
+                         │
+           ● Runway      │
+           ● Sora        │        ● ComfyUI
+          (单模型工具)    │       (节点式生成)
+                         │
+                         └──────────────────────▶ 视频领域专精
+
+  一句话定位：
+
+  VideoClaw 是视频生成领域的 Kubernetes —— 
+  不生产容器(模型)，而是编排容器(模型)。
+
+  与 ComfyUI 的关系：互补而非竞争
+
+  ComfyUI = 单帧/单片段的精细生成控制（张量级节点）
+  VideoClaw = 完整视频的端到端生产编排（任务级节点）
+
+  VideoClaw 可以内嵌 ComfyUI 作为一个 Model Adapter。
+  用户在 VideoClaw 的一个节点里调用整个 ComfyUI workflow。
+
+  ---
+  三、竞品对比
+  维度: 定位
+  MoneyPrinterTurbo: 短视频批量生成脚本
+  ComfyUI: 图/视频生成节点编辑器
+  Dify: 通用AI应用构建
+  n8n: 通用工作流自动化
+  VideoClaw: 视频Agent操作系统
+  ────────────────────────────────────────
+  维度: 视频模型
+  MoneyPrinterTurbo: 素材拼贴为主
+  ComfyUI: 本地Diffusion
+  Dify: 通过插件
+  n8n: 通过HTTP
+  VideoClaw: 多模型原生适配
+  ────────────────────────────────────────
+  维度: AI生成
+  MoneyPrinterTurbo: 文案+素材匹配
+  ComfyUI: 单片段精细控制
+  Dify: LLM编排
+  n8n: API调用
+  VideoClaw: 全流程Agent驱动
+  ────────────────────────────────────────
+  维度: 编排方式
+  MoneyPrinterTurbo: 固定流水线
+  ComfyUI: 节点拖拽
+  Dify: 可视化工作流
+  n8n: 可视化工作流
+  VideoClaw: 可视化 + Agent自主
+  ────────────────────────────────────────
+  维度: 自我纠错
+  MoneyPrinterTurbo: ❌
+  ComfyUI: ❌
+  Dify: ❌
+  n8n: ❌
+  VideoClaw: ✅ Agent审查循环
+  ────────────────────────────────────────
+  维度: 成本追踪
+  MoneyPrinterTurbo: ❌
+  ComfyUI: ❌
+  Dify: Token统计
+  n8n: ❌
+  VideoClaw: ✅ 全链路实时计费
+  ────────────────────────────────────────
+  维度: 断点续跑
+  MoneyPrinterTurbo: ❌
+  ComfyUI: ❌
+  Dify: ❌
+  n8n: 部分
+  VideoClaw: ✅ 任意节点恢复
+  ────────────────────────────────────────
+  维度: 本地推理
+  MoneyPrinterTurbo: 弱（依赖云API）
+  ComfyUI: ✅ 强（核心优势）
+  Dify: ❌
+  n8n: ❌
+  VideoClaw: ✅ Apple Silicon优化
+  ────────────────────────────────────────
+  维度: 云端API
+  MoneyPrinterTurbo: ✅
+  ComfyUI: 弱
+  Dify: ✅
+  n8n: ✅
+  VideoClaw: ✅ 混合智能路由
+  ────────────────────────────────────────
+  维度: 插件生态
+  MoneyPrinterTurbo: ❌
+  ComfyUI: ✅ 自定义节点
+  Dify: ✅ v1.0插件
+  n8n: ✅ 400+集成
+  VideoClaw: ✅ 三类插件体系
+  ────────────────────────────────────────
+  维度: 行业模板
+  MoneyPrinterTurbo: 通用短视频
+  ComfyUI: 无
+  Dify: 通用AI
+  n8n: 通用
+  VideoClaw: ✅ 垂直行业方案
+  ────────────────────────────────────────
+  维度: 发布分发
+  MoneyPrinterTurbo: ❌
+  ComfyUI: ❌
+  Dify: ❌
+  n8n: 可配置
+  VideoClaw: ✅ 多平台原生
+  ────────────────────────────────────────
+  维度: 目标用户
+  MoneyPrinterTurbo: 短视频创作者
+  ComfyUI: 技术型AI艺术家
+  Dify: AI开发者
+  n8n: 运维/自动化
+  VideoClaw: 视频团队+开发者
+  核心竞争壁垒：没有任何现有工具同时做到"多模型编排 + Agent纠错 + 成本控制 + 
+  本地推理"四位一体。
+
+  ---
+  四、GitHub 首页项目介绍
+
+  <div align="center">
+    <img src="assets/logo.svg" width="120" />
+    <h1>VideoClaw</h1>
+    <p><strong>The Agent OS for AI Video Generation</strong></p>
+    <p>
+      Orchestrate multiple AI models. Automate entire video pipelines.<br/>
+      From script to publish — one command, one flow, zero babysitting.
+    </p>
+    <p>
+      <a href="#quick-start">Quick Start</a> •
+      <a href="#features">Features</a> •
+      <a href="https://docs.videoclaw.dev">Docs</a> •
+      <a href="https://hub.videoclaw.dev">Plugin Hub</a> •
+      <a href="#community">Community</a>
+    </p>
+    <p>
+      <img src="https://img.shields.io/badge/license-Apache%202.0-blue" />
+      <img src="https://img.shields.io/badge/python-3.12+-green" />
+      <img src="https://img.shields.io/badge/platform-macOS%20|%20Linux%20|%20Do
+  cker-lightgrey" />
+    </p>
+  </div>
+
+  ---
+
+  > **VideoClaw doesn't generate videos. It orchestrates the models that do.**
+  >
+  > Think Kubernetes for containers, but for AI video generation.
+
+  ## Why VideoClaw?
+
+  You've tried Sora, Runway, Kling, CogVideo... Each is impressive alone.
+  But making a *real* video still means:
+
+  ❌ Writing prompts for each shot manually
+  ❌ Waiting, downloading, re-uploading between tools
+  ❌ No idea what it costs until the bill arrives
+  ❌ Starting from scratch when one shot fails
+  ❌ Manually stitching, adding subtitles, music, voiceover
+
+  **VideoClaw fixes all of this.**
+
+  ## ⚡ 30-Second Demo
+
+  ```bash
+  pip install videoclaw
+  claw generate "A 30-second product intro for a smart watch, cinematic style"
+  # → Script generated (Claude) ✓
+  # → 6 shots planned ✓
+  # → Shot 1-3: Sora API ████████ Done
+  # → Shot 4-6: CogVideo local ████████ Done
+  # → Voice: Fish-Speech local ████████ Done
+  # → Music: Suno API ████████ Done
+  # → Composed & rendered ✓
+  # → output/smart_watch_intro.mp4 (Cost: $0.47)
+
+  🔥 Key Features
+
+  🎬 Visual Flow Editor (ClawFlow)
+
+  Drag-and-drop video pipeline builder with live preview at every node.
+  Not just wiring boxes — see your video take shape in real time.
+
+  🤖 Video Agents
+
+  AI agents that think, act, and self-correct. The Director plans,
+  the Cameraman generates, the Reviewer QA-checks. Bad shot? Auto-retry
+  with improved prompts. No human in the loop.
+
+  🔌 Plugin Ecosystem (ClawHub)
+
+  Model adapters, industry templates, and reusable flows.
+  claw plugin install @community/ecommerce-video — done.
+
+  💰 Built-in Cost Tracking
+
+  Real-time per-node cost display. Budget guards. Optimization hints.
+  Know exactly what every video costs — before and after.
+
+  🍎 Apple Silicon Native
+
+  MLX + MPS + CoreML backends. Run Wan2.2, CogVideo, Fish-Speech
+  locally on your Mac. Auto-fallback to cloud when needed.
+
+  🔀 Smart Model Router
+
+  One pipeline, multiple models. VideoClaw picks the best model
+  for each shot based on your strategy: quality, speed, or cost.
+
+  Same 30s video:
+    All Sora:              $2.50  ~3 min
+    VideoClaw hybrid:      $0.47  ~2 min  ← auto-routes simple shots locally
+    VideoClaw all-local:   $0.00  ~6 min
+
+  🏗️ Architecture
+
+    You ──▶ Director Agent ──▶ Planner ──▶ DAG Executor
+                │                              │
+                ▼                     ┌────────┼────────┐
+           Scriptwriter              ▼        ▼        ▼
+           Cameraman              [Sora]  [CogVideo] [Kling]
+           Reviewer                  │        │        │
+                │                    └────────┼────────┘
+                ▼                             ▼
+           Quality Gate ──▶ Compose ──▶ Publish
+
+  📦 Supported Models
+  Category: Video
+  Models: Sora, Runway Gen-3, Kling, CogVideoX, Wan2.2, AnimateDiff
+  Mode: Cloud + Local
+  ────────────────────────────────────────
+  Category: LLM
+  Models: Claude, GPT, Qwen, DeepSeek, Ollama
+  Mode: Cloud + Local
+  ────────────────────────────────────────
+  Category: TTS
+  Models: Fish-Speech, Edge-TTS, ElevenLabs, ChatTTS
+  Mode: Cloud + Local
+  ────────────────────────────────────────
+  Category: Music
+  Models: Suno, Udio, MusicGen
+  Mode: Cloud + Local
+  ────────────────────────────────────────
+  Category: Image
+  Models: DALL·E, Flux, Stable Diffusion
+  Mode: Cloud + Local
+  Adding a new model? Implement 4 methods. docs/adapter-guide.md
+
+  🚀 Quick Start
+
+  # Install
+  pip install videoclaw
+
+  # System check
+  claw doctor
+
+  # One-liner generation
+  claw generate "your video idea here"
+
+  # Or use the visual editor
+  claw ui
+  # → opens http://localhost:3000
+
+  # Use a template
+  claw template use product-intro --topic "My SaaS App"
+
+  # Pull a local model (Apple Silicon)
+  claw model pull wan2.2-5b
+  claw model pull fish-speech
+
+  🏭 Industry Templates
+  ┌───────────────┬─────────────────────┬───────────────────────┐
+  │   Template    │        Input        │        Output         │
+  ├───────────────┼─────────────────────┼───────────────────────┤
+  │ product-intro │ Product description │ 30s showcase video    │
+  ├───────────────┼─────────────────────┼───────────────────────┤
+  │ news-digest   │ RSS feed / URL      │ Daily news summary    │
+  ├───────────────┼─────────────────────┼───────────────────────┤
+  │ tutorial      │ Markdown / PDF      │ Step-by-step tutorial │
+  ├───────────────┼─────────────────────┼───────────────────────┤
+  │ ecommerce     │ Product link        │ Shopping video        │
+  ├───────────────┼─────────────────────┼───────────────────────┤
+  │ real-estate   │ Floor plan + photos │ Property tour         │
+  └───────────────┴─────────────────────┴───────────────────────┘
+  🧩 Build Your Own Plugin
+
+  claw plugin create --type model_adapter --name my-model
+  # → scaffolds plugin structure with clawhub.yaml
+
+  Contributing
+
+  We welcome contributions! See CONTRIBUTING.md.
+
+  License
+
+  Apache 2.0 — use it for anything.
+
+  ---
+
+  ## 五、总结：VideoClaw 的护城河
+
+            单模型工具                    通用编排平台
+           (Sora/Runway)                (n8n/Dify)
+                │                           │
+                │     VideoClaw 占据的       │
+                │     ◆ 唯一交叉位置 ◆       │
+                │                           │
+                ▼                           ▼
+       ┌────────────────────────────────────────┐
+       │                                        │
+       │   视频领域专精  ×  Agent智能编排        │
+       │          ×  成本可控                    │
+       │          ×  本地优先                    │
+       │                                        │
+       │   = 目前开源世界的空白地带               │
+       │                                        │
+       └────────────────────────────────────────┘
+
+  五个爆点形成闭环：**ClawFlow 降低门槛 → Agent 提升智能 → ClawHub 建设生态 →
+  CostTracker 留住用户 → Apple Silicon 扩大基数**。
+
+  下一步建议：确认这个方向后，我可以帮你落地 Phase 1 的最小可行产品——CLI +
+  Director Agent + 单模型适配器（Sora 或 CogVideo）+ FFmpeg 合成 +
+  成本追踪，大约 10 个核心文件。
+
+  Sources:
+  - [Best Open Source Video Generation Models 2026](https://www.hyperstack.cloud
+  /blog/case-study/best-open-source-video-generation-models)
+  - [MoneyPrinterTurbo GitHub](https://github.com/harry0703/MoneyPrinterTurbo)
+  - [n8n vs Langflow
+  comparison](https://hostadvice.com/blog/ai/automation/n8n-vs-langflow/)
+  - [Dify v1.0 Plugin
+  Ecosystem](https://dify.ai/blog/dify-v1-0-building-a-vibrant-plugin-ecosystem)
+  - [ComfyUI Video Generation Pipeline](https://comfyui.org/en/video-generation-
+  pipeline-features-models-optimization)
+  - [n8n AI Workflow Platform](https://n8n.io/)
+
+✻ Sautéed for 3m 31s
+
+❯ 新建项目文件夹开始第一阶段建设 
+
+⏺ 开始建设。基于已完成的架构设计，直接落地 Phase 1 核心骨架。
+
+⏺ Bash(mkdir -p /Volumes/MindDockSSD/projects/opensource/videoclaw/src/videoclaw
+      /{core,models/adapters,models/llm,generation/audio,cost,server/routes,stor
+      age,publisher…)
+  ⎿  total 0
+     drwxr-xr-x@  9 quyang  staff   288  2月 11 20:53 .
+     drwxr-xr-x  37 quyang  staff  1184  2月 11 20:53 ..
+     … +7 lines (ctrl+o to expand)
+  ⎿  Running PostToolUse hooks…
+
+⏺ 先并行创建所有基础设施文件。
+
+⏺ Write(videoclaw/pyproject.toml)
+  ⎿  Wrote 77 lines to videoclaw/pyproject.toml
+       1 [project]
+       2 name = "videoclaw"
+       3 version = "0.1.0"
+       4 description = "The Agent OS for AI Video Generation"
+       5 readme = "README.md"
+       6 license = { text = "Apache-2.0" }
+       7 requires-python = ">=3.12"
+       8 authors = [{ name = "VideoClaw Contributors" }]
+       9 keywords = ["ai", "video", "generation", "agent", "orchestration
+         "]
+      10 classifiers = [
+     … +67 lines (ctrl+o to expand)
+  ⎿  Running PostToolUse hooks…
+
+⏺ Write(videoclaw/.gitignore)
+  ⎿  Wrote 40 lines to videoclaw/.gitignore
+       1 __pycache__/
+       2 *.py[cod]
+       3 *$py.class
+       4 *.egg-info/
+       5 dist/
+       6 build/
+       7 .eggs/
+       8 *.egg
+       9 
+      10 .venv/
+     … +30 lines (ctrl+o to expand)
+  ⎿  Running PostToolUse hooks…
+
+⏺ Write(videoclaw/.env.example)
+  ⎿  Wrote 20 lines to videoclaw/.env.example
+       1 # === LLM Providers ===
+       2 OPENAI_API_KEY=sk-...
+       3 ANTHROPIC_API_KEY=sk-ant-...
+       4 
+       5 # === Video Model Providers ===
+       6 # SORA_API_KEY=          # OpenAI Sora (uses OPENAI_API_KEY)
+       7 # RUNWAY_API_KEY=
+       8 # KLING_API_KEY=
+       9 
+      10 # === Audio Providers ===
+     … +10 lines (ctrl+o to expand)
+  ⎿  Running PostToolUse hooks…
+
+⏺ Write(videoclaw/Makefile)
+  ⎿  Wrote 29 lines to videoclaw/Makefile
+       1 .PHONY: install dev test lint format run ui clean
+       2 
+       3 install:
+       4        uv pip install -e .
+       5 
+       6 dev:
+       7        uv pip install -e ".[dev,server]"
+       8 
+       9 test:
+      10        pytest tests/ -v
+     … +19 lines (ctrl+o to expand)
+  ⎿  Running PostToolUse hooks…
+
+⏺ 创建所有 __init__.py 包文件。
+
+⏺ Write(videoclaw/src/videoclaw/__init__.py)
+  ⎿  Wrote 4 lines to videoclaw/src/videoclaw/__init__.py
+      1 """VideoClaw — The Agent OS for AI Video Generation."""
+      2 
+      3 __version__ = "0.1.0"
+  ⎿  Running PostToolUse hooks…
+
+⏺ Write(videoclaw/src/videoclaw/core/__init__.py)
+  ⎿  Wrote 1 lines to videoclaw/src/videoclaw/core/__init__.py
+      1 (No content)
+  ⎿  Running PostToolUse hooks…
+
+⏺ Write(videoclaw/src/videoclaw/models/__init__.py)
+  ⎿  Wrote 1 lines to videoclaw/src/videoclaw/models/__init__.py
+      1 (No content)
+  ⎿  Running PostToolUse hooks…
+
+⏺ Write(videoclaw/src/videoclaw/models/adapters/__init__.py)
+  ⎿  Wrote 1 lines to videoclaw/src/videoclaw/models/adapters/__init__.py
+      1 (No content)
+  ⎿  Running PostToolUse hooks…
+
+⏺ Write(videoclaw/src/videoclaw/models/llm/__init__.py)
+  ⎿  Wrote 1 lines to videoclaw/src/videoclaw/models/llm/__init__.py
+      1 (No content)
+  ⎿  Running PostToolUse hooks…
+
+⏺ Write(videoclaw/src/videoclaw/generation/__init__.py)
+  ⎿  Wrote 1 lines to videoclaw/src/videoclaw/generation/__init__.py
+      1 (No content)
+  ⎿  Running PostToolUse hooks…
+
+⏺ Write(videoclaw/src/videoclaw/generation/audio/__init__.py)
+  ⎿  Wrote 1 lines to videoclaw/src/videoclaw/generation/audio/__init__.py
+      1 (No content)
+  ⎿  Running PostToolUse hooks…
+
+⏺ Write(videoclaw/src/videoclaw/cost/__init__.py)
+  ⎿  Wrote 1 lines to videoclaw/src/videoclaw/cost/__init__.py
+      1 (No content)
+  ⎿  Running PostToolUse hooks…
+
+⏺ Write(videoclaw/src/videoclaw/server/__init__.py)
+  ⎿  Wrote 1 lines to videoclaw/src/videoclaw/server/__init__.py
+      1 (No content)
+  ⎿  Running PostToolUse hooks…
+
+⏺ Write(videoclaw/src/videoclaw/server/routes/__init__.py)
+  ⎿  Wrote 1 lines to videoclaw/src/videoclaw/server/routes/__init__.py
+      1 (No content)
+  ⎿  Running PostToolUse hooks…
+
+⏺ Write(videoclaw/src/videoclaw/storage/__init__.py)
+  ⎿  Wrote 1 lines to videoclaw/src/videoclaw/storage/__init__.py
+      1 (No content)
+  ⎿  Running PostToolUse hooks…
+
+⏺ Write(videoclaw/src/videoclaw/publishers/__init__.py)
+  ⎿  Wrote 1 lines to videoclaw/src/videoclaw/publishers/__init__.py
+      1 (No content)
+  ⎿  Running PostToolUse hooks…
+
+⏺ Write(videoclaw/src/videoclaw/utils/__init__.py)
+  ⎿  Wrote 1 lines to videoclaw/src/videoclaw/utils/__init__.py
+      1 (No content)
+  ⎿  Running PostToolUse hooks…
+
+⏺ Write(videoclaw/src/videoclaw/agents/__init__.py)
+  ⎿  Wrote 1 lines to videoclaw/src/videoclaw/agents/__init__.py
+      1 (No content)
+  ⎿  Running PostToolUse hooks…
+
+⏺ 脚手架完成。现在并行构建核心引擎和模型适配层——这两块互相独立。
+
+⏺ 2 Task agents launched (ctrl+o to expand)
+   ├─ Build core engine files
+   │  ⎿  Running in the background (shift+↑ to manage)
+   └─ Build model adapter layer
+      ⎿  Running in the background (shift+↑ to manage)
+
+⏺ 核心引擎和模型层正在并行构建。继续推进 Director Agent
+  和生成模块——这些依赖前两个模块的协议定义，但文件级别可以独立编写。
+
+⏺ 2 Task agents launched (ctrl+o to expand)
+   ├─ Build Director and generation modules
+   │  ⎿  Running in the background (shift+↑ to manage)
+   └─ Build CLI and cost tracker
+      ⎿  Running in the background (shift+↑ to manage)
+
+⏺ 4个构建 agent 正在并行工作。趁等待的时间，我来创建 README 和 Agent
+  基类——这些不依赖其他模块。
+
+⏺ Write(videoclaw/src/videoclaw/agents/base.py)
+  ⎿  Wrote 104 lines to videoclaw/src/videoclaw/agents/base.py
+       1 """Base Video Agent protocol and shared types."""
+       2 
+       3 from __future__ import annotations
+       4 
+       5 from dataclasses import dataclass, field
+       6 from enum import Enum
+       7 from typing import Any, Protocol, runtime_checkable
+       8 
+       9 
+      10 class AgentRole(str, Enum):
+     … +94 lines (ctrl+o to expand)
+  ⎿  Running PostToolUse hooks…
+
+⏺ Write(videoclaw/README.md)
+  ⎿  Error writing file
+
+⏺ Read 1 file (ctrl+o to expand)
+  ⎿  Loaded videoclaw/CLAUDE.md
+  ⎿  Loaded videoclaw/src/videoclaw/CLAUDE.md
+  ⎿  Loaded videoclaw/src/videoclaw/core/CLAUDE.md
+
+⏺ Write(videoclaw/README.md)
+  ⎿  Wrote 177 lines to videoclaw/README.md
+       1 <div align="center">
+       2   <h1>🎬 VideoClaw</h1>
+       3   <p><strong>The Agent OS for AI Video Generation</strong></p>
+       4   <p>
+       5     Orchestrate multiple AI models. Automate entire video pipeli
+         nes.<br/>
+       6     From script to publish — one command, one flow, zero babysit
+         ting.
+       7   </p>
+       8   <p>
+       9     <a href="#quick-start">Quick Start</a> •
+      10     <a href="#features">Features</a> •
+     … +167 lines (ctrl+o to expand)
+  ⎿  Running PostToolUse hooks…
+
+⏺ 现在创建 LICENSE 文件。
+
+⏺ Write(videoclaw/LICENSE)
+  ⎿  Wrote 191 lines to videoclaw/LICENSE
+       1                                  Apache License
+       2                            Version 2.0, January 2004
+       3                         http://www.apache.org/licenses/
+       4 
+       5    TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+       6 
+       7    1. Definitions.
+       8 
+       9       "License" shall mean the terms and conditions for use, rep
+         roduction,
+      10       and distribution as defined by Sections 1 through 9 of thi
+         s document.
+     … +181 lines (ctrl+o to expand)
+  ⎿  Running PostToolUse hooks…
+  ⎿  You've hit your limit · resets 1am (Asia/Shanghai)
+     /upgrade or /extra-usage to finish what you’re working on.
+
+✻ Cogitated for 5m 15s
+
+⏺ Agent "Build core engine files" completed
+  ⎿  You've hit your limit · resets 1am (Asia/Shanghai)
+     /upgrade or /extra-usage to finish what you’re working on.
+
+⏺ Agent "Build model adapter layer" completed
+  ⎿  You've hit your limit · resets 1am (Asia/Shanghai)
+     /upgrade or /extra-usage to finish what you’re working on.
+
+⏺ Agent "Build CLI and cost tracker" completed
+  ⎿  You've hit your limit · resets 1am (Asia/Shanghai)
+     /upgrade or /extra-usage to finish what you’re working on.
+
+⏺ Agent "Build Director and generation modules" completed
+  ⎿  You've hit your limit · resets 1am (Asia/Shanghai)
+     /upgrade or /extra-usage to finish what you’re working on.
