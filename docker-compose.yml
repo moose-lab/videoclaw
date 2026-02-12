@@ -1,0 +1,13 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - videoclaw-data:/data
+    environment:
+      - VIDEOCLAW_LOG_LEVEL=info
+      - VIDEOCLAW_DEFAULT_VIDEO_MODEL=mock
+
+volumes:
+  videoclaw-data:

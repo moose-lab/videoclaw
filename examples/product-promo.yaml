@@ -1,0 +1,64 @@
+name: product-promo
+description: Generate a 30-second product promo video
+version: "1.0"
+
+variables:
+  product_name: "VideoClaw"
+  shot_duration: 5
+
+steps:
+  - id: script
+    type: script_gen
+    params:
+      prompt: "Write a 30-second promo script for {{product_name}}"
+
+  - id: storyboard
+    type: storyboard
+    depends_on: [script]
+
+  - id: shot_hero
+    type: video_gen
+    depends_on: [storyboard]
+    params:
+      prompt: "{{product_name}} logo reveal, cinematic lighting"
+      model_id: mock
+      duration: "{{shot_duration}}"
+
+  - id: shot_demo
+    type: video_gen
+    depends_on: [storyboard]
+    params:
+      prompt: "Screen recording of {{product_name}} workflow editor"
+      model_id: mock
+      duration: "{{shot_duration}}"
+
+  - id: shot_cta
+    type: video_gen
+    depends_on: [storyboard]
+    params:
+      prompt: "Call to action screen with download link"
+      model_id: mock
+      duration: "{{shot_duration}}"
+
+  - id: narration
+    type: tts
+    depends_on: [script]
+    params:
+      voice: alloy
+
+  - id: bgm
+    type: music
+    depends_on: [storyboard]
+    params:
+      mood: upbeat
+
+  - id: compose
+    type: compose
+    depends_on: [shot_hero, shot_demo, shot_cta, narration, bgm]
+
+  - id: render
+    type: render
+    depends_on: [compose]
+    params:
+      resolution: 1080p
+      format: mp4

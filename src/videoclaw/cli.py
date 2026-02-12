@@ -62,10 +62,12 @@ app = typer.Typer(
 model_app = typer.Typer(help="Manage model adapters.", no_args_is_help=True)
 project_app = typer.Typer(help="Manage VideoClaw projects.", no_args_is_help=True)
 template_app = typer.Typer(help="Flow templates for common video types.", no_args_is_help=True)
+flow_app = typer.Typer(help="Run and validate ClawFlow YAML pipelines.", no_args_is_help=True)
 
 app.add_typer(model_app, name="model")
 app.add_typer(project_app, name="project")
 app.add_typer(template_app, name="template")
+app.add_typer(flow_app, name="flow")
 
 
 # ---------------------------------------------------------------------------
@@ -695,6 +697,117 @@ def template_use(
         model=None,
         verbose=False,
     )
+
+
+# ---------------------------------------------------------------------------
+# claw flow run / validate
+# ---------------------------------------------------------------------------
+
+
+@flow_app.command("run")
+def flow_run(
+    path: Annotated[str, typer.Argument(help="Path to a ClawFlow YAML file.")],
+    prompt: Annotated[Optional[str], typer.Option("--prompt", "-p", help="Override the script prompt.")] = None,
+    budget: Annotated[Optional[float], typer.Option("--budget", "-b", help="Maximum budget in USD.")] = None,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Execute a video pipeline defined in a ClawFlow YAML file."""
+    _configure_logging(verbose)
+    _show_banner()
+
+    from videoclaw.flow.parser import load_flow, FlowValidationError
+    from videoclaw.flow.runner import FlowRunner
+    from videoclaw.core.state import StateManager
+
+    try:
+        flow = load_flow(path)
+    except (FileNotFoundError, FlowValidationError) as exc:
+        console.print(f"[red]Error loading flow: {exc}[/red]")
+        raise typer.Exit(code=1)
+
+    console.print(
+        Panel(
+            f"[bold]Flow:[/bold]    {flow.name}\n"
+            f"[bold]Desc:[/bold]    {flow.description}\n"
+            f"[bold]Steps:[/bold]   {len(flow.steps)}\n"
+            f"[bold]Version:[/bold] {flow.version}",
+            title="[bold cyan]ClawFlow Pipeline[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+
+    # Override script prompt if provided.
+    if prompt:
+        for step in flow.steps:
+            if "prompt" in step.params:
+                step.params["prompt"] = prompt
+                break
+
+    cfg = get_config()
+    cfg.ensure_dirs()
+    sm = StateManager()
+    state = sm.create_project(prompt=prompt or flow.name)
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Running flow...", total=len(flow.steps))
+
+        async def _run() -> None:
+            runner = FlowRunner(state_manager=sm, max_concurrency=4)
+            await runner.run(flow, state)
+
+        asyncio.run(_run())
+        progress.update(task, completed=len(flow.steps))
+
+    console.print(
+        Panel(
+            f"[bold]Project:[/bold] {state.project_id}\n"
+            f"[bold]Status:[/bold]  {state.status.value}",
+            title="[bold green]Flow Complete[/bold green]",
+            border_style="green",
+        )
+    )
+
+
+@flow_app.command("validate")
+def flow_validate(
+    path: Annotated[str, typer.Argument(help="Path to a ClawFlow YAML file.")],
+) -> None:
+    """Validate a ClawFlow YAML file without executing it."""
+    from videoclaw.flow.parser import load_flow, FlowValidationError
+
+    try:
+        flow = load_flow(path)
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1)
+    except FlowValidationError as exc:
+        console.print(f"[red]Validation failed: {exc}[/red]")
+        raise typer.Exit(code=1)
+
+    # Display validated flow summary.
+    table = Table(title=f"Flow: {flow.name}", show_header=True, header_style="bold cyan")
+    table.add_column("Step ID", style="cyan")
+    table.add_column("Type", style="magenta")
+    table.add_column("Depends On", style="dim")
+    table.add_column("Params", style="white")
+
+    for step in flow.steps:
+        table.add_row(
+            step.id,
+            step.type.value,
+            ", ".join(step.depends_on) or "-",
+            ", ".join(f"{k}={v}" for k, v in step.params.items()) or "-",
+        )
+
+    console.print(table)
+    console.print("[bold green]Flow is valid.[/bold green]")
 
 
 # ---------------------------------------------------------------------------

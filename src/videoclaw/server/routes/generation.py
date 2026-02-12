@@ -31,10 +31,45 @@ class GenerateRequest(BaseModel):
     budget_usd: float | None = None
 
 
+class FlowRunRequest(BaseModel):
+    """Request body for running a ClawFlow pipeline from inline YAML dict."""
+    flow: dict
+    prompt: str | None = None
+
+
 class GenerateResponse(BaseModel):
     project_id: str
     status: str
     message: str
+
+
+@router.post("/flow", response_model=GenerateResponse)
+async def run_flow(body: FlowRunRequest) -> GenerateResponse:
+    """Execute a ClawFlow pipeline from an inline YAML definition."""
+    from videoclaw.flow.parser import parse_flow, FlowValidationError
+    from videoclaw.flow.runner import FlowRunner
+
+    try:
+        flow = parse_flow(body.flow)
+    except FlowValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    ps = _state_mgr.create_project(prompt=body.prompt or flow.name)
+
+    async def _run_flow_bg() -> None:
+        try:
+            runner = FlowRunner(state_manager=_state_mgr, bus=event_bus)
+            await runner.run(flow, ps)
+        except Exception:
+            logger.exception("Flow failed for project %s", ps.project_id)
+
+    asyncio.create_task(_run_flow_bg())
+
+    return GenerateResponse(
+        project_id=ps.project_id,
+        status="started",
+        message=f"Flow '{flow.name}' launched. Connect to /ws/{ps.project_id} for progress.",
+    )
 
 
 @router.post("/", response_model=GenerateResponse)
