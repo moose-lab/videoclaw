@@ -1,0 +1,66 @@
+name: tutorial-explainer
+description: Step-by-step tutorial or explainer video
+version: "1.0"
+
+variables:
+  topic: "How to use VideoClaw"
+  duration_per_step: 8
+
+steps:
+  - id: script
+    type: script_gen
+    params:
+      prompt: "Write a clear tutorial script about: {{topic}}"
+
+  - id: storyboard
+    type: storyboard
+    depends_on: [script]
+
+  - id: step1
+    type: video_gen
+    depends_on: [storyboard]
+    params:
+      prompt: "Screen recording: opening the application, clean UI"
+      model_id: mock
+      duration: "{{duration_per_step}}"
+
+  - id: step2
+    type: video_gen
+    depends_on: [storyboard]
+    params:
+      prompt: "Screen recording: configuring settings, step-by-step"
+      model_id: mock
+      duration: "{{duration_per_step}}"
+
+  - id: step3
+    type: video_gen
+    depends_on: [storyboard]
+    params:
+      prompt: "Screen recording: running the workflow, results appearing"
+      model_id: mock
+      duration: "{{duration_per_step}}"
+
+  - id: narration
+    type: tts
+    depends_on: [script]
+    params:
+      voice: nova
+      speed: 0.95
+
+  - id: bgm
+    type: music
+    depends_on: [storyboard]
+    params:
+      mood: focused
+      style: lo-fi
+
+  - id: compose
+    type: compose
+    depends_on: [step1, step2, step3, narration, bgm]
+
+  - id: render
+    type: render
+    depends_on: [compose]
+    params:
+      resolution: 1080p
+      format: mp4

@@ -120,29 +120,40 @@ class Director:
 
     async def plan(
         self,
-        prompt: str,
+        prompt_or_state: str | ProjectState,
         duration: float = 30.0,
         style: str | None = None,
         aspect_ratio: str = "16:9",
+        preferred_model: str | None = None,
     ) -> ProjectState:
         """Generate a full production plan from a user prompt.
 
         Parameters
         ----------
-        prompt:
-            Free-form description of the desired video.
+        prompt_or_state:
+            Either a free-form description string or an existing
+            :class:`ProjectState` (whose ``prompt`` field will be used).
         duration:
             Target video length in seconds.
         style:
             Optional visual style hint (e.g. ``"cinematic"``, ``"anime"``).
         aspect_ratio:
             Target aspect ratio key (see :data:`_ASPECT_TO_RESOLUTION`).
+        preferred_model:
+            If set, all shots will default to this model adapter id.
 
         Returns
         -------
         ProjectState
             A fully populated project state with shots ready for generation.
         """
+        if isinstance(prompt_or_state, ProjectState):
+            existing_state = prompt_or_state
+            prompt = existing_state.prompt
+        else:
+            existing_state = None
+            prompt = prompt_or_state
+
         await event_bus.emit(TASK_STARTED, {"task": "director.plan", "prompt": prompt})
         logger.info("Director planning: prompt=%r duration=%.1fs style=%s", prompt, duration, style)
 
@@ -157,11 +168,18 @@ class Director:
         )
 
         plan_data = self._parse_plan(raw_response)
-        state = self._build_project_state(
-            plan_data=plan_data,
-            original_prompt=prompt,
-            aspect_ratio=aspect_ratio,
-        )
+
+        if existing_state is not None:
+            # Update existing project state in-place.
+            state = existing_state
+            self._populate_state(state, plan_data, aspect_ratio, preferred_model)
+        else:
+            state = self._build_project_state(
+                plan_data=plan_data,
+                original_prompt=prompt,
+                aspect_ratio=aspect_ratio,
+                preferred_model=preferred_model,
+            )
 
         await event_bus.emit(
             TASK_COMPLETED,
@@ -260,14 +278,11 @@ class Director:
             ) from exc
 
     @staticmethod
-    def _build_project_state(
+    def _shots_from_plan(
         plan_data: dict[str, Any],
-        original_prompt: str,
-        aspect_ratio: str,
-    ) -> ProjectState:
-        """Convert parsed plan JSON into a :class:`ProjectState`."""
-        width, height = _ASPECT_TO_RESOLUTION.get(aspect_ratio, (1280, 720))
-
+        preferred_model: str | None = None,
+    ) -> list[Shot]:
+        """Extract Shot objects from the parsed plan data."""
         shots: list[Shot] = []
         for scene in plan_data.get("scenes", []):
             shot = Shot(
@@ -275,25 +290,56 @@ class Director:
                 description=scene.get("description", ""),
                 prompt=scene.get("description", ""),
                 duration_seconds=float(scene.get("duration", 5.0)),
+                model_id=preferred_model or "mock",
                 status=ShotStatus.PENDING,
             )
             shots.append(shot)
+        return shots
 
+    @staticmethod
+    def _plan_metadata(
+        plan_data: dict[str, Any],
+        aspect_ratio: str,
+    ) -> dict[str, Any]:
+        width, height = _ASPECT_TO_RESOLUTION.get(aspect_ratio, (1280, 720))
+        return {
+            "title": plan_data.get("title", ""),
+            "description": plan_data.get("description", ""),
+            "aspect_ratio": aspect_ratio,
+            "resolution": {"width": width, "height": height},
+            "voice_over": plan_data.get("voice_over", {}),
+            "music": plan_data.get("music", {}),
+            "scenes_raw": plan_data.get("scenes", []),
+        }
+
+    @classmethod
+    def _populate_state(
+        cls,
+        state: ProjectState,
+        plan_data: dict[str, Any],
+        aspect_ratio: str,
+        preferred_model: str | None = None,
+    ) -> None:
+        """Update an existing ProjectState with plan data in-place."""
         voice_over = plan_data.get("voice_over", {})
-        music = plan_data.get("music", {})
+        state.script = voice_over.get("text")
+        state.storyboard = cls._shots_from_plan(plan_data, preferred_model)
+        state.metadata = cls._plan_metadata(plan_data, aspect_ratio)
 
+    @classmethod
+    def _build_project_state(
+        cls,
+        plan_data: dict[str, Any],
+        original_prompt: str,
+        aspect_ratio: str,
+        preferred_model: str | None = None,
+    ) -> ProjectState:
+        """Convert parsed plan JSON into a :class:`ProjectState`."""
+        voice_over = plan_data.get("voice_over", {})
         state = ProjectState(
             prompt=original_prompt,
             script=voice_over.get("text"),
-            storyboard=shots,
-            metadata={
-                "title": plan_data.get("title", ""),
-                "description": plan_data.get("description", ""),
-                "aspect_ratio": aspect_ratio,
-                "resolution": {"width": width, "height": height},
-                "voice_over": voice_over,
-                "music": music,
-                "scenes_raw": plan_data.get("scenes", []),
-            },
+            storyboard=cls._shots_from_plan(plan_data, preferred_model),
+            metadata=cls._plan_metadata(plan_data, aspect_ratio),
         )
         return state

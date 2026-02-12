@@ -157,6 +157,44 @@ class LLMClient:
 
         return self._parse_json(raw)
 
+    async def chat(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        model: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+    ) -> str:
+        """Send a pre-built message list and return the assistant's reply.
+
+        This is a convenience wrapper around :meth:`complete` for callers
+        (like the Director) that construct their own message history.
+        """
+        resolved_model = model or self._default_model
+
+        kwargs: dict[str, Any] = {
+            "model": resolved_model,
+            "messages": messages,
+            "temperature": temperature,
+        }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+
+        logger.debug("[llm] chat call to %s (%d messages)", resolved_model, len(messages))
+        response = await litellm.acompletion(**kwargs)
+
+        if hasattr(response, "usage") and response.usage is not None:
+            self.usage.record(
+                {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens,
+                }
+            )
+
+        content: str = response.choices[0].message.content or ""
+        return content
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------

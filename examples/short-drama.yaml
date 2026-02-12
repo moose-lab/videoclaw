@@ -1,0 +1,83 @@
+name: short-drama
+description: Short dramatic narrative video (30-60 seconds)
+version: "1.0"
+
+variables:
+  theme: "A mysterious traveler arrives at an ancient temple"
+  shot_duration: 5
+
+steps:
+  - id: script
+    type: script_gen
+    params:
+      prompt: "Write a cinematic short drama script: {{theme}}"
+
+  - id: storyboard
+    type: storyboard
+    depends_on: [script]
+
+  - id: establishing
+    type: video_gen
+    depends_on: [storyboard]
+    params:
+      prompt: "Wide aerial shot of ancient temple at dawn, mist rising, cinematic 4K"
+      model_id: mock
+      duration: "{{shot_duration}}"
+
+  - id: approach
+    type: video_gen
+    depends_on: [storyboard]
+    params:
+      prompt: "Tracking shot following a cloaked figure walking up stone steps, dramatic lighting"
+      model_id: mock
+      duration: "{{shot_duration}}"
+
+  - id: reveal
+    type: video_gen
+    depends_on: [storyboard]
+    params:
+      prompt: "Close-up of the traveler's face as temple doors open, golden light illuminates"
+      model_id: mock
+      duration: "{{shot_duration}}"
+
+  - id: interior
+    type: video_gen
+    depends_on: [storyboard]
+    params:
+      prompt: "Slow dolly into the temple interior, ancient murals, dust particles in light beams"
+      model_id: mock
+      duration: "{{shot_duration}}"
+
+  - id: climax
+    type: video_gen
+    depends_on: [storyboard]
+    params:
+      prompt: "The traveler reaches out to touch a glowing artifact, energy swirls around"
+      model_id: mock
+      duration: "{{shot_duration}}"
+
+  - id: narration
+    type: tts
+    depends_on: [script]
+    params:
+      voice: onyx
+      tone: dramatic
+
+  - id: bgm
+    type: music
+    depends_on: [storyboard]
+    params:
+      style: orchestral
+      mood: mysterious
+      tempo: 72
+
+  - id: compose
+    type: compose
+    depends_on: [establishing, approach, reveal, interior, climax, narration, bgm]
+
+  - id: render
+    type: render
+    depends_on: [compose]
+    params:
+      resolution: 4k
+      format: mp4
