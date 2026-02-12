@@ -37,3 +37,5 @@ htmlcov/
 projects/
 models_cache/
 node_modules/
+web/.next/
+web/node_modules/
