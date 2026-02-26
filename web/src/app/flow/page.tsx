@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { api, FlowStep } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -22,8 +22,28 @@ import {
   Loader2,
   ArrowDown,
   ArrowRight,
+  Sparkles,
 } from "lucide-react";
-import YAML from "@/lib/yaml-parse";
+import YAML from "yaml";
+
+import {
+  FlowCanvas,
+  NodePalette,
+  NodeProperties,
+  type FlowDef,
+  type FlowNode,
+  type FlowEdge,
+  type TaskType,
+  NODE_TEMPLATES,
+} from "@/components/flow-editor";
+import {
+  parseYamlToFlowDef,
+  flowDefToYaml,
+  flowDefToReactFlow,
+  reactFlowToFlowDef,
+  validateFlow,
+  generateStepId,
+} from "@/components/flow-editor/utils";
 
 const EXAMPLE_FLOW = `name: my-video
 description: A custom video pipeline
@@ -79,17 +99,10 @@ const typeColors: Record<string, string> = {
   render: "bg-cyan-500/10 text-cyan-500 border-cyan-500/30",
 };
 
-interface ParsedFlow {
-  name: string;
-  description?: string;
-  variables?: Record<string, unknown>;
-  steps: FlowStep[];
-}
-
 export default function FlowPage() {
   const router = useRouter();
   const [yaml, setYaml] = useState(EXAMPLE_FLOW);
-  const [parsed, setParsed] = useState<ParsedFlow | null>(null);
+  const [parsed, setParsed] = useState<FlowDef | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState<{
@@ -97,15 +110,54 @@ export default function FlowPage() {
     message: string;
   } | null>(null);
 
+  // Visual editor state
+  const [nodes, setNodes] = useState<FlowNode[]>([]);
+  const [edges, setEdges] = useState<FlowEdge[]>([]);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  // Parse YAML on mount
+  useEffect(() => {
+    const flow = parseYamlToFlowDef(yaml);
+    if (flow) {
+      setParsed(flow);
+      const { nodes: n, edges: e } = flowDefToReactFlow(flow);
+      setNodes(n);
+      setEdges(e);
+      setParseError(null);
+    }
+  }, []);
+
+  // Get selected node
+  const selectedNode = selectedNodeId
+    ? nodes.find((n) => n.id === selectedNodeId) || null
+    : null;
+
+  // Get dependencies for selected node
+  const selectedDeps = selectedNodeId
+    ? edges.filter((e) => e.target === selectedNodeId).map((e) => e.source)
+    : [];
+
+  // Handle YAML parse
   const handleParse = useCallback(() => {
     try {
-      const data = YAML.parse(yaml);
-      if (!data || !data.steps) {
+      const flow = parseYamlToFlowDef(yaml);
+      if (!flow) {
         setParseError("Invalid flow: missing 'steps'");
         setParsed(null);
         return false;
       }
-      setParsed(data as ParsedFlow);
+
+      const validation = validateFlow(flow);
+      if (!validation.valid) {
+        setParseError(validation.errors.join("; "));
+        setParsed(null);
+        return false;
+      }
+
+      setParsed(flow);
+      const { nodes: n, edges: e } = flowDefToReactFlow(flow);
+      setNodes(n);
+      setEdges(e);
       setParseError(null);
       return true;
     } catch (e) {
@@ -115,6 +167,114 @@ export default function FlowPage() {
     }
   }, [yaml]);
 
+  // Handle flow change from visual editor
+  const handleFlowChange = useCallback(
+    (flow: FlowDef) => {
+      setParsed(flow);
+      setYaml(flowDefToYaml(flow));
+    },
+    []
+  );
+
+  // Handle node add from palette
+  const handleNodeAdd = useCallback(
+    (type: TaskType) => {
+      const existingIds = nodes.map((n) => n.id);
+      const id = generateStepId(type, existingIds);
+      const template = NODE_TEMPLATES.find((t) => t.type === type);
+
+      const newNode: FlowNode = {
+        id,
+        type: "flow",
+        position: {
+          x: Math.random() * 300 + 100,
+          y: Math.random() * 300 - 150,
+        },
+        data: {
+          label: id,
+          type,
+          params: template?.defaultParams || {},
+        },
+      };
+
+      setNodes((nds) => [...nds, newNode]);
+
+      // Update flow
+      const newFlow = reactFlowToFlowDef(
+        [...nodes, newNode],
+        edges,
+        parsed || undefined
+      );
+      handleFlowChange(newFlow);
+    },
+    [nodes, edges, parsed, handleFlowChange]
+  );
+
+  // Handle node update
+  const handleNodeUpdate = useCallback(
+    (
+      nodeId: string,
+      updates: { label?: string; params?: Record<string, unknown> }
+    ) => {
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === nodeId
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  ...(updates.label ? { label: updates.label } : {}),
+                  ...(updates.params ? { params: updates.params } : {}),
+                },
+              }
+            : n
+        )
+      );
+
+      // Update flow
+      const updatedNodes = nodes.map((n) =>
+        n.id === nodeId
+          ? {
+              ...n,
+              data: {
+                ...n.data,
+                ...(updates.label ? { label: updates.label } : {}),
+                ...(updates.params ? { params: updates.params } : {}),
+              },
+            }
+          : n
+      );
+      const newFlow = reactFlowToFlowDef(updatedNodes, edges, parsed || undefined);
+      handleFlowChange(newFlow);
+    },
+    [nodes, edges, parsed, handleFlowChange]
+  );
+
+  // Handle node delete
+  const handleNodeDelete = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+      setEdges((eds) =>
+        eds.filter((e) => e.source !== nodeId && e.target !== nodeId)
+      );
+      setSelectedNodeId(null);
+
+      // Update flow
+      const updatedNodes = nodes.filter((n) => n.id !== nodeId);
+      const updatedEdges = edges.filter(
+        (e) => e.source !== nodeId && e.target !== nodeId
+      );
+      const newFlow = reactFlowToFlowDef(
+        updatedNodes,
+        updatedEdges,
+        parsed || undefined
+      );
+      handleFlowChange(newFlow);
+    },
+    [nodes, edges, parsed, handleFlowChange]
+  );
+
+  // Handle run
   const handleRun = async () => {
     const valid = handleParse();
     if (!valid) return;
@@ -122,7 +282,6 @@ export default function FlowPage() {
     setRunning(true);
     setRunResult(null);
     try {
-      // Re-parse to get latest
       const data = YAML.parse(yaml) as Record<string, unknown>;
       const res = await api.runFlow(data);
       setRunResult(res);
@@ -136,144 +295,147 @@ export default function FlowPage() {
   const levels = buildLevels(parsed?.steps || []);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Workflow className="h-6 w-6 text-primary" />
-          ClawFlow Editor
-        </h1>
-        <p className="text-muted-foreground">
-          Define and run video pipelines with YAML
-        </p>
+    <div className="h-[calc(100vh-4rem)] flex flex-col">
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-border">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <Workflow className="h-6 w-6 text-primary" />
+              ClawFlow Editor
+            </h1>
+            <p className="text-muted-foreground">
+              Design and run video pipelines visually
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => handleParse()}>
+              <Check className="mr-2 h-4 w-4" />
+              Validate
+            </Button>
+            <Button onClick={handleRun} disabled={running}>
+              {running ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Running...
+                </>
+              ) : (
+                <>
+                  <Play className="mr-2 h-4 w-4" />
+                  Run Pipeline
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {/* Status bar */}
+        <div className="flex items-center gap-4 mt-3">
+          {parsed && (
+            <>
+              <Badge variant="outline" className="bg-green-500/10 text-green-500">
+                <Check className="mr-1 h-3 w-3" />
+                {parsed.steps.length} steps
+              </Badge>
+              {parsed.variables && (
+                <Badge variant="outline">
+                  {Object.keys(parsed.variables).length} variables
+                </Badge>
+              )}
+            </>
+          )}
+          {parseError && (
+            <Badge variant="outline" className="bg-red-500/10 text-red-500">
+              <AlertCircle className="mr-1 h-3 w-3" />
+              {parseError}
+            </Badge>
+          )}
+        </div>
       </div>
 
-      <Tabs defaultValue="editor">
-        <TabsList>
-          <TabsTrigger value="editor">YAML Editor</TabsTrigger>
-          <TabsTrigger value="visual">Visual DAG</TabsTrigger>
-        </TabsList>
+      {/* Main content */}
+      <div className="flex-1 flex overflow-hidden">
+        <Tabs defaultValue="visual" className="flex-1 flex flex-col">
+          <div className="px-6 pt-2 border-b border-border">
+            <TabsList>
+              <TabsTrigger value="visual">
+                <Sparkles className="mr-1.5 h-4 w-4" />
+                Visual Editor
+              </TabsTrigger>
+              <TabsTrigger value="yaml">YAML Editor</TabsTrigger>
+            </TabsList>
+          </div>
 
-        <TabsContent value="editor" className="space-y-4">
-          <Card>
-            <CardContent className="pt-6">
-              <Textarea
-                value={yaml}
-                onChange={(e) => setYaml(e.target.value)}
-                className="font-mono text-sm min-h-[400px] resize-none"
-                spellCheck={false}
+          <TabsContent value="visual" className="flex-1 m-0 flex">
+            <div className="w-[200px] shrink-0">
+              <NodePalette onNodeAdd={handleNodeAdd} />
+            </div>
+            <div className="flex-1 relative">
+              <FlowCanvas
+                initialNodes={nodes}
+                initialEdges={edges}
+                onChange={handleFlowChange}
+                existingFlow={parsed || undefined}
+                onNodeSelect={setSelectedNodeId}
               />
-              <div className="flex gap-2 mt-4">
-                <Button variant="outline" onClick={() => handleParse()}>
-                  <Check className="mr-2 h-4 w-4" />
-                  Validate
-                </Button>
-                <Button onClick={handleRun} disabled={running}>
-                  {running ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Running...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="mr-2 h-4 w-4" />
-                      Run Pipeline
-                    </>
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+            <div className="w-[280px] shrink-0">
+              <NodeProperties
+                node={selectedNode}
+                dependencies={selectedDeps}
+                onUpdate={handleNodeUpdate}
+                onDelete={handleNodeDelete}
+                onClose={() => setSelectedNodeId(null)}
+              />
+            </div>
+          </TabsContent>
 
-          {parseError && (
-            <Card className="border-destructive">
-              <CardContent className="pt-6 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
-                <pre className="text-sm text-destructive whitespace-pre-wrap">
-                  {parseError}
-                </pre>
+          <TabsContent value="yaml" className="flex-1 m-0 p-6 overflow-auto">
+            <Card className="h-full">
+              <CardContent className="pt-6 h-full flex flex-col">
+                <Textarea
+                  value={yaml}
+                  onChange={(e) => {
+                    setYaml(e.target.value);
+                    const flow = parseYamlToFlowDef(e.target.value);
+                    if (flow) {
+                      setParsed(flow);
+                      const { nodes: n, edges: e } = flowDefToReactFlow(flow);
+                      setNodes(n);
+                      setEdges(e);
+                      setParseError(null);
+                    }
+                  }}
+                  className="font-mono text-sm flex-1 min-h-[400px] resize-none"
+                  spellCheck={false}
+                />
               </CardContent>
             </Card>
-          )}
+          </TabsContent>
+        </Tabs>
+      </div>
 
-          {parsed && !parseError && (
-            <Card className="border-green-500/50">
-              <CardContent className="pt-6 text-sm">
-                <div className="flex items-center gap-2 text-green-500 mb-2">
-                  <Check className="h-4 w-4" />
-                  Flow is valid
-                </div>
-                <div className="text-muted-foreground">
-                  <strong>{parsed.name}</strong> &mdash; {parsed.steps.length} steps
-                  {parsed.variables &&
-                    `, ${Object.keys(parsed.variables).length} variables`}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {runResult && (
-            <Card className="border-green-500/50">
-              <CardContent className="pt-6 space-y-2">
-                <Badge className="bg-green-500/10 text-green-500">Started</Badge>
-                <p className="text-sm text-muted-foreground">{runResult.message}</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => router.push(`/projects/${runResult.project_id}`)}
-                >
-                  View Project
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        <TabsContent value="visual" className="space-y-4">
-          {!parsed ? (
-            <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                Validate a flow first to see the visual DAG.
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">{parsed.name}</CardTitle>
-                <CardDescription>
-                  {parsed.steps.length} steps &bull; {levels.length} levels
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col items-center gap-3">
-                  {levels.map((level, li) => (
-                    <div key={li}>
-                      {li > 0 && (
-                        <div className="flex justify-center py-1">
-                          <ArrowDown className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                      )}
-                      <div className="flex gap-3 justify-center flex-wrap">
-                        {level.map((step) => (
-                          <div
-                            key={step.id}
-                            className={`rounded-lg border px-4 py-2.5 text-sm min-w-[140px] text-center ${
-                              typeColors[step.type] || "border-border"
-                            }`}
-                          >
-                            <div className="font-medium">{step.id}</div>
-                            <div className="text-xs opacity-70">{step.type}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-      </Tabs>
+      {/* Run result */}
+      {runResult && (
+        <div className="px-6 py-4 border-t border-border bg-green-500/5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Badge className="bg-green-500/10 text-green-500">Started</Badge>
+              <span className="text-sm text-muted-foreground">
+                {runResult.message}
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push(`/projects/${runResult.project_id}`)}
+            >
+              View Project
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

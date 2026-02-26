@@ -37,6 +37,10 @@ class VideoClawConfig(BaseSettings):
     # --- API keys (read without the VIDEOCLAW_ prefix too) ---
     openai_api_key: str | None = Field(default=None)
     anthropic_api_key: str | None = Field(default=None)
+    moonshot_api_key: str | None = Field(default=None)  # Kimi (月之暗面)
+
+    # --- LLM API Base URLs ---
+    moonshot_api_base: str = Field(default="https://api.moonshot.cn/v1")
 
     # --- Budget & resilience ---
     budget_default_usd: float = 10.0

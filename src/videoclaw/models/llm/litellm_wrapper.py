@@ -14,6 +14,8 @@ from typing import Any
 
 import litellm
 
+from videoclaw.config import get_config
+
 logger = logging.getLogger(__name__)
 
 
@@ -54,12 +56,36 @@ class LLMClient:
     default_model:
         The model identifier to use when none is passed to individual calls.
         Accepts any LiteLLM-compatible model string (e.g. ``"gpt-4o"``,
-        ``"claude-sonnet-4-20250514"``, ``"ollama/llama3"``).
+        ``"claude-sonnet-4-20250514"``, ``"ollama/llama3"``, ``"openai/moonshot-v1-8k"``).
     """
+
+    # Moonshot (Kimi) model prefix detection
+    MOONSHOT_PREFIXES = ("openai/moonshot", "moonshot")
 
     def __init__(self, default_model: str = "gpt-4o") -> None:
         self._default_model = default_model
         self.usage = TokenUsage()
+        self._config = get_config()
+
+    def _is_moonshot_model(self, model: str) -> bool:
+        """Check if the model is a Moonshot (Kimi) model."""
+        return any(model.startswith(prefix) for prefix in self.MOONSHOT_PREFIXES)
+
+    def _get_model_config(self, model: str) -> dict[str, Any]:
+        """Get provider-specific configuration for the model."""
+        config: dict[str, Any] = {}
+
+        if self._is_moonshot_model(model):
+            # Moonshot uses OpenAI-compatible API
+            if self._config.moonshot_api_key:
+                config["api_key"] = self._config.moonshot_api_key
+            config["api_base"] = self._config.moonshot_api_base
+
+            # Normalize model name for LiteLLM (remove openai/ prefix if present)
+            if model.startswith("openai/"):
+                config["model"] = model  # LiteLLM handles this
+
+        return config
 
     # ------------------------------------------------------------------
     # Public API
@@ -105,6 +131,9 @@ class LLMClient:
             kwargs["response_format"] = response_format
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
+
+        # Apply provider-specific config (e.g., Moonshot API base)
+        kwargs.update(self._get_model_config(resolved_model))
 
         logger.debug(
             "[llm] Calling %s (temp=%.2f, tokens=%s)",
@@ -179,6 +208,9 @@ class LLMClient:
         }
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
+
+        # Apply provider-specific config (e.g., Moonshot API base)
+        kwargs.update(self._get_model_config(resolved_model))
 
         logger.debug("[llm] chat call to %s (%d messages)", resolved_model, len(messages))
         response = await litellm.acompletion(**kwargs)
