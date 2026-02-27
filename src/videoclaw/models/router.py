@@ -61,7 +61,14 @@ MODEL_PROFILES: dict[str, dict[str, float]] = {
     "runway-gen4": {"quality": 0.90, "speed": 0.6, "cost": 0.4},
     "kling-1.6": {"quality": 0.85, "speed": 0.65, "cost": 0.5},
     "pika-2.2": {"quality": 0.80, "speed": 0.7, "cost": 0.6},
-    "minimax": {"quality": 0.75, "speed": 0.75, "cost": 0.7},
+    # MiniMax models (海螺AI) - free tier available
+    "minimax-hailuo-2.3": {"quality": 0.82, "speed": 0.75, "cost": 0.85},
+    "minimax-hailuo-2.3-fast": {"quality": 0.78, "speed": 0.85, "cost": 0.85},
+    "minimax-hailuo-02": {"quality": 0.75, "speed": 0.75, "cost": 0.85},
+    "minimax-s2v-01": {"quality": 0.80, "speed": 0.70, "cost": 0.85},
+    # ZhipuAI models (智谱清影/CogVideoX) - free tier available
+    "cogvideox-flash": {"quality": 0.70, "speed": 0.85, "cost": 0.95},
+    "cogvideox": {"quality": 0.75, "speed": 0.60, "cost": 0.95},
     "mock": {"quality": 0.10, "speed": 1.0, "cost": 1.0},
 }
 

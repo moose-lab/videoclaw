@@ -86,7 +86,7 @@ export function NodeProperties({
   };
 
   const handleParamChange = (key: string, value: string | number) => {
-    const newParams = { ...node.data.params, [key]: value };
+    const newParams = { ...(node.data.params || {}), [key]: value };
     onUpdate?.(node.id, { params: newParams });
   };
 
@@ -144,14 +144,14 @@ export function NodeProperties({
                 <Label className="text-xs">{field.label}</Label>
                 {field.type === "text" ? (
                   <Textarea
-                    value={String(node.data.params[field.key] || "")}
+                    value={String((node.data.params || {})[field.key] || "")}
                     onChange={(e) => handleParamChange(field.key, e.target.value)}
                     className="min-h-[60px] text-sm resize-none"
                   />
                 ) : (
                   <Input
                     type="number"
-                    value={node.data.params[field.key] || ""}
+                    value={(node.data.params || {})[field.key] || ""}
                     onChange={(e) => handleParamChange(field.key, Number(e.target.value))}
                     className="h-8 text-sm"
                   />

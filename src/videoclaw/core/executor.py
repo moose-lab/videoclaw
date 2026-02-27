@@ -16,7 +16,7 @@ from videoclaw.core.events import (
     event_bus as default_event_bus,
 )
 from videoclaw.core.planner import DAG, NodeStatus, TaskNode, TaskType
-from videoclaw.core.state import ProjectState, ProjectStatus, StateManager
+from videoclaw.core.state import ProjectState, ProjectStatus, ShotStatus, StateManager
 
 logger = logging.getLogger(__name__)
 
@@ -199,11 +199,63 @@ class DAGExecutor:
         return {"shot_count": len(state.storyboard)}
 
     async def _handle_video_gen(self, node: TaskNode, state: ProjectState) -> Any:
+        """Generate video for a single shot using VideoGenerator."""
+        from videoclaw.generation.video import VideoGenerator
+        from videoclaw.models.registry import get_registry
+        from videoclaw.models.router import ModelRouter, RoutingStrategy
+
         shot_id = node.params.get("shot_id", "unknown")
-        logger.info("[placeholder] Generating video for shot %s", shot_id)
-        await asyncio.sleep(0.01)
-        asset_path = f"shots/{shot_id}.mp4"
-        return {"asset_path": asset_path}
+        logger.info("[video_gen] Generating video for shot %s", shot_id)
+
+        # Find the shot in the storyboard
+        shot = next((s for s in state.storyboard if s.shot_id == shot_id), None)
+        if not shot:
+            logger.error("Shot %s not found in storyboard", shot_id)
+            raise ValueError(f"Shot {shot_id} not found in storyboard")
+
+        # Create router with registry
+        registry = get_registry()
+        registry.discover()  # Auto-discover adapters via entry points
+        
+        # Debug: log available models
+        available_models = [m["model_id"] for m in registry.list_models()]
+        logger.info("[video_gen] Available models: %s", available_models)
+        logger.info("[video_gen] Shot model_id: %s", shot.model_id)
+        
+        router = ModelRouter(registry)
+        generator = VideoGenerator(router=router)
+        
+        try:
+            result = await generator.generate_shot(shot, strategy=RoutingStrategy.AUTO)
+        except Exception as e:
+            logger.error("[video_gen] Generation failed for shot %s: %s", shot_id, e)
+            raise
+
+        # Update shot with result
+        shot.asset_path = result.asset_path or f"shots/{shot_id}.mp4"
+        shot.cost = result.cost_usd
+        shot.status = ShotStatus.COMPLETED if result.video_data else ShotStatus.FAILED
+
+        # Save video data if present
+        if result.video_data:
+            import hashlib
+            from pathlib import Path
+            
+            # Generate unique filename
+            video_hash = hashlib.md5(result.video_data).hexdigest()[:8]
+            output_dir = Path(self._config.projects_dir) / state.project_id / "shots"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_path = output_dir / f"{shot_id}_{video_hash}.mp4"
+            
+            output_path.write_bytes(result.video_data)
+            shot.asset_path = str(output_path)
+            logger.info("[video_gen] Saved video to %s", output_path)
+
+        return {
+            "asset_path": shot.asset_path,
+            "cost_usd": result.cost_usd,
+            "model_id": result.model_id,
+        }
 
     async def _handle_tts(self, node: TaskNode, state: ProjectState) -> Any:
         logger.info("[placeholder] Generating TTS narration")

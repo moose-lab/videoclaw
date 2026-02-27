@@ -26,6 +26,7 @@ dependencies = [
     "pyyaml>=6.0.2",
     "litellm>=1.55.0",
     "aiosqlite>=0.20.0",
+    "zhipuai>=2.1.0",
 ]
 
 [project.optional-dependencies]
@@ -53,6 +54,9 @@ claw = "videoclaw.cli:app"
 [project.entry-points."videoclaw.adapters"]
 openai = "videoclaw.models.adapters.openai_video:OpenAIVideoAdapter"
 mock = "videoclaw.models.adapters.mock:MockVideoAdapter"
+kling = "videoclaw.models.adapters.kling:KlingVideoAdapter"
+minimax = "videoclaw.models.adapters.minimax:MiniMaxVideoAdapter"
+zhipu = "videoclaw.models.adapters.zhipu:ZhipuVideoAdapter"
 
 [build-system]
 requires = ["hatchling"]

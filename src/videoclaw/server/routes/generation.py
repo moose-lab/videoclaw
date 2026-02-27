@@ -121,8 +121,8 @@ async def _run_pipeline(
         dag = build_dag(ps)
         executor = DAGExecutor(
             dag=dag,
-            project_state=ps,
-            event_bus=event_bus,
+            state=ps,
+            bus=event_bus,
         )
         ps = await executor.run()
         _state_mgr.save(ps)

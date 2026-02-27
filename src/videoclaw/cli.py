@@ -200,7 +200,7 @@ async def _generate_async(
                 duration=duration,
                 style=style,
                 aspect_ratio=aspect_ratio,
-                preferred_model=preferred_model,
+                preferred_model=preferred_model or cfg.default_video_model,
             )
             sm.save(state)
     except ImportError:
@@ -254,8 +254,9 @@ async def _generate_async(
 
     try:
         from videoclaw.core.executor import DAGExecutor
+        from videoclaw.core.events import event_bus, TASK_COMPLETED
 
-        executor = DAGExecutor(dag=dag, state=state, tracker=tracker)
+        executor = DAGExecutor(dag=dag, state=state)
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -265,7 +266,21 @@ async def _generate_async(
             console=console,
         ) as progress:
             task = progress.add_task("Executing pipeline...", total=total_nodes)
-            await executor.run(on_node_complete=lambda _nid: progress.advance(task))
+
+            # Subscribe to task completion events to update progress
+            completed_count = 0
+            async def on_task_completed(event_type: str, event_data: dict) -> None:
+                nonlocal completed_count
+                completed_count += 1
+                task_type = event_data.get("task_type", "unknown")
+                progress.update(task, description=f"Completed {task_type} ({completed_count}/{total_nodes})")
+                progress.advance(task)
+
+            event_bus.subscribe(TASK_COMPLETED, on_task_completed)
+            try:
+                await executor.run()
+            finally:
+                event_bus.unsubscribe(TASK_COMPLETED, on_task_completed)
 
     except ImportError:
         # Executor not yet implemented -- simulate progress.

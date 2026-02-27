@@ -13,6 +13,7 @@ import logging
 import uuid
 from typing import Any
 
+from videoclaw.config import get_config
 from videoclaw.core.events import event_bus, TASK_STARTED, TASK_COMPLETED
 from videoclaw.core.state import ProjectState, Shot, ShotStatus
 from videoclaw.models.llm.litellm_wrapper import LLMClient
@@ -113,7 +114,7 @@ class Director:
 
     def _ensure_llm(self) -> LLMClient:
         if self._llm is None:
-            self._llm = LLMClient()
+            self._llm = LLMClient(default_model=get_config().default_llm)
         return self._llm
 
     # -- public API ---------------------------------------------------------

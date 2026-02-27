@@ -66,7 +66,7 @@ function calculateNodePositions(steps: FlowStep[]): Map<string, { x: number; y: 
     visited.add(stepId);
 
     const step = stepMap.get(stepId);
-    if (!step || step.depends_on.length === 0) {
+    if (!step || !step.depends_on || step.depends_on.length === 0) {
       levels.set(stepId, 0);
       return 0;
     }
@@ -135,7 +135,7 @@ export function flowDefToReactFlow(flow: FlowDef): { nodes: FlowNode[]; edges: F
 
   // Create edges
   flow.steps.forEach((step) => {
-    step.depends_on.forEach((depId) => {
+    (step.depends_on || []).forEach((depId) => {
       edges.push({
         id: `${depId}-${step.id}`,
         source: depId,
@@ -217,7 +217,7 @@ export function validateFlow(flow: FlowDef): { valid: boolean; errors: string[] 
 
   // Check for missing dependencies
   flow.steps.forEach((step) => {
-    step.depends_on.forEach((dep) => {
+    (step.depends_on || []).forEach((dep) => {
       if (!stepIds.has(dep)) {
         errors.push(`Step "${step.id}" depends on unknown step "${dep}"`);
       }
@@ -237,7 +237,7 @@ export function validateFlow(flow: FlowDef): { valid: boolean; errors: string[] 
   });
 
   flow.steps.forEach((step) => {
-    step.depends_on.forEach((dep) => {
+    (step.depends_on || []).forEach((dep) => {
       if (stepIds.has(dep)) {
         adj.get(dep)!.push(step.id);
         inDegree.set(step.id, (inDegree.get(step.id) || 0) + 1);
