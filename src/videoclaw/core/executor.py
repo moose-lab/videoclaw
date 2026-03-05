@@ -232,7 +232,7 @@ class DAGExecutor:
             raise
 
         # Update shot with result
-        shot.asset_path = result.asset_path or f"shots/{shot_id}.mp4"
+        shot.asset_path = f"shots/{shot_id}.mp4"
         shot.cost = result.cost_usd
         shot.status = ShotStatus.COMPLETED if result.video_data else ShotStatus.FAILED
 
