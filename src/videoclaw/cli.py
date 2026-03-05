@@ -844,6 +844,7 @@ def drama_new(
     aspect_ratio: Annotated[str, typer.Option("--aspect-ratio", "-a", help="Aspect ratio.")] = "9:16",
     model: Annotated[str, typer.Option("--model", "-m", help="Video model id.")] = "mock",
     plan: Annotated[bool, typer.Option("--plan/--no-plan", help="Immediately plan episodes via LLM.")] = False,
+    design_characters: Annotated[bool, typer.Option("--design-characters", help="Generate character reference images after planning.")] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Create a new AI short drama series."""
@@ -882,6 +883,10 @@ def drama_new(
     if plan:
         console.print("\n[bold cyan]Planning episodes via LLM...[/bold cyan]")
         asyncio.run(_drama_plan_async(series, mgr))
+
+    if design_characters and plan:
+        console.print("\n[bold cyan]Generating character reference images...[/bold cyan]")
+        asyncio.run(_design_characters_async(series, mgr, force=False))
 
 
 async def _drama_plan_async(series, mgr) -> None:
@@ -1037,6 +1042,60 @@ def drama_plan(
     asyncio.run(_drama_plan_async(series, mgr))
 
 
+@drama_app.command("design-characters")
+def drama_design_characters(
+    series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Regenerate existing images.")] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Generate reference images for characters in a drama series."""
+    _configure_logging(verbose)
+
+    from videoclaw.drama.models import DramaManager
+
+    mgr = DramaManager()
+    try:
+        series = mgr.load(series_id)
+    except FileNotFoundError:
+        console.print(f"[red]Series {series_id!r} not found.[/red]")
+        raise typer.Exit(code=1)
+
+    if not series.characters:
+        console.print("[yellow]No characters found. Run `claw drama plan` first.[/yellow]")
+        raise typer.Exit(code=1)
+
+    console.print(
+        Panel(
+            f"[bold]Series:[/bold]     {series.title}\n"
+            f"[bold]Characters:[/bold] {len(series.characters)}\n"
+            f"[bold]Force:[/bold]      {force}",
+            title="[bold cyan]Character Design[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+
+    asyncio.run(_design_characters_async(series, mgr, force))
+
+
+async def _design_characters_async(series, mgr, force: bool) -> None:
+    from videoclaw.drama.character_designer import CharacterDesigner
+
+    designer = CharacterDesigner(drama_manager=mgr)
+
+    with console.status("[cyan]Generating character reference images...", spinner="dots"):
+        series = await designer.design_characters(series, force=force)
+
+    # Show results
+    table = Table(title="Character Reference Images", show_header=True, header_style="bold magenta")
+    table.add_column("Name", style="cyan")
+    table.add_column("Reference Image", style="green")
+    for c in series.characters:
+        table.add_row(c.name, c.reference_image or "[dim]none[/dim]")
+    console.print(table)
+
+    console.print(f"\n[bold green]Character designs complete for {series.series_id}[/bold green]")
+
+
 @drama_app.command("run")
 def drama_run(
     series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
@@ -1094,7 +1153,18 @@ async def _drama_run_async(series, mgr, start: int, end: int | None) -> None:
         and ep.status != "completed"
     ]
 
+    # Retrieve cliffhanger from the episode before the first one we're running
     prev_cliffhanger: str | None = None
+    if episodes_to_run:
+        prev_num = episodes_to_run[0].number - 1
+        for ep in series.episodes:
+            if ep.number == prev_num and ep.script:
+                try:
+                    prev_script = json.loads(ep.script)
+                    prev_cliffhanger = prev_script.get("cliffhanger")
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                break
 
     for ep in episodes_to_run:
         console.print(f"\n[bold cyan]Episode {ep.number}: {ep.title}[/bold cyan]")

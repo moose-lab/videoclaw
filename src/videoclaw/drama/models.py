@@ -67,6 +67,7 @@ class Episode:
     number: int = 1
     title: str = ""
     synopsis: str = ""
+    opening_hook: str = ""
     status: EpisodeStatus = EpisodeStatus.PENDING
     project_id: str | None = None
     duration_seconds: float = 60.0

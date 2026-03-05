@@ -22,38 +22,55 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 SERIES_OUTLINE_PROMPT: str = """\
-You are an expert screenwriter for AI-generated short-form drama series
-(竖屏短剧 / vertical short drama). Each episode is 30-90 seconds long.
+You are an expert screenwriter for Chinese vertical short drama (竖屏短剧),
+targeting platforms like 抖音/快手/微信视频号. Each episode is 30-90 seconds long.
 
 Given a concept, produce a series outline with episode synopses and character
 descriptions. The drama should have clear story arcs, emotional hooks, and
-cliffhangers between episodes to drive engagement.
+cliffhangers between episodes to maximize viewer retention and swipe-through rate.
+
+黄金3秒法则 (Golden 3-Second Rule):
+- 第1集开头必须在3秒内用强冲突、悬念或视觉冲击抓住观众。
+- Episode 1 MUST open with a high-impact visual or conflict in the FIRST 3 SECONDS.
+- 平铺直叙的开场会导致90%的观众划走。Start with action, mystery, or shock — never exposition.
+
+叙事弧结构 (Narrative Arc Structure, for N episodes):
+- 第1集: 激励事件 — 用爆发性开场介绍主角和核心冲突
+- 第2集到第N-2集: 递进升级 — 加深人物关系、升高赌注、引入新矛盾
+- 第N-1集: 至暗时刻 — 最大危机、重大揭示或背叛
+- 第N集: 高潮 + 解决 — 主角面临终极抉择，留有情感余韵
+
+情绪节奏曲线 (Emotional Rhythm per episode):
+- 每集遵循: 钩子(0-5s) → 铺垫(5-15s) → 递进(15-35s) → 高潮(35-50s) → 悬念(50-60s)
+- 集与集之间要有情绪对比（紧张→温柔→震撼）
 
 Guidelines:
 - Each episode should have a self-contained mini-arc while advancing the main plot.
-- End each episode with a hook or cliffhanger.
-- Characters should have distinct visual descriptions (for AI video consistency).
-- Write in the requested language.
+- End each episode with a hook or cliffhanger that compels the viewer to watch the next.
+- Characters should have distinct visual descriptions (for AI video generation consistency).
+- Write all narrative content (title, synopsis, description, opening_hook) in Chinese (中文).
+- Write visual_prompt in English (for AI image/video generation models).
 - Return ONLY valid JSON — no markdown fences, no commentary.
 
 Output JSON schema:
 {
-  "title": "<series title>",
-  "genre": "<genre>",
-  "synopsis": "<overall series synopsis>",
+  "title": "<中文剧名>",
+  "genre": "<类型>",
+  "synopsis": "<中文整体剧情梗概>",
   "characters": [
     {
-      "name": "<character name>",
-      "description": "<personality and role in story>",
-      "visual_prompt": "<detailed visual description for AI generation: age, gender, appearance, clothing, distinctive features>",
+      "name": "<中文角色名>",
+      "description": "<中文：性格、动机、在故事中的角色定位、与其他角色的关键关系>",
+      "visual_prompt": "<ENGLISH ONLY — PURE character appearance: age, gender, ethnicity, body type, face features, hair style/color, clothing, accessories, distinctive marks. Do NOT include camera angles, lighting, background, shot composition, or cinematography instructions.>",
       "voice_style": "<warm | authoritative | playful | dramatic | calm>"
     }
   ],
   "episodes": [
     {
       "number": <int>,
-      "title": "<episode title>",
-      "synopsis": "<2-3 sentence episode synopsis with emotional beats>",
+      "title": "<中文集标题>",
+      "synopsis": "<中文：2-3句分集梗概，包含情绪节拍>",
+      "opening_hook": "<中文：一句话描述本集前3秒的视觉/情绪钩子>",
       "duration_seconds": <float>
     }
   ]
@@ -61,49 +78,63 @@ Output JSON schema:
 """
 
 EPISODE_SCRIPT_PROMPT: str = """\
-You are an expert screenwriter for AI-generated short drama.
+You are an expert screenwriter for Chinese vertical short drama (竖屏短剧).
 
 Given a series context and episode synopsis, produce a detailed shot-by-shot
 script for this episode. Each scene should be 3-8 seconds and have a precise
 visual description optimized for AI video generation models.
 
-Character consistency rules:
-- ALWAYS include the character's full visual description when they appear.
+角色一致性规则 (Character consistency):
+- ALWAYS include the character's full English visual description when they appear.
 - Use the exact same visual prompt keywords for the same character across scenes.
 - Include clothing, hair style, and distinctive features in every scene prompt.
+
+节奏控制 (Pacing rules):
+- 场景数量：60秒一集约8-12个场景，按时长等比缩放。
+- 所有场景的 duration_seconds 之和必须等于目标集时长（±2秒）。
+- 第一个场景(0-5s)：用视觉钩子开场，或衔接上集悬念。
+- 中间场景：特写与全景交替，营造视觉节奏（紧→松→紧）。
+- 最后一个场景：悬念/情绪高潮，驱动观众看下一集。
+
+台词密度控制 (Dialogue density):
+- 中文对白总字数不超过100字（60秒集）。中文语速约4字/秒，对白占时不超过25秒。
+- 旁白用于推进叙事和内心独白，对白用于冲突和情感爆发。
+- 不是每个场景都需要台词。无声的视觉叙事同样有力。
 
 Guidelines:
 - Open with a hook (continue from previous episode's cliffhanger if applicable).
 - Build tension through the middle.
 - End with a cliffhanger or emotional peak.
 - Camera movements should serve the narrative.
+- visual_prompt MUST be in English (for AI video generation models).
+- dialogue and narration MUST be in Chinese (中文).
 - Return ONLY valid JSON — no markdown fences.
 
 Output JSON schema:
 {
-  "episode_title": "<title>",
+  "episode_title": "<中文集标题>",
   "scenes": [
     {
       "scene_id": "<e.g. ep01_s01>",
-      "description": "<brief description>",
-      "visual_prompt": "<detailed AI video generation prompt in English, include character visual descriptions>",
+      "description": "<中文场景描述>",
+      "visual_prompt": "<ENGLISH ONLY — detailed AI video generation prompt, include character visual descriptions>",
       "camera_movement": "<static | pan_left | pan_right | dolly_in | tracking | crane_up | handheld>",
       "duration_seconds": <float>,
-      "dialogue": "<character dialogue if any, in original language>",
-      "narration": "<voice-over narration if any>"
+      "dialogue": "<中文角色对白，无则留空>",
+      "narration": "<中文旁白，无则留空>"
     }
   ],
   "voice_over": {
-    "text": "<full narration script>",
+    "text": "<中文完整旁白脚本>",
     "tone": "<warm | dramatic | tense | playful>",
-    "language": "<zh | en>"
+    "language": "zh"
   },
   "music": {
     "style": "<orchestral | electronic | acoustic | lo-fi>",
     "mood": "<tense | romantic | mysterious | triumphant>",
     "tempo": <BPM int>
   },
-  "cliffhanger": "<description of episode-ending hook>"
+  "cliffhanger": "<中文悬念描述>"
 }
 """
 
@@ -157,6 +188,7 @@ class DramaPlanner:
                 number=ep.get("number", i + 1),
                 title=ep.get("title", f"Episode {i + 1}"),
                 synopsis=ep.get("synopsis", ""),
+                opening_hook=ep.get("opening_hook", ""),
                 duration_seconds=float(ep.get("duration_seconds", series.target_episode_duration)),
                 status=EpisodeStatus.PENDING,
             )
@@ -219,6 +251,21 @@ class DramaPlanner:
         )
 
         script_data = self._parse_json(raw)
+
+        # --- Duration validation ---
+        scenes = script_data.get("scenes", [])
+        total_duration = sum(float(s.get("duration_seconds", 0)) for s in scenes)
+        target = episode.duration_seconds
+        if abs(total_duration - target) > 5:
+            logger.warning(
+                "Scene durations sum to %.1fs (target %.1fs), adjusting proportionally",
+                total_duration, target,
+            )
+            if total_duration > 0:
+                scale = target / total_duration
+                for s in scenes:
+                    s["duration_seconds"] = round(float(s["duration_seconds"]) * scale, 1)
+
         episode.script = json.dumps(script_data, ensure_ascii=False)
         episode.scene_prompts = script_data.get("scenes", [])
         return script_data

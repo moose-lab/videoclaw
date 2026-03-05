@@ -61,6 +61,8 @@ class LLMClient:
 
     # Moonshot (Kimi) model prefix detection
     MOONSHOT_PREFIXES = ("openai/moonshot", "moonshot")
+    # Evolink (Kimi K2) model prefix detection
+    EVOLINK_PREFIXES = ("openai/kimi-k2", "kimi-k2")
 
     def __init__(self, default_model: str = "gpt-4o") -> None:
         self._default_model = default_model
@@ -70,6 +72,10 @@ class LLMClient:
     def _is_moonshot_model(self, model: str) -> bool:
         """Check if the model is a Moonshot (Kimi) model."""
         return any(model.startswith(prefix) for prefix in self.MOONSHOT_PREFIXES)
+
+    def _is_evolink_model(self, model: str) -> bool:
+        """Check if the model is an Evolink (Kimi K2) model."""
+        return any(model.startswith(prefix) for prefix in self.EVOLINK_PREFIXES)
 
     def _get_model_config(self, model: str) -> dict[str, Any]:
         """Get provider-specific configuration for the model."""
@@ -84,6 +90,12 @@ class LLMClient:
             # Normalize model name for LiteLLM (remove openai/ prefix if present)
             if model.startswith("openai/"):
                 config["model"] = model  # LiteLLM handles this
+
+        elif self._is_evolink_model(model):
+            # Evolink uses OpenAI-compatible API (Kimi K2)
+            if self._config.evolink_api_key:
+                config["api_key"] = self._config.evolink_api_key
+            config["api_base"] = self._config.evolink_api_base
 
         return config
 

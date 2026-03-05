@@ -38,6 +38,7 @@ class VideoClawConfig(BaseSettings):
     openai_api_key: str | None = Field(default=None)
     anthropic_api_key: str | None = Field(default=None)
     moonshot_api_key: str | None = Field(default=None)  # Kimi (月之暗面)
+    evolink_api_key: str | None = Field(default=None)  # Evolink (Kimi K2)
     kling_access_key: str | None = Field(default=None)  # Kling (可灵) Access Key
     kling_secret_key: str | None = Field(default=None)  # Kling (可灵) Secret Key
     minimax_api_key: str | None = Field(default=None)  # MiniMax (海螺AI) API Key
@@ -45,6 +46,7 @@ class VideoClawConfig(BaseSettings):
 
     # --- LLM API Base URLs ---
     moonshot_api_base: str = Field(default="https://api.moonshot.cn/v1")
+    evolink_api_base: str = Field(default="https://api.evolink.ai/v1")
 
     # --- Budget & resilience ---
     budget_default_usd: float = 10.0
