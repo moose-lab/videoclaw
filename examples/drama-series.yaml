@@ -1,0 +1,70 @@
+# Example: AI Short Drama Series
+# Usage:
+#   claw drama new "都市白领林薇在一次加班后偶遇神秘占卜师..." \
+#     --title "命运来电" --genre "都市悬疑" --episodes 5 \
+#     --style cinematic --lang zh --aspect-ratio 9:16 --plan
+#
+#   claw drama run <series_id>
+#
+# Or create manually:
+#   claw drama new "A mysterious phone call changes everything" \
+#     --title "Fate Calling" --genre "urban mystery" --episodes 5 --plan
+
+# This file documents the drama YAML format for reference.
+# Drama series are created via CLI, not loaded from YAML files.
+
+title: "命运来电"
+genre: "都市悬疑"
+synopsis: |
+  都市白领林薇在一次深夜加班后，偶遇一位神秘的占卜师。
+  占卜师给了她一部古老的手机，每次来电都能预知未来30秒。
+  林薇用这个能力改变了很多人的命运，但每次改变都有代价。
+  最终她发现，真正的命运不是被预知的，而是被选择的。
+
+style: cinematic
+language: zh
+aspect_ratio: "9:16"
+target_episode_duration: 60
+model_id: mock
+
+characters:
+  - name: 林薇
+    description: 28岁都市白领，聪明但总觉得人生缺少什么
+    visual_prompt: "young Chinese woman, 28 years old, professional attire, shoulder-length black hair, warm brown eyes, subtle makeup"
+    voice_style: calm
+
+  - name: 占卜师
+    description: 年龄不详的神秘老者，似乎知道一切
+    visual_prompt: "elderly Chinese man, long white beard, traditional dark robe, mysterious aura, wise eyes, holding a wooden staff"
+    voice_style: dramatic
+
+  - name: 张凯
+    description: 林薇的同事兼暧昧对象，性格开朗
+    visual_prompt: "young Chinese man, 30 years old, casual business attire, short black hair, friendly smile, athletic build"
+    voice_style: warm
+
+episodes:
+  - number: 1
+    title: "深夜来电"
+    synopsis: "林薇深夜加班遇到占卜师，获得神秘手机。第一次来电预知了一场即将发生的事故。"
+    duration_seconds: 60
+
+  - number: 2
+    title: "代价"
+    synopsis: "林薇成功阻止了事故，但发现身边开始出现奇怪的变化。张凯注意到她的异常。"
+    duration_seconds: 60
+
+  - number: 3
+    title: "失控"
+    synopsis: "林薇试图利用手机帮更多人，但每次改变命运的代价越来越大。她开始怀疑占卜师的目的。"
+    duration_seconds: 60
+
+  - number: 4
+    title: "真相"
+    synopsis: "林薇发现占卜师就是未来的自己，手机是一个关于选择的考验。张凯陷入危险。"
+    duration_seconds: 60
+
+  - number: 5
+    title: "选择"
+    synopsis: "林薇必须做出最终选择：继续使用手机，还是放手接受真实的命运。"
+    duration_seconds: 60
