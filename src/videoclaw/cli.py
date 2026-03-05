@@ -826,38 +826,6 @@ def flow_validate(
 
 
 # ---------------------------------------------------------------------------
-# claw ui
-# ---------------------------------------------------------------------------
-
-
-@app.command()
-def ui(
-    port: Annotated[int, typer.Option("--port", "-p", help="Dev server port.")] = 3000,
-) -> None:
-    """Launch the VideoClaw web UI (Next.js dev server)."""
-    web_dir = Path(__file__).resolve().parent.parent.parent / "web"
-    if not (web_dir / "package.json").exists():
-        console.print("[red]Web UI not found. Expected at:[/red]")
-        console.print(f"  {web_dir}")
-        console.print("\n[dim]Run: cd web && npm install && npm run dev[/dim]")
-        raise typer.Exit(code=1)
-
-    console.print(
-        Panel(
-            f"[bold]Starting VideoClaw Web UI[/bold]\n\n"
-            f"  URL:  [cyan]http://localhost:{port}[/cyan]\n"
-            f"  API:  [cyan]http://localhost:8000[/cyan]\n\n"
-            "[dim]Make sure the API server is also running:\n"
-            "  uvicorn videoclaw.server.app:create_app --factory[/dim]",
-            title="[bold cyan]Web UI[/bold cyan]",
-            border_style="cyan",
-        )
-    )
-
-    os.execvp("npm", ["npm", "run", "dev", "--prefix", str(web_dir), "--", "-p", str(port)])
-
-
-# ---------------------------------------------------------------------------
 # claw version
 # ---------------------------------------------------------------------------
 

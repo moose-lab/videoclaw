@@ -153,7 +153,7 @@ Six-layer design:
 
 | Layer | Purpose |
 |-------|---------|
-| Interface | CLI (`claw`) + Web UI + REST API |
+| Interface | CLI (`claw`) + REST API (optional) |
 | Gateway | FastAPI server, WebSocket progress |
 | Agent Runtime | Director, Planner, DAG Executor |
 | Generation | Script, Storyboard, Video, TTS, Music, Compose |
@@ -224,12 +224,12 @@ videoclaw/
 │   ├── generation/         # Script, storyboard, video, audio, compose
 │   ├── cost/               # Cost tracking + budget guards
 │   ├── flow/               # ClawFlow YAML parser + runner
-│   ├── server/             # FastAPI server + WebSocket
+│   ├── server/             # FastAPI REST API (optional, headless)
 │   ├── storage/            # Local filesystem storage
 │   ├── publishers/         # YouTube, Bilibili publishers
 │   └── utils/              # FFmpeg helpers
 ├── examples/               # Example ClawFlow YAML pipelines
-├── tests/                  # 37 tests (unit + integration)
+├── tests/                  # Unit + integration tests
 ├── Dockerfile
 ├── docker-compose.yml
 └── pyproject.toml
@@ -268,7 +268,7 @@ ruff check src/ tests/    # Lint
 - [x] **Phase 2**: FastAPI server, WebSocket, storage, publishers, test suite
 - [x] **Phase 3**: ClawFlow YAML engine, integration tests, Docker
 - [x] **Phase 4**: Director LLM integration, GitHub Actions CI, flow templates
-- [ ] **Phase 5**: Web UI (ClawFlow visual editor)
+- [ ] **Phase 5**: AI Short Drama orchestration + CLI-driven workflows
 - [ ] **Phase 6**: Plugin marketplace (ClawHub) + industry templates
 - [ ] **Phase 7**: Multi-agent collaboration + quality review loop
 

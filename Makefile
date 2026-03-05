@@ -1,4 +1,4 @@
-.PHONY: install dev test lint format run ui clean
+.PHONY: install dev test lint format run clean
 
 install:
 	uv pip install -e .
@@ -19,9 +19,6 @@ format:
 
 run:
 	claw generate "A 10-second demo video"
-
-ui:
-	claw ui
 
 clean:
 	rm -rf dist/ build/ *.egg-info .mypy_cache .pytest_cache .ruff_cache
