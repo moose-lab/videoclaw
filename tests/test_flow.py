@@ -152,6 +152,10 @@ def test_compile_dag():
 @pytest.mark.asyncio
 async def test_flow_runner_e2e(tmp_path):
     """End-to-end test: parse a flow, run it with mock handlers, verify completion."""
+    from unittest.mock import AsyncMock, patch
+    from videoclaw.config import VideoClawConfig
+    from videoclaw.core.state import Shot
+
     raw = {
         "name": "e2e-test",
         "steps": [
@@ -164,11 +168,49 @@ async def test_flow_runner_e2e(tmp_path):
         ],
     }
     flow = parse_flow(raw)
+    test_config = VideoClawConfig(projects_dir=tmp_path)
     sm = StateManager(projects_dir=tmp_path)
     ps = sm.create_project(prompt="e2e test")
 
+    # Pre-populate so script_gen and storyboard handlers skip LLM calls
+    ps.script = "Test script narration."
+
+    # Create a fake video file for the shot so compose handler finds it
+    shots_dir = tmp_path / ps.project_id / "shots"
+    shots_dir.mkdir(parents=True, exist_ok=True)
+    shot_file = shots_dir / "s1.mp4"
+    shot_file.write_bytes(b"mock_video_data")
+
+    ps.storyboard = [
+        Shot(shot_id="s1", prompt="test shot", duration_seconds=3.0,
+             model_id="mock", asset_path=str(shot_file)),
+    ]
+    sm.save(ps)
+
     runner = FlowRunner(state_manager=sm, max_concurrency=2)
-    result = await runner.run(flow, ps)
+
+    with patch("videoclaw.generation.audio.tts.TTSManager") as MockTTS, \
+         patch("videoclaw.generation.compose.VideoComposer") as MockComposer, \
+         patch("videoclaw.config.get_config", return_value=test_config):
+        tts_instance = MockTTS.return_value
+        tts_instance.generate_voiceover = AsyncMock(side_effect=lambda text, path, **kw: path)
+
+        composer_instance = MockComposer.return_value
+
+        async def _mock_compose(video_paths, output_path, **kw):
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"mock")
+            return output_path
+
+        async def _mock_render_final(video_path, audio_tracks, subtitle_path, output_path):
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"mock")
+            return output_path
+
+        composer_instance.compose = AsyncMock(side_effect=_mock_compose)
+        composer_instance.render_final = AsyncMock(side_effect=_mock_render_final)
+
+        result = await runner.run(flow, ps)
 
     assert result.status.value == "completed"
     assert "final_video" in result.assets

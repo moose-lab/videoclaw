@@ -178,28 +178,82 @@ class DAGExecutor:
             logger.exception("Failed to checkpoint state for %s", self.state.project_id)
 
     # ------------------------------------------------------------------
-    # Placeholder handlers (Phase 1)
+    # Handlers
     # ------------------------------------------------------------------
     # Each handler receives the TaskNode and the current ProjectState.
-    # Real implementations will be injected via register_handler() or
-    # by replacing these methods in later phases.
+    # Handlers are "smart": they detect pre-populated state (e.g. from
+    # DramaPlanner) and skip generation when data already exists.
 
     async def _handle_script_gen(self, node: TaskNode, state: ProjectState) -> Any:
-        logger.info("[placeholder] Generating script for: %s", node.params.get("prompt", ""))
-        await asyncio.sleep(0.01)
-        script = f"[Generated script for: {state.prompt}]"
-        state.script = script
-        return {"script": script}
+        """Generate script via LLM, or skip if already populated."""
+        if state.script:
+            logger.info("[script_gen] Script already exists, skipping LLM call")
+            return {"script": state.script}
+
+        from videoclaw.generation.script import ScriptGenerator
+
+        generator = ScriptGenerator()
+        language = state.metadata.get("language", "zh")
+        style = state.metadata.get("style", "cinematic")
+        duration = (
+            sum(s.duration_seconds for s in state.storyboard)
+            if state.storyboard
+            else 60.0
+        )
+
+        script = await generator.generate(
+            topic=state.prompt,
+            duration=duration,
+            tone=style,
+            language=language,
+        )
+        state.script = script.voice_over_text
+        logger.info(
+            "[script_gen] Generated script: %d sections, %.1fs",
+            len(script.sections),
+            script.total_duration,
+        )
+        return {
+            "script": state.script,
+            "title": script.title,
+            "sections": len(script.sections),
+        }
 
     async def _handle_storyboard(self, node: TaskNode, state: ProjectState) -> Any:
-        logger.info("[placeholder] Building storyboard")
-        await asyncio.sleep(0.01)
-        # In a real pipeline the LLM would decompose the script into shots.
-        # For now we leave the storyboard as-is if already populated.
-        return {"shot_count": len(state.storyboard)}
+        """Decompose script into shots via LLM, or skip if already populated."""
+        if state.storyboard:
+            logger.info(
+                "[storyboard] Storyboard already populated (%d shots), skipping",
+                len(state.storyboard),
+            )
+            return {"shot_count": len(state.storyboard)}
+
+        from videoclaw.generation.script import Script, ScriptSection
+        from videoclaw.generation.storyboard import StoryboardGenerator
+
+        # Build a Script object from state for the storyboard generator
+        script = Script(
+            title=state.prompt,
+            voice_over_text=state.script or "",
+            sections=[
+                ScriptSection(text=state.script or "", duration_seconds=60.0)
+            ],
+            total_duration=60.0,
+        )
+
+        generator = StoryboardGenerator()
+        aspect_ratio = state.metadata.get("aspect_ratio", "16:9")
+        style = state.metadata.get("style", "cinematic")
+
+        shots = await generator.decompose(script, style=style, aspect_ratio=aspect_ratio)
+        state.storyboard = shots
+        logger.info("[storyboard] Generated %d shots", len(shots))
+        return {"shot_count": len(shots)}
 
     async def _handle_video_gen(self, node: TaskNode, state: ProjectState) -> Any:
         """Generate video for a single shot using VideoGenerator."""
+        from pathlib import Path
+
         from videoclaw.generation.video import VideoGenerator
         from videoclaw.models.registry import get_registry
         from videoclaw.models.router import ModelRouter, RoutingStrategy
@@ -207,46 +261,34 @@ class DAGExecutor:
         shot_id = node.params.get("shot_id", "unknown")
         logger.info("[video_gen] Generating video for shot %s", shot_id)
 
-        # Find the shot in the storyboard
         shot = next((s for s in state.storyboard if s.shot_id == shot_id), None)
         if not shot:
-            logger.error("Shot %s not found in storyboard", shot_id)
             raise ValueError(f"Shot {shot_id} not found in storyboard")
 
-        # Create router with registry
         registry = get_registry()
-        registry.discover()  # Auto-discover adapters via entry points
-        
-        # Debug: log available models
-        available_models = [m["model_id"] for m in registry.list_models()]
-        logger.info("[video_gen] Available models: %s", available_models)
-        logger.info("[video_gen] Shot model_id: %s", shot.model_id)
-        
+        registry.discover()
+
         router = ModelRouter(registry)
         generator = VideoGenerator(router=router)
-        
-        try:
-            result = await generator.generate_shot(shot, strategy=RoutingStrategy.AUTO)
-        except Exception as e:
-            logger.error("[video_gen] Generation failed for shot %s: %s", shot_id, e)
-            raise
 
-        # Update shot with result
-        shot.asset_path = f"shots/{shot_id}.mp4"
+        result = await generator.generate_shot(
+            shot,
+            strategy=RoutingStrategy.AUTO,
+            aspect_ratio=node.params.get("aspect_ratio", state.metadata.get("aspect_ratio")),
+        )
+
+        # Update shot status
         shot.cost = result.cost_usd
         shot.status = ShotStatus.COMPLETED if result.video_data else ShotStatus.FAILED
 
-        # Save video data if present
+        # Persist video data
         if result.video_data:
             import hashlib
-            from pathlib import Path
-            
-            # Generate unique filename
+
             video_hash = hashlib.md5(result.video_data).hexdigest()[:8]
             output_dir = Path(self._config.projects_dir) / state.project_id / "shots"
             output_dir.mkdir(parents=True, exist_ok=True)
             output_path = output_dir / f"{shot_id}_{video_hash}.mp4"
-            
             output_path.write_bytes(result.video_data)
             shot.asset_path = str(output_path)
             logger.info("[video_gen] Saved video to %s", output_path)
@@ -258,23 +300,145 @@ class DAGExecutor:
         }
 
     async def _handle_tts(self, node: TaskNode, state: ProjectState) -> Any:
-        logger.info("[placeholder] Generating TTS narration")
-        await asyncio.sleep(0.01)
-        return {"asset_path": "audio/narration.wav"}
+        """Synthesize dialogue/narration audio per scene via TTSManager."""
+        import json as _json
+        from pathlib import Path
+
+        from videoclaw.generation.audio.tts import TTSManager
+
+        tts = TTSManager()
+        language = node.params.get("language", state.metadata.get("language", "zh"))
+        project_dir = Path(self._config.projects_dir) / state.project_id
+        audio_dir = project_dir / "audio"
+        audio_dir.mkdir(parents=True, exist_ok=True)
+
+        audio_paths: list[dict[str, str]] = []
+        scenes = node.params.get("scenes", [])
+
+        if scenes:
+            # Drama mode: per-scene dialogue + narration
+            for scene_data in scenes:
+                scene_id = scene_data.get("scene_id", "unknown")
+                dialogue = scene_data.get("dialogue", "").strip()
+                narration = scene_data.get("narration", "").strip()
+                voice = scene_data.get("voice")
+
+                if dialogue:
+                    path = audio_dir / f"{scene_id}_dialogue.mp3"
+                    await tts.generate_voiceover(
+                        dialogue, path, voice=voice, language=language,
+                    )
+                    audio_paths.append({
+                        "scene_id": scene_id,
+                        "type": "dialogue",
+                        "path": str(path),
+                    })
+
+                if narration:
+                    path = audio_dir / f"{scene_id}_narration.mp3"
+                    await tts.generate_voiceover(
+                        narration, path, language=language,
+                    )
+                    audio_paths.append({
+                        "scene_id": scene_id,
+                        "type": "narration",
+                        "path": str(path),
+                    })
+        elif state.script:
+            # Generic mode: single voiceover from full script
+            path = audio_dir / "voiceover.mp3"
+            await tts.generate_voiceover(state.script, path, language=language)
+            audio_paths.append({"type": "voiceover", "path": str(path)})
+
+        state.assets["tts_audio"] = _json.dumps(audio_paths)
+        logger.info("[tts] Synthesized %d audio segments", len(audio_paths))
+        return {"audio_paths": audio_paths, "count": len(audio_paths)}
 
     async def _handle_music(self, node: TaskNode, state: ProjectState) -> Any:
-        logger.info("[placeholder] Generating background music")
-        await asyncio.sleep(0.01)
-        return {"asset_path": "audio/music.wav"}
+        """Background music generation (placeholder — no music API integrated yet)."""
+        logger.info("[music] No music API configured, skipping BGM generation")
+        state.assets["music"] = ""
+        return {"status": "skipped", "reason": "no_music_api"}
 
     async def _handle_compose(self, node: TaskNode, state: ProjectState) -> Any:
-        logger.info("[placeholder] Composing timeline")
-        await asyncio.sleep(0.01)
-        return {"timeline": "composed"}
+        """Compose video clips + audio + subtitles into a single timeline."""
+        import json as _json
+        from pathlib import Path
+
+        from videoclaw.generation.compose import AudioTrack, AudioType, VideoComposer
+        from videoclaw.generation.subtitle import generate_srt
+
+        project_dir = Path(self._config.projects_dir) / state.project_id
+        composer = VideoComposer()
+
+        # 1. Collect video paths from completed shots
+        video_paths: list[Path] = []
+        for shot in state.storyboard:
+            if shot.asset_path and Path(shot.asset_path).exists():
+                video_paths.append(Path(shot.asset_path))
+
+        if not video_paths:
+            raise ValueError("No video assets available for composition")
+
+        # 2. Concatenate videos with transitions
+        composed_path = project_dir / "composed.mp4"
+        transition = node.params.get("transition", "dissolve")
+        await composer.compose(video_paths, composed_path, transition=transition)
+        logger.info("[compose] Composed %d clips -> %s", len(video_paths), composed_path)
+
+        # 3. Generate subtitles from scene dialogue
+        scenes = node.params.get("scenes", [])
+        subtitle_path = None
+        if scenes and any(s.get("dialogue") for s in scenes):
+            subtitle_path = project_dir / "subtitles.srt"
+            generate_srt(scenes, subtitle_path)
+            state.assets["subtitles"] = str(subtitle_path)
+            logger.info("[compose] Generated subtitles -> %s", subtitle_path)
+
+        # 4. Collect audio tracks (TTS + music)
+        audio_tracks: list[AudioTrack] = []
+        tts_data = state.assets.get("tts_audio")
+        if tts_data:
+            for entry in _json.loads(tts_data):
+                audio_path = Path(entry["path"])
+                if audio_path.exists():
+                    audio_tracks.append(AudioTrack(
+                        path=audio_path,
+                        type=AudioType.VOICE,
+                        volume=0.9,
+                    ))
+
+        # 5. Final render: audio mix + subtitle burn
+        output_path = project_dir / "composed_final.mp4"
+        if audio_tracks or subtitle_path:
+            await composer.render_final(
+                video_path=composed_path,
+                audio_tracks=audio_tracks,
+                subtitle_path=subtitle_path,
+                output_path=output_path,
+            )
+        else:
+            import shutil
+            shutil.copy2(composed_path, output_path)
+
+        state.assets["composed_video"] = str(output_path)
+        logger.info("[compose] Final composed video -> %s", output_path)
+        return {"composed_path": str(output_path)}
 
     async def _handle_render(self, node: TaskNode, state: ProjectState) -> Any:
-        logger.info("[placeholder] Rendering final video")
-        await asyncio.sleep(0.01)
-        output_path = f"output/{state.project_id}.mp4"
-        state.assets["final_video"] = output_path
-        return {"output_path": output_path}
+        """Produce the final deliverable video file."""
+        import shutil
+        from pathlib import Path
+
+        project_dir = Path(self._config.projects_dir) / state.project_id
+        composed = state.assets.get("composed_video")
+        if not composed or not Path(composed).exists():
+            raise ValueError("No composed video found — compose step may have failed")
+
+        output_path = project_dir / "final.mp4"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(composed, output_path)
+
+        state.assets["final_video"] = str(output_path)
+        logger.info("[render] Final video -> %s", output_path)
+        return {"output_path": str(output_path)}
