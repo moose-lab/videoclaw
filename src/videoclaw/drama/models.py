@@ -52,8 +52,25 @@ class ShotType(StrEnum):
 class AudioType(StrEnum):
     DIALOGUE = "dialogue"
     NARRATION = "narration"
+    INNER_MONOLOGUE = "inner_monologue"
     SFX = "sfx"
     MUSIC = "music"
+
+
+class LineType(StrEnum):
+    NARRATION = "narration"
+    DIALOGUE = "dialogue"
+    INNER_MONOLOGUE = "inner_monologue"
+
+
+class DramaGenre(StrEnum):
+    SWEET_ROMANCE = "sweet_romance"
+    MALE_POWER_FANTASY = "male_power_fantasy"
+    SUSPENSE_THRILLER = "suspense_thriller"
+    ANCIENT_XIANXIA = "ancient_xianxia"
+    COMEDY = "comedy"
+    FAMILY_DRAMA = "family_drama"
+    OTHER = "other"
 
 
 # ---------------------------------------------------------------------------
@@ -150,14 +167,56 @@ class VoiceProfile:
     pitch: int = 0
     emotion: str = "neutral"
     volume: float = 1.0
+    role_name: str = ""
+    line_type: LineType = LineType.DIALOGUE
+    age_feel: str = "young_adult"
+    energy: str = "medium"
+    description: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        d["line_type"] = self.line_type.value
+        return d
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> VoiceProfile:
         known = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in data.items() if k in known})
+        filtered = {k: v for k, v in data.items() if k in known}
+        if "line_type" in filtered:
+            try:
+                filtered["line_type"] = LineType(filtered["line_type"])
+            except ValueError:
+                filtered["line_type"] = LineType.DIALOGUE
+        return cls(**filtered)
+
+
+@dataclass
+class DialogueLine:
+    """A single line of dialogue, narration, or inner monologue."""
+
+    text: str
+    speaker: str
+    line_type: LineType = LineType.DIALOGUE
+    scene_id: str = ""
+    emotion_hint: str | None = None
+    duration_seconds: float = 0.0
+    asset_path: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        d["line_type"] = self.line_type.value
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> DialogueLine:
+        known = {f.name for f in fields(cls)}
+        filtered = {k: v for k, v in data.items() if k in known}
+        if "line_type" in filtered:
+            try:
+                filtered["line_type"] = LineType(filtered["line_type"])
+            except ValueError:
+                filtered["line_type"] = LineType.DIALOGUE
+        return cls(**filtered)
 
 
 @dataclass
@@ -167,6 +226,7 @@ class AudioSegment:
     segment_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     scene_id: str = ""
     audio_type: AudioType = AudioType.DIALOGUE
+    line_type: LineType = LineType.DIALOGUE
     text: str = ""
     character_name: str = ""
     audio_path: str | None = None
@@ -177,6 +237,7 @@ class AudioSegment:
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["audio_type"] = self.audio_type.value
+        d["line_type"] = self.line_type.value
         return d
 
     @classmethod
@@ -185,6 +246,11 @@ class AudioSegment:
         data = {k: v for k, v in data.items() if k in known}
         if data.get("audio_type") is not None:
             data["audio_type"] = AudioType(data["audio_type"])
+        if data.get("line_type") is not None:
+            try:
+                data["line_type"] = LineType(data["line_type"])
+            except ValueError:
+                data["line_type"] = LineType.DIALOGUE
         return cls(**data)
 
 
@@ -223,6 +289,46 @@ VOICE_PROFILES: dict[str, VoiceProfile] = {
     "playful": VoiceProfile(voice_id="Lively_Girl", speed=1.10, pitch=2, emotion="happy"),
     "dramatic": VoiceProfile(voice_id="Determined_Man", speed=0.90, pitch=-1),
     "calm": VoiceProfile(voice_id="Calm_Woman", speed=0.90),
+}
+
+
+# Genre-aware narrator voice presets
+NARRATOR_PRESETS: dict[DramaGenre, VoiceProfile] = {
+    DramaGenre.SWEET_ROMANCE: VoiceProfile(
+        voice_id="Friendly_Person", speed=1.0, pitch=1, emotion="happy",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="young_adult", energy="medium", description="warm female",
+    ),
+    DramaGenre.MALE_POWER_FANTASY: VoiceProfile(
+        voice_id="Imposing_Manner", speed=0.95, pitch=-2, emotion="neutral",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="middle_aged", energy="medium", description="mature male",
+    ),
+    DramaGenre.SUSPENSE_THRILLER: VoiceProfile(
+        voice_id="Determined_Man", speed=0.9, pitch=-3, emotion="fearful",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="middle_aged", energy="low", description="deep mysterious",
+    ),
+    DramaGenre.ANCIENT_XIANXIA: VoiceProfile(
+        voice_id="Calm_Woman", speed=0.95, pitch=2, emotion="neutral",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="young_adult", energy="low", description="ethereal female",
+    ),
+    DramaGenre.COMEDY: VoiceProfile(
+        voice_id="Lively_Girl", speed=1.1, pitch=1, emotion="happy",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="young_adult", energy="high", description="energetic",
+    ),
+    DramaGenre.FAMILY_DRAMA: VoiceProfile(
+        voice_id="Calm_Woman", speed=0.95, pitch=0, emotion="neutral",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="middle_aged", energy="medium", description="warm mature",
+    ),
+    DramaGenre.OTHER: VoiceProfile(
+        voice_id="Friendly_Person", speed=1.0, pitch=0, emotion="neutral",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="young_adult", energy="medium", description="default",
+    ),
 }
 
 

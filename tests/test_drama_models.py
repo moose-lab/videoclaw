@@ -6,6 +6,8 @@ from videoclaw.drama.models import (
     AudioSegment,
     AudioType,
     Character,
+    DialogueLine,
+    DramaGenre,
     DramaManager,
     DramaScene,
     DramaSeries,
@@ -13,6 +15,8 @@ from videoclaw.drama.models import (
     Episode,
     EpisodeAudioManifest,
     EpisodeStatus,
+    LineType,
+    NARRATOR_PRESETS,
     ShotScale,
     ShotType,
     VoiceProfile,
@@ -363,3 +367,58 @@ def test_voice_profiles_all_styles_covered():
     # Verify all voice_ids are distinct
     voice_ids = [p.voice_id for p in VOICE_PROFILES.values()]
     assert len(voice_ids) == len(set(voice_ids)), "Each style must map to a unique voice_id"
+
+
+# ---------------------------------------------------------------------------
+# LineType, DramaGenre, DialogueLine, NARRATOR_PRESETS, extended VoiceProfile
+# ---------------------------------------------------------------------------
+
+
+def test_line_type_enum():
+    assert LineType.NARRATION == "narration"
+    assert LineType.DIALOGUE == "dialogue"
+    assert LineType.INNER_MONOLOGUE == "inner_monologue"
+
+
+def test_drama_genre_enum():
+    assert DramaGenre.SWEET_ROMANCE == "sweet_romance"
+    assert DramaGenre.MALE_POWER_FANTASY == "male_power_fantasy"
+    assert DramaGenre.SUSPENSE_THRILLER == "suspense_thriller"
+
+
+def test_voice_profile_extended_fields():
+    vp = VoiceProfile(voice_id="Test", role_name="林小姐", line_type=LineType.DIALOGUE, age_feel="young_adult", energy="high", description="活泼女声")
+    d = vp.to_dict()
+    assert d["role_name"] == "林小姐"
+    assert d["line_type"] == "dialogue"
+    restored = VoiceProfile.from_dict(d)
+    assert restored.role_name == "林小姐"
+    assert restored.line_type == LineType.DIALOGUE
+
+
+def test_dialogue_line_roundtrip():
+    line = DialogueLine(text="你怎么在这里？", speaker="林小姐", line_type=LineType.DIALOGUE, scene_id="ep01_s03", emotion_hint="shocked")
+    d = line.to_dict()
+    restored = DialogueLine.from_dict(d)
+    assert restored.speaker == "林小姐"
+    assert restored.line_type == LineType.DIALOGUE
+
+
+def test_narrator_presets_by_genre():
+    for genre in DramaGenre:
+        assert genre in NARRATOR_PRESETS
+        preset = NARRATOR_PRESETS[genre]
+        assert preset.line_type == LineType.NARRATION
+        assert preset.role_name == "narrator"
+
+
+def test_audio_type_has_inner_monologue():
+    assert AudioType.INNER_MONOLOGUE == "inner_monologue"
+
+
+def test_audio_segment_with_line_type():
+    seg = AudioSegment(text="他不可能知道", character_name="萧衍", audio_type=AudioType.INNER_MONOLOGUE, line_type=LineType.INNER_MONOLOGUE)
+    d = seg.to_dict()
+    assert d["line_type"] == "inner_monologue"
+    restored = AudioSegment.from_dict(d)
+    assert restored.line_type == LineType.INNER_MONOLOGUE
