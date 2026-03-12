@@ -120,6 +120,7 @@ class DramaScene:
     camera_movement: str = "static"
     duration_seconds: float = 5.0
     dialogue: str = ""
+    dialogue_line_type: str = "dialogue"  # "dialogue" | "inner_monologue"
     narration: str = ""
     shot_scale: ShotScale | None = None
     shot_type: ShotType | None = None

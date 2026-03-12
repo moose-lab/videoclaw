@@ -422,3 +422,21 @@ def test_audio_segment_with_line_type():
     assert d["line_type"] == "inner_monologue"
     restored = AudioSegment.from_dict(d)
     assert restored.line_type == LineType.INNER_MONOLOGUE
+
+
+# ---------------------------------------------------------------------------
+# Task 6: DramaScene.dialogue_line_type
+# ---------------------------------------------------------------------------
+
+
+def test_drama_scene_dialogue_line_type():
+    scene = DramaScene(scene_id="s01", dialogue="不可能", speaking_character="萧衍", dialogue_line_type="inner_monologue")
+    d = scene.to_dict()
+    assert d["dialogue_line_type"] == "inner_monologue"
+    restored = DramaScene.from_dict(d)
+    assert restored.dialogue_line_type == "inner_monologue"
+
+
+def test_drama_scene_dialogue_line_type_default():
+    scene = DramaScene(scene_id="s01", dialogue="你好")
+    assert scene.dialogue_line_type == "dialogue"

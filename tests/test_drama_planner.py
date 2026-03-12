@@ -208,3 +208,15 @@ async def test_parse_json_strips_markdown_fences():
 
     with pytest.raises(ValueError, match="invalid JSON"):
         planner._parse_json("not json at all")
+
+
+# ---------------------------------------------------------------------------
+# Task 5: inner_monologue in EPISODE_SCRIPT_PROMPT
+# ---------------------------------------------------------------------------
+
+
+def test_episode_script_has_inner_monologue():
+    from videoclaw.drama.planner import EPISODE_SCRIPT_PROMPT
+    assert "inner_monologue" in EPISODE_SCRIPT_PROMPT
+    assert "dialogue_line_type" in EPISODE_SCRIPT_PROMPT
+    assert "内心独白" in EPISODE_SCRIPT_PROMPT

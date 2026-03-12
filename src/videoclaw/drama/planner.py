@@ -159,6 +159,13 @@ EPISODE_SCRIPT_PROMPT: str = """\
 - 不是每个场景都需要台词，无声的表情特写同样有力
 - speaking_character 必须与 characters_present 中的角色一致
 
+# 内心独白（内心OS）
+- 内心独白是中国短剧的标志性叙事手法：角色第一人称内心活动
+- 标记为 dialogue_line_type: "inner_monologue"
+- 触发标志：角色内心活动、自言自语式的思考、"心想"、"暗道"、不可能式的自我反问
+- 内心独白用与该角色对白相同的声音，但后期加混响处理，制造"脑内回响"效果
+- 内心独白既不是对白（说给其他角色听），也不是旁白（第三人称叙述者视角）
+
 # visual_prompt 写作规范
 - 必须用英文，针对AI视频生成模型优化
 - 结构：[环境/场景] + [角色完整外貌] + [动作/表情] + [光影/氛围]
@@ -182,6 +189,7 @@ Output JSON schema:
       "camera_movement": "<static | pan_left | pan_right | dolly_in | tracking | crane_up | handheld>",
       "duration_seconds": <float>,
       "dialogue": "<中文角色对白，短句口语化，无则留空>",
+      "dialogue_line_type": "<dialogue | inner_monologue — 角色间对白为dialogue，内心独白(第一人称OS/心理活动)为inner_monologue，无对白则留空>",
       "narration": "<中文旁白，无则留空>",
       "speaking_character": "<说话角色名，必须在 characters_present 中，无则留空>",
       "shot_scale": "<close_up | medium_close | medium | wide | extreme_wide>",
