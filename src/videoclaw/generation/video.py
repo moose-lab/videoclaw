@@ -42,6 +42,9 @@ class VideoGenerator:
         self,
         shot: Shot,
         strategy: RoutingStrategy = RoutingStrategy.AUTO,
+        aspect_ratio: str | None = None,
+        reference_image: bytes | None = None,
+        extra_references: dict[str, bytes] | None = None,
     ) -> GenerationResult:
         """Generate video for a single shot.
 
@@ -51,6 +54,12 @@ class VideoGenerator:
             The shot to generate, containing prompt and metadata.
         strategy:
             The routing strategy used to select a model adapter.
+        aspect_ratio:
+            Optional aspect ratio override (e.g. "16:9").
+        reference_image:
+            Primary character reference image bytes for IMAGE_TO_VIDEO.
+        extra_references:
+            Additional character reference images keyed by character name.
 
         Returns
         -------
@@ -67,9 +76,15 @@ class VideoGenerator:
         )
 
         # Build generation request from shot data
+        extra: dict[str, Any] = {}
+        if extra_references:
+            extra["additional_references"] = extra_references
+
         request = GenerationRequest(
             prompt=shot.prompt,
             duration_seconds=shot.duration_seconds,
+            reference_image=reference_image,
+            extra=extra,
         )
 
         # Select the adapter via the router

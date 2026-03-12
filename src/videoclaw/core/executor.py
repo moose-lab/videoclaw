@@ -200,6 +200,8 @@ class DAGExecutor:
 
     async def _handle_video_gen(self, node: TaskNode, state: ProjectState) -> Any:
         """Generate video for a single shot using VideoGenerator."""
+        from pathlib import Path
+
         from videoclaw.generation.video import VideoGenerator
         from videoclaw.models.registry import get_registry
         from videoclaw.models.router import ModelRouter, RoutingStrategy
@@ -213,26 +215,59 @@ class DAGExecutor:
             logger.error("Shot %s not found in storyboard", shot_id)
             raise ValueError(f"Shot {shot_id} not found in storyboard")
 
+        # Load character reference images from params
+        reference_images: dict[str, str] = node.params.get("reference_images", {})
+        speaking_character: str = node.params.get("speaking_character", "")
+
+        primary_ref_bytes: bytes | None = None
+        extra_refs: dict[str, bytes] = {}
+
+        if reference_images:
+            # Determine primary character: speaking_character first, else first available
+            primary_name = speaking_character if speaking_character in reference_images else None
+            if primary_name is None:
+                primary_name = next(iter(reference_images))
+
+            for char_name, img_path in reference_images.items():
+                img_file = Path(img_path)
+                if not img_file.exists():
+                    logger.warning(
+                        "[video_gen] Reference image not found for %s: %s",
+                        char_name,
+                        img_path,
+                    )
+                    continue
+                img_bytes = img_file.read_bytes()
+                if char_name == primary_name:
+                    primary_ref_bytes = img_bytes
+                else:
+                    extra_refs[char_name] = img_bytes
+
         # Create router with registry
         registry = get_registry()
         registry.discover()  # Auto-discover adapters via entry points
-        
+
         # Debug: log available models
         available_models = [m["model_id"] for m in registry.list_models()]
         logger.info("[video_gen] Available models: %s", available_models)
         logger.info("[video_gen] Shot model_id: %s", shot.model_id)
-        
+
         router = ModelRouter(registry)
         generator = VideoGenerator(router=router)
-        
+
         try:
-            result = await generator.generate_shot(shot, strategy=RoutingStrategy.AUTO)
+            result = await generator.generate_shot(
+                shot,
+                strategy=RoutingStrategy.AUTO,
+                reference_image=primary_ref_bytes,
+                extra_references=extra_refs if extra_refs else None,
+            )
         except Exception as e:
             logger.error("[video_gen] Generation failed for shot %s: %s", shot_id, e)
             raise
 
         # Update shot with result
-        shot.asset_path = result.asset_path or f"shots/{shot_id}.mp4"
+        shot.asset_path = f"shots/{shot_id}.mp4"
         shot.cost = result.cost_usd
         shot.status = ShotStatus.COMPLETED if result.video_data else ShotStatus.FAILED
 

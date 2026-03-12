@@ -55,6 +55,9 @@ class Shot:
     asset_path: str | None = None
     cost: float = 0.0
     retries: int = 0
+    reference_images: dict[str, str] = field(default_factory=dict)
+    # Mapping: character_name → file_path
+    # e.g. {"林薇": "/path/to/dramas/xxx/characters/林薇.png"}
 
     # -- Serialisation helpers -------------------------------------------------
 

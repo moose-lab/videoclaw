@@ -234,17 +234,26 @@ class MiniMaxVideoAdapter:
 
         # Image to video: first_frame_image
         if request.reference_image:
-            # MiniMax expects a URL for first_frame_image
-            # If we have bytes, we need to upload first or use base64
-            # For now, check if it's a URL in extra
             if "first_frame_image_url" in request.extra:
                 payload["first_frame_image"] = request.extra["first_frame_image_url"]
             elif "first_frame_image" in request.extra:
                 payload["first_frame_image"] = request.extra["first_frame_image"]
+            elif "first_frame_image" not in payload:
+                # bytes → base64 data URI
+                import base64
+                b64 = base64.b64encode(request.reference_image).decode("utf-8")
+                payload["first_frame_image"] = f"data:image/png;base64,{b64}"
 
         # Subject reference (for S2V-01 model)
-        if self._model == "minimax-s2v-01" and "subject_reference" in request.extra:
-            payload["subject_reference"] = request.extra["subject_reference"]
+        if self._model == "minimax-s2v-01" and request.reference_image:
+            if "subject_reference" in request.extra:
+                payload["subject_reference"] = request.extra["subject_reference"]
+            elif "subject_reference" not in payload:
+                import base64
+                b64 = base64.b64encode(request.reference_image).decode("utf-8")
+                payload["subject_reference"] = [
+                    {"image": f"data:image/png;base64,{b64}"}
+                ]
 
         logger.debug("[minimax] Built payload: %s", payload)
         return payload

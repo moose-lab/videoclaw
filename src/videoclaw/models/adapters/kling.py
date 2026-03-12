@@ -251,16 +251,19 @@ class KlingVideoAdapter:
 
         # Handle image to video
         if request.reference_image:
-            # Would need to upload the image first
-            # For now, pass as base64 if supported
-            pass
+            b64 = base64.b64encode(request.reference_image).decode("utf-8")
+            payload["image"] = f"data:image/png;base64,{b64}"
 
         logger.debug("[kling] Built payload: %s", payload)
         return payload
 
     async def _create_job(self, request: GenerationRequest) -> str:
         """Create a generation job and return the job ID."""
-        path = f"/{_VERSION}/videos/text2video"
+        path = (
+            f"/{_VERSION}/videos/image2video"
+            if request.reference_image
+            else f"/{_VERSION}/videos/text2video"
+        )
         headers = self._auth_headers(method="POST", path=path)
         payload = self._build_payload(request)
 
