@@ -51,13 +51,20 @@ class EvolinkImageGenerator:
         output_dir: Path,
         filename: str = "image.png",
         model: str = "doubao-seedream-5.0-lite",
-        size: str = "768:1024",
+        size: str = "3:4",
         quality: str = "2K",
         reference_urls: list[str] | None = None,
     ) -> Path:
         """Generate an image and save to *output_dir/filename*.
 
         Returns the local Path to the downloaded image.
+
+        Parameters
+        ----------
+        size:
+            Ratio format (``"1:1"``, ``"3:4"``, ``"16:9"``, ``"auto"``) or
+            pixel format (``"2048x2048"``).  Seedream 5.0 does NOT accept
+            raw pixel dimensions separated by ``:``.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / filename
@@ -72,15 +79,25 @@ class EvolinkImageGenerator:
         if reference_urls:
             body["image_urls"] = reference_urls
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        logger.info(
+            "Submitting image generation: model=%s size=%s prompt=%.60s...",
+            model, size, prompt,
+        )
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
             # Submit generation task
             resp = await client.post(
                 f"{self._api_base}/images/generations",
                 headers=self._headers(),
                 json=body,
             )
+            if resp.status_code != 200:
+                logger.error(
+                    "Image API error %d: %s", resp.status_code, resp.text,
+                )
             resp.raise_for_status()
             task_data = resp.json()
+            logger.debug("Image task response: %s", task_data)
 
             # Some APIs return the image URL directly; others return a task ID
             image_url = self._extract_image_url(task_data)
@@ -91,7 +108,7 @@ class EvolinkImageGenerator:
                 image_url = await self._poll_task(client, task_id)
 
             # Download the image
-            img_resp = await client.get(image_url)
+            img_resp = await client.get(image_url, timeout=60.0)
             img_resp.raise_for_status()
             output_path.write_bytes(img_resp.content)
 

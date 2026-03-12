@@ -61,8 +61,8 @@ class LLMClient:
 
     # Moonshot (Kimi) model prefix detection
     MOONSHOT_PREFIXES = ("openai/moonshot", "moonshot")
-    # Evolink (Kimi K2) model prefix detection
-    EVOLINK_PREFIXES = ("openai/kimi-k2", "kimi-k2")
+    # Evolink (Kimi) model prefix detection
+    EVOLINK_PREFIXES = ("openai/kimi-k2", "kimi-k2", "openai/kimi-2.5", "kimi-2.5")
 
     def __init__(self, default_model: str = "gpt-4o") -> None:
         self._default_model = default_model
@@ -205,6 +205,7 @@ class LLMClient:
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        timeout: float | None = None,
     ) -> str:
         """Send a pre-built message list and return the assistant's reply.
 
@@ -221,22 +222,41 @@ class LLMClient:
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
 
+        # Thinking models need longer timeouts
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        elif "thinking" in resolved_model:
+            kwargs["timeout"] = 600  # 10 minutes for thinking models
+
         # Apply provider-specific config (e.g., Moonshot API base)
         kwargs.update(self._get_model_config(resolved_model))
 
-        logger.debug("[llm] chat call to %s (%d messages)", resolved_model, len(messages))
-        response = await litellm.acompletion(**kwargs)
+        # Use streaming for thinking models to avoid proxy timeouts
+        use_stream = "thinking" in resolved_model
 
-        if hasattr(response, "usage") and response.usage is not None:
-            self.usage.record(
-                {
-                    "prompt_tokens": response.usage.prompt_tokens,
-                    "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens,
-                }
-            )
+        logger.debug("[llm] chat call to %s (%d messages, stream=%s)", resolved_model, len(messages), use_stream)
 
-        content: str = response.choices[0].message.content or ""
+        if use_stream:
+            kwargs["stream"] = True
+            response = await litellm.acompletion(**kwargs)
+            chunks: list[str] = []
+            async for chunk in response:
+                delta = chunk.choices[0].delta
+                if delta and delta.content:
+                    chunks.append(delta.content)
+            content = "".join(chunks)
+        else:
+            response = await litellm.acompletion(**kwargs)
+            if hasattr(response, "usage") and response.usage is not None:
+                self.usage.record(
+                    {
+                        "prompt_tokens": response.usage.prompt_tokens,
+                        "completion_tokens": response.usage.completion_tokens,
+                        "total_tokens": response.usage.total_tokens,
+                    }
+                )
+            content = response.choices[0].message.content or ""
+
         return content
 
     # ------------------------------------------------------------------

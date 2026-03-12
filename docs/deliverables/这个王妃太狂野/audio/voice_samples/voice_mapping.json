@@ -1,0 +1,22 @@
+{
+  "林薇": {
+    "edge_tts_voice": "zh-CN-XiaoxiaoNeural",
+    "sample_text": "你确定？在这王府里，没人能动我。我不是从前的废物王妃了。",
+    "sample_audio": "audio/voice_samples/林薇_voice_sample.mp3"
+  },
+  "萧衍": {
+    "edge_tts_voice": "zh-CN-YunjianNeural",
+    "sample_text": "本王的事，不劳你费心。退下。",
+    "sample_audio": "audio/voice_samples/萧衍_voice_sample.mp3"
+  },
+  "慕容雪": {
+    "edge_tts_voice": "zh-CN-XiaoyiNeural",
+    "sample_text": "姐姐说笑了，妹妹怎敢造次呢？不过是替王爷分忧罢了。",
+    "sample_audio": "audio/voice_samples/慕容雪_voice_sample.mp3"
+  },
+  "老太君": {
+    "edge_tts_voice": "zh-CN-XiaochenNeural",
+    "sample_text": "放肆！萧家的规矩，还轮不到你来说！给我把人带下去！",
+    "sample_audio": "audio/voice_samples/老太君_voice_sample.mp3"
+  }
+}

@@ -1,0 +1,230 @@
+{
+  "episode_title": "深夜试探",
+  "scenes": [
+    {
+      "scene_id": "ep03_s01",
+      "description": "慕容雪闺房内，烛光摇曳。她手持曼陀罗折扇，眼神阴狠，决定提前动手除掉林薇。",
+      "visual_prompt": "Ancient Chinese bedroom at night, candlelight flickering, Beautiful Chinese woman in her mid-20s with round face and dimples, gentle almond eyes hiding cunning, elaborate updo with golden phoenix hairpins, wearing pink silk hanfu with floral patterns, holding folding fan with mandala flower painting, sitting at wooden table, sinister expression, dramatic shadows, moody atmosphere, cinematic lighting",
+      "camera_movement": "static",
+      "duration_seconds": 4.5,
+      "dialogue": "",
+      "narration": "毒计，要提前了。",
+      "speaking_character": "",
+      "shot_scale": "close_up",
+      "shot_type": "detail",
+      "emotion": "suspense",
+      "characters_present": [
+        "慕容雪"
+      ],
+      "transition": "cut",
+      "sfx": "烛火摇曳声"
+    },
+    {
+      "scene_id": "ep03_s02",
+      "description": "深夜柴房外，月光清冷。萧衍黑衣身影出现，腰间佩剑，眼神审视地望向柴房门。",
+      "visual_prompt": "Ancient Chinese courtyard at midnight, moonlight casting cold blue light, tall Chinese man in his late-20s with sharp angular jawline, intense dark eyes, long black hair in high ponytail with silver crown, wearing black brocade robe with dragon embroidery, broad shoulders, never-drawn sword at waist, standing still with authoritative posture, atmospheric mist, ethereal lighting",
+      "camera_movement": "static",
+      "duration_seconds": 4.0,
+      "dialogue": "",
+      "narration": "",
+      "speaking_character": "",
+      "shot_scale": "medium",
+      "shot_type": "establishing",
+      "emotion": "tense",
+      "characters_present": [
+        "萧衍"
+      ],
+      "transition": "cut",
+      "sfx": "脚步声"
+    },
+    {
+      "scene_id": "ep03_s03",
+      "description": "柴房内，林薇盘坐休息。她突然睁眼，凤凰眼锐利如刃，瞬间察觉门外危险。",
+      "visual_prompt": "Dilapidated ancient Chinese woodshed, moonlight through window bars, young Chinese woman in early 20s with delicate oval face, phoenix eyes with sharp gaze, long black hair with jade hairpin, wearing tattered but elegant white hanfu with red inner lining, slender build, subtle scar on left wrist, sitting cross-legged, eyes snapping open with alert expression, soft moonlight on face, moody atmosphere",
+      "camera_movement": "static",
+      "duration_seconds": 3.5,
+      "dialogue": "",
+      "narration": "她醒了。",
+      "speaking_character": "",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "emotion": "tense",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "衣袂摩擦声"
+    },
+    {
+      "scene_id": "ep03_s04",
+      "description": "柴房内，萧衍射出银针暗器。林薇闪电般抬手，两指精准夹住银针，嘴角微扬。",
+      "visual_prompt": "Inside dark woodshed, moonlight streaming through broken door, tall Chinese man in black brocade robe with dragon embroidery extending hand releasing silver needle, young Chinese woman in tattered white hanfu with red lining catching silver needle between two fingers with lightning reflex, close-up of hands, determined smirk, dramatic shadows, cinematic action lighting",
+      "camera_movement": "handheld",
+      "duration_seconds": 5.0,
+      "dialogue": "靖王殿下，深夜来访，有何指教？",
+      "narration": "",
+      "speaking_character": "林薇",
+      "shot_scale": "close_up",
+      "shot_type": "action",
+      "emotion": "defiant",
+      "characters_present": [
+        "林薇",
+        "萧衍"
+      ],
+      "transition": "cut",
+      "sfx": "暗器破风声"
+    },
+    {
+      "scene_id": "ep03_s05",
+      "description": "萧衍站在门口，眼中闪过震惊。他重新审视眼前这个曾被自己休弃的女人。",
+      "visual_prompt": "Woodshed doorway framed in moonlight, tall Chinese man in his late-20s with sharp angular jawline, intense dark eyes widening in shock, long black hair in high ponytail with silver crown, wearing black brocade robe with dragon embroidery, never-drawn sword at waist, expression of disbelief and reappraisal, soft moonlight on face, atmospheric mood",
+      "camera_movement": "static",
+      "duration_seconds": 3.5,
+      "dialogue": "",
+      "narration": "他从未见过这样的她。",
+      "speaking_character": "",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "emotion": "shock",
+      "characters_present": [
+        "萧衍"
+      ],
+      "transition": "cut",
+      "sfx": "倒吸气声"
+    },
+    {
+      "scene_id": "ep03_s06",
+      "description": "月下庭院，两人对峙。林薇白衣飘动，萧衍黑衣肃杀，眼神交锋，气势不相上下。",
+      "visual_prompt": "Ancient Chinese courtyard bathed in moonlight, young Chinese woman in tattered white hanfu with red lining facing tall Chinese man in black brocade robe with dragon embroidery, both standing in fighting stance, phoenix eyes meeting intense dark gaze, moonlight creating dramatic silhouettes, ethereal atmosphere, cinematic composition",
+      "camera_movement": "crane_up",
+      "duration_seconds": 6.0,
+      "dialogue": "你究竟是谁？",
+      "narration": "",
+      "speaking_character": "萧衍",
+      "shot_scale": "medium_close",
+      "shot_type": "action",
+      "emotion": "tense",
+      "characters_present": [
+        "林薇",
+        "萧衍"
+      ],
+      "transition": "cut",
+      "sfx": "夜风声"
+    },
+    {
+      "scene_id": "ep03_s07",
+      "description": "林薇微微一笑，眼神挑衅。她轻轻转动手中银针，姿态从容。",
+      "visual_prompt": "Moonlit courtyard, close-up on young Chinese woman in early 20s with delicate oval face, phoenix eyes with sharp gaze, long black hair with jade hairpin, wearing tattered white hanfu with red lining, holding silver needle between fingers, subtle smirk playing on lips, confident posture, soft moonlight creating gentle shadows, atmospheric mood",
+      "camera_movement": "static",
+      "duration_seconds": 4.0,
+      "dialogue": "王爷不是已经查过了？",
+      "narration": "",
+      "speaking_character": "林薇",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "emotion": "defiant",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "银针转动声"
+    },
+    {
+      "scene_id": "ep03_s08",
+      "description": "一支飞镖破空而来，钉在柴房窗棂上。镖尾系着一封密信，纸页在夜风中飘动。",
+      "visual_prompt": "Night woodshed window, moonlight illuminating wooden frame, throwing dart with red tassel embedding into windowsill with thud, secret letter attached fluttering in night breeze, close-up of dart and letter, dramatic shadows, suspenseful atmosphere",
+      "camera_movement": "static",
+      "duration_seconds": 4.0,
+      "dialogue": "",
+      "narration": "飞来的，是警告。",
+      "speaking_character": "",
+      "shot_scale": "close_up",
+      "shot_type": "detail",
+      "emotion": "suspense",
+      "characters_present": [],
+      "transition": "cut",
+      "sfx": "飞镖破风声"
+    },
+    {
+      "scene_id": "ep03_s09",
+      "description": "林薇展开密信，借着月光阅读。看到内容瞬间，瞳孔骤缩，手指收紧。",
+      "visual_prompt": "Close-up of hands unfolding secret letter in moonlight, young Chinese woman in tattered white hanfu with red lining reading, phoenix eyes widening in shock, subtle scar on left wrist visible, fingers trembling then clenching paper, moonlight revealing text, dramatic lighting, tense atmosphere",
+      "camera_movement": "static",
+      "duration_seconds": 4.5,
+      "dialogue": "",
+      "narration": "",
+      "speaking_character": "",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "emotion": "shock",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "纸张摩擦声"
+    },
+    {
+      "scene_id": "ep03_s10",
+      "description": "密信特写，月光照亮字迹。七个字清晰可见：'你的前世，我都知道'。",
+      "visual_prompt": "Extreme close-up of secret letter in moonlight, Chinese calligraphy characters '你的前世，我都知道' illuminated by soft blue moonlight, ink glistening, paper texture visible, mysterious atmosphere, ethereal lighting",
+      "camera_movement": "dolly_in",
+      "duration_seconds": 4.0,
+      "dialogue": "",
+      "narration": "",
+      "speaking_character": "",
+      "shot_scale": "extreme_wide",
+      "shot_type": "detail",
+      "emotion": "revelation",
+      "characters_present": [],
+      "transition": "cut",
+      "sfx": "心跳声"
+    },
+    {
+      "scene_id": "ep03_s11",
+      "description": "慕容雪闺房，她轻摇曼陀罗折扇，眼神得意而阴狠，决定明日动手。",
+      "visual_prompt": "Ancient Chinese bedroom, candlelight casting warm glow, beautiful Chinese woman in mid-20s with round face and dimples, gentle almond eyes now showing cruelty, elaborate updo with golden phoenix hairpins, wearing pink silk hanfu with floral patterns, slowly waving folding fan with mandala flower painting, smug smile, dramatic shadows, ominous atmosphere",
+      "camera_movement": "static",
+      "duration_seconds": 4.0,
+      "dialogue": "这次，看你怎么逃。",
+      "narration": "",
+      "speaking_character": "慕容雪",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "emotion": "smug",
+      "characters_present": [
+        "慕容雪"
+      ],
+      "transition": "cut",
+      "sfx": "折扇开合声"
+    },
+    {
+      "scene_id": "ep03_s12",
+      "description": "月光下，林薇捏碎密信，眼神冰冷彻骨。她嘴角微扬，轻声说出致命话语。",
+      "visual_prompt": "Moonlit woodshed exterior, close-up on young Chinese woman in early 20s with delicate oval face, phoenix eyes with icy cold gaze, long black hair with jade hairpin, wearing tattered white hanfu with red lining, crushing paper in fist, subtle scar on left wrist, cold smile playing on lips, determined expression, ethereal moonlight, atmospheric mood",
+      "camera_movement": "static",
+      "duration_seconds": 12.0,
+      "dialogue": "那就看看，谁先死。",
+      "narration": "",
+      "speaking_character": "林薇",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "emotion": "defiant",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "fade_out",
+      "sfx": "纸张碎裂声"
+    }
+  ],
+  "voice_over": {
+    "text": "毒计提前，密信突至。当前世被揭开，这场游戏，才真正开始。",
+    "tone": "dramatic",
+    "language": "zh"
+  },
+  "music": {
+    "style": "chinese_traditional",
+    "mood": "tense",
+    "tempo": 85
+  },
+  "cliffhanger": "穿越的秘密被人知晓，林薇的特工身份即将暴露？慕容雪的毒计与神秘送信人，谁才是最大的威胁？"
+}

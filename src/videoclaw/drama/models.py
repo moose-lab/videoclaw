@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, fields, asdict
 from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
@@ -33,6 +33,29 @@ class EpisodeStatus(StrEnum):
     FAILED = "failed"
 
 
+class ShotScale(StrEnum):
+    CLOSE_UP = "close_up"
+    MEDIUM_CLOSE = "medium_close"
+    MEDIUM = "medium"
+    WIDE = "wide"
+    EXTREME_WIDE = "extreme_wide"
+
+
+class ShotType(StrEnum):
+    ESTABLISHING = "establishing"
+    REACTION = "reaction"
+    ACTION = "action"
+    DETAIL = "detail"
+    POV = "pov"
+
+
+class AudioType(StrEnum):
+    DIALOGUE = "dialogue"
+    NARRATION = "narration"
+    SFX = "sfx"
+    MUSIC = "music"
+
+
 # ---------------------------------------------------------------------------
 # Data models
 # ---------------------------------------------------------------------------
@@ -50,13 +73,176 @@ class Character:
     visual_prompt: str = ""
     voice_style: str = ""
     reference_image: str | None = None
+    voice_profile: VoiceProfile | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        if self.voice_profile is not None:
+            d["voice_profile"] = self.voice_profile.to_dict()
+        else:
+            d.pop("voice_profile", None)
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Character:
+        data = dict(data)
+        vp = data.pop("voice_profile", None)
+        c = cls(**data)
+        if vp is not None:
+            c.voice_profile = VoiceProfile.from_dict(vp)
+        return c
+
+
+@dataclass
+class DramaScene:
+    """A single scene within an episode."""
+
+    scene_id: str = ""
+    description: str = ""
+    visual_prompt: str = ""
+    camera_movement: str = "static"
+    duration_seconds: float = 5.0
+    dialogue: str = ""
+    narration: str = ""
+    shot_scale: ShotScale | None = None
+    shot_type: ShotType | None = None
+    speaking_character: str = ""
+    emotion: str = ""
+    characters_present: list[str] = field(default_factory=list)
+    transition: str = ""
+    sfx: str = ""
+    video_asset_path: str | None = None
+    dialogue_audio_path: str | None = None
+    narration_audio_path: str | None = None
+    scene_status: str = "pending"
+
+    def to_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        if self.shot_scale is not None:
+            d["shot_scale"] = self.shot_scale.value
+        if self.shot_type is not None:
+            d["shot_type"] = self.shot_type.value
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> DramaScene:
+        known = {f.name for f in fields(cls)}
+        data = {k: v for k, v in data.items() if k in known}
+        if data.get("shot_scale") is not None:
+            try:
+                data["shot_scale"] = ShotScale(data["shot_scale"])
+            except ValueError:
+                data["shot_scale"] = None
+        if data.get("shot_type") is not None:
+            try:
+                data["shot_type"] = ShotType(data["shot_type"])
+            except ValueError:
+                data["shot_type"] = None
+        return cls(**data)
+
+
+@dataclass
+class VoiceProfile:
+    """TTS voice configuration mapped from character personality."""
+
+    voice_id: str = "Friendly_Person"
+    speed: float = 1.0
+    pitch: int = 0
+    emotion: str = "neutral"
+    volume: float = 1.0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> Character:
+    def from_dict(cls, data: dict[str, Any]) -> VoiceProfile:
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in known})
+
+
+@dataclass
+class AudioSegment:
+    """A single audio segment within an episode timeline."""
+
+    segment_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    scene_id: str = ""
+    audio_type: AudioType = AudioType.DIALOGUE
+    text: str = ""
+    character_name: str = ""
+    audio_path: str | None = None
+    start_time: float = 0.0
+    duration_seconds: float = 0.0
+    volume: float = 1.0
+
+    def to_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        d["audio_type"] = self.audio_type.value
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AudioSegment:
+        known = {f.name for f in fields(cls)}
+        data = {k: v for k, v in data.items() if k in known}
+        if data.get("audio_type") is not None:
+            data["audio_type"] = AudioType(data["audio_type"])
         return cls(**data)
+
+
+@dataclass
+class EpisodeAudioManifest:
+    """Audio manifest describing all audio segments for an episode."""
+
+    episode_id: str = ""
+    segments: list[AudioSegment] = field(default_factory=list)
+    total_duration: float = 0.0
+    mixed_audio_path: str | None = None
+    created_at: str = field(default_factory=_now_iso)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "episode_id": self.episode_id,
+            "segments": [s.to_dict() for s in self.segments],
+            "total_duration": self.total_duration,
+            "mixed_audio_path": self.mixed_audio_path,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> EpisodeAudioManifest:
+        data = dict(data)
+        data["segments"] = [
+            AudioSegment.from_dict(s) for s in data.get("segments", [])
+        ]
+        return cls(**data)
+
+
+# MiniMax speech-02-hd voice profiles keyed by Character.voice_style
+VOICE_PROFILES: dict[str, VoiceProfile] = {
+    "warm": VoiceProfile(voice_id="Friendly_Person", speed=0.95, emotion="happy"),
+    "authoritative": VoiceProfile(voice_id="Imposing_Manner", speed=0.90, pitch=-2),
+    "playful": VoiceProfile(voice_id="Lively_Girl", speed=1.10, pitch=2, emotion="happy"),
+    "dramatic": VoiceProfile(voice_id="Determined_Man", speed=0.90, pitch=-1),
+    "calm": VoiceProfile(voice_id="Calm_Woman", speed=0.90),
+}
+
+
+def assign_voice_profile(character: Character) -> Character:
+    """Auto-assign a VoiceProfile based on character.voice_style.
+
+    Skips characters that already have a voice_profile set.
+    Falls back to 'warm' profile if voice_style is unknown.
+    """
+    if character.voice_profile is not None:
+        return character
+    template = VOICE_PROFILES.get(character.voice_style, VOICE_PROFILES["warm"])
+    character.voice_profile = VoiceProfile(
+        voice_id=template.voice_id,
+        speed=template.speed,
+        pitch=template.pitch,
+        emotion=template.emotion,
+        volume=template.volume,
+    )
+    return character
 
 
 @dataclass
@@ -72,18 +258,20 @@ class Episode:
     project_id: str | None = None
     duration_seconds: float = 60.0
     script: str | None = None
-    scene_prompts: list[dict[str, Any]] = field(default_factory=list)
+    scenes: list[DramaScene] = field(default_factory=list)
     cost: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["status"] = self.status.value
+        d["scenes"] = [s.to_dict() for s in self.scenes]
         return d
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Episode:
         data = dict(data)
         data["status"] = EpisodeStatus(data.get("status", "pending"))
+        data["scenes"] = [DramaScene.from_dict(s) for s in data.get("scenes", [])]
         return cls(**data)
 
 

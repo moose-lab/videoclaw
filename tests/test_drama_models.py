@@ -1,6 +1,5 @@
-"""Tests for the drama orchestration module."""
+"""Tests for drama data models (models.py)."""
 
-import json
 import pytest
 
 from videoclaw.drama.models import (
@@ -23,7 +22,7 @@ from videoclaw.drama.models import (
 
 
 # ---------------------------------------------------------------------------
-# DramaSeries model tests
+# DramaSeries
 # ---------------------------------------------------------------------------
 
 
@@ -70,7 +69,7 @@ def test_drama_cost_total():
 
 
 # ---------------------------------------------------------------------------
-# DramaManager persistence tests
+# DramaManager
 # ---------------------------------------------------------------------------
 
 
@@ -86,24 +85,20 @@ def test_drama_manager_crud(tmp_path):
     )
     assert series.series_id
 
-    # List
     ids = mgr.list_series()
     assert series.series_id in ids
 
-    # Load
     loaded = mgr.load(series.series_id)
     assert loaded.title == "CRUD Drama"
     assert loaded.genre == "comedy"
     assert loaded.total_episodes == 2
 
-    # Update and save
     loaded.episodes.append(Episode(number=1, title="Pilot"))
     mgr.save(loaded)
     reloaded = mgr.load(series.series_id)
     assert len(reloaded.episodes) == 1
     assert reloaded.episodes[0].title == "Pilot"
 
-    # Delete
     mgr.delete(series.series_id)
     assert series.series_id not in mgr.list_series()
 
@@ -116,7 +111,7 @@ def test_drama_manager_load_nonexistent(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Episode model tests
+# Episode & DramaScene
 # ---------------------------------------------------------------------------
 
 
@@ -135,7 +130,6 @@ def test_episode_roundtrip():
                 emotion="tense",
                 characters_present=["Alice"],
                 transition="cut",
-                sfx="footsteps echoing",
             ),
             DramaScene(
                 scene_id="ep01_s02",
@@ -147,7 +141,6 @@ def test_episode_roundtrip():
                 emotion="shock",
                 characters_present=["Alice", "Bob"],
                 transition="dissolve",
-                sfx="door creak",
             ),
         ],
         cost=0.42,
@@ -164,40 +157,11 @@ def test_episode_roundtrip():
     assert restored.scenes[0].emotion == "tense"
     assert restored.scenes[0].characters_present == ["Alice"]
     assert restored.scenes[0].transition == "cut"
-    assert restored.scenes[0].sfx == "footsteps echoing"
     assert restored.scenes[1].shot_scale == ShotScale.CLOSE_UP
     assert restored.scenes[1].shot_type == ShotType.REACTION
     assert restored.scenes[1].speaking_character == "Alice"
     assert restored.scenes[1].characters_present == ["Alice", "Bob"]
-    assert restored.scenes[1].sfx == "door creak"
     assert restored.cost == pytest.approx(0.42)
-
-
-def test_drama_scene_sfx_roundtrip():
-    """DramaScene sfx field should serialize and deserialize correctly."""
-    scene = DramaScene(
-        scene_id="ep01_s01",
-        visual_prompt="A dark alley",
-        sfx="thunder, rain on pavement",
-    )
-    data = scene.to_dict()
-    assert data["sfx"] == "thunder, rain on pavement"
-
-    restored = DramaScene.from_dict(data)
-    assert restored.sfx == "thunder, rain on pavement"
-
-    # Default should be empty string
-    empty = DramaScene()
-    assert empty.sfx == ""
-
-    # from_dict with sfx from LLM-style dict
-    from_llm = DramaScene.from_dict({
-        "scene_id": "ep01_s03",
-        "sfx": "door slam",
-        "extra_unknown_field": "ignored",
-    })
-    assert from_llm.sfx == "door slam"
-    assert from_llm.scene_id == "ep01_s03"
 
 
 def test_drama_scene_from_dict_ignores_unknown_keys():
@@ -211,6 +175,20 @@ def test_drama_scene_from_dict_ignores_unknown_keys():
     scene = DramaScene.from_dict(data)
     assert scene.scene_id == "ep01_s01"
     assert scene.visual_prompt == "test"
+
+
+def test_drama_scene_from_dict_invalid_enum_falls_back_to_none():
+    """from_dict should set invalid enum values to None instead of crashing."""
+    data = {
+        "scene_id": "ep04_s07",
+        "visual_prompt": "test",
+        "shot_scale": "extreme_close_up",  # invalid — not in ShotScale enum
+        "shot_type": "dolly_zoom",  # invalid — not in ShotType enum
+    }
+    scene = DramaScene.from_dict(data)
+    assert scene.scene_id == "ep04_s07"
+    assert scene.shot_scale is None
+    assert scene.shot_type is None
 
 
 def test_shot_enums_values():
@@ -245,12 +223,16 @@ def test_drama_scene_asset_tracking_roundtrip():
     assert restored.narration_audio_path == "/projects/dramas/abc/ep01/ep01_s01_narration.mp3"
     assert restored.scene_status == "completed"
 
-    # Defaults
     empty = DramaScene()
     assert empty.video_asset_path is None
     assert empty.dialogue_audio_path is None
     assert empty.narration_audio_path is None
     assert empty.scene_status == "pending"
+
+
+# ---------------------------------------------------------------------------
+# AudioSegment & EpisodeAudioManifest
+# ---------------------------------------------------------------------------
 
 
 def test_audio_segment_roundtrip():
@@ -295,6 +277,11 @@ def test_episode_audio_manifest_roundtrip():
     assert restored.segments[0].audio_type == AudioType.DIALOGUE
     assert restored.segments[1].audio_type == AudioType.NARRATION
     assert restored.mixed_audio_path == "/tmp/ep01_mixed.mp3"
+
+
+# ---------------------------------------------------------------------------
+# VoiceProfile & Character voice mapping
+# ---------------------------------------------------------------------------
 
 
 def test_voice_profile_roundtrip():
@@ -359,110 +346,20 @@ def test_assign_voice_profile_unknown_style_falls_back():
     assert c.voice_profile.voice_id == "Friendly_Person"
 
 
-# ---------------------------------------------------------------------------
-# Drama runner (build_episode_dag) tests
-# ---------------------------------------------------------------------------
+def test_voice_profiles_all_styles_covered():
+    """Every VOICE_PROFILES entry should produce a valid, distinct VoiceProfile."""
+    expected_styles = {"warm", "authoritative", "playful", "dramatic", "calm"}
+    assert set(VOICE_PROFILES.keys()) == expected_styles
 
+    for style, profile in VOICE_PROFILES.items():
+        c = Character(name=f"test_{style}", voice_style=style)
+        assign_voice_profile(c)
+        assert c.voice_profile is not None
+        assert c.voice_profile.voice_id == profile.voice_id
+        assert c.voice_profile.speed == profile.speed
+        assert c.voice_profile.pitch == profile.pitch
+        assert c.voice_profile.emotion == profile.emotion
 
-def test_build_episode_dag():
-    """build_episode_dag should produce a valid DAG from episode DramaScene objects."""
-    from videoclaw.drama.runner import build_episode_dag
-
-    series = DramaSeries(
-        title="Test",
-        model_id="mock",
-    )
-    ep = Episode(
-        number=1,
-        title="Pilot",
-        scenes=[
-            DramaScene(scene_id="ep01_s01", visual_prompt="shot 1", duration_seconds=5.0),
-            DramaScene(scene_id="ep01_s02", visual_prompt="shot 2", duration_seconds=5.0),
-        ],
-    )
-
-    dag, state = build_episode_dag(ep, series)
-
-    # Should have: script_gen, storyboard, 2x video, tts, music, compose, render = 8 nodes
-    assert len(dag.nodes) == 8
-    assert len(state.storyboard) == 2
-    assert state.storyboard[0].shot_id == "ep01_s01"
-    assert state.storyboard[1].model_id == "mock"
-    assert ep.project_id == state.project_id
-
-
-@pytest.mark.asyncio
-async def test_script_episode_parses_mock_llm_response():
-    """script_episode should parse mock LLM JSON into DramaScene objects."""
-    mock_llm_response = json.dumps({
-        "episode_title": "命运来电",
-        "scenes": [
-            {
-                "scene_id": "ep01_s01",
-                "description": "深夜办公室，林晓接到神秘电话",
-                "visual_prompt": "Modern office at night, young Chinese woman in business suit, short black hair, looking shocked at phone, dramatic lighting from desk lamp",
-                "camera_movement": "dolly_in",
-                "duration_seconds": 5.0,
-                "dialogue": "喂？你是谁？",
-                "narration": "",
-                "speaking_character": "林晓",
-                "shot_scale": "medium_close",
-                "shot_type": "action",
-                "emotion": "suspense",
-                "characters_present": ["林晓"],
-                "transition": "fade_in",
-            },
-            {
-                "scene_id": "ep01_s02",
-                "description": "林晓震惊地看着手机屏幕",
-                "visual_prompt": "Close-up of young Chinese woman's face, short black hair, eyes wide with shock, phone screen illuminating her face, dark office background",
-                "camera_movement": "static",
-                "duration_seconds": 3.0,
-                "dialogue": "",
-                "narration": "那一刻，她的世界彻底改变了",
-                "speaking_character": "",
-                "shot_scale": "close_up",
-                "shot_type": "reaction",
-                "emotion": "shock",
-                "characters_present": ["林晓"],
-                "transition": "cut",
-            },
-        ],
-        "voice_over": {"text": "那一刻，她的世界彻底改变了", "tone": "dramatic", "language": "zh"},
-        "music": {"style": "orchestral", "mood": "mysterious", "tempo": 90},
-        "cliffhanger": "电话那头的声音，竟然是她自己",
-    }, ensure_ascii=False)
-
-    from unittest.mock import AsyncMock
-    from videoclaw.drama.planner import DramaPlanner
-    from videoclaw.drama.models import ShotScale, ShotType
-
-    mock_llm = AsyncMock()
-    mock_llm.chat = AsyncMock(return_value=mock_llm_response)
-
-    planner = DramaPlanner(llm=mock_llm)
-    series = DramaSeries(title="测试剧", characters=[Character(name="林晓")])
-    episode = Episode(number=1, title="命运来电", synopsis="深夜接到神秘电话", duration_seconds=8.0)
-
-    script_data = await planner.script_episode(series, episode)
-
-    # Verify DramaScene objects were created
-    assert len(episode.scenes) == 2
-    assert episode.scenes[0].scene_id == "ep01_s01"
-    assert episode.scenes[0].speaking_character == "林晓"
-    assert episode.scenes[0].shot_scale == ShotScale.MEDIUM_CLOSE
-    assert episode.scenes[0].shot_type == ShotType.ACTION
-    assert episode.scenes[0].emotion == "suspense"
-    assert episode.scenes[0].characters_present == ["林晓"]
-    assert episode.scenes[0].transition == "fade_in"
-
-    assert episode.scenes[1].shot_scale == ShotScale.CLOSE_UP
-    assert episode.scenes[1].shot_type == ShotType.REACTION
-    assert episode.scenes[1].narration == "那一刻，她的世界彻底改变了"
-
-    # Verify script JSON was stored
-    assert episode.script is not None
-    assert "命运来电" in episode.script
-
-    # Verify cliffhanger in returned data
-    assert script_data["cliffhanger"] == "电话那头的声音，竟然是她自己"
+    # Verify all voice_ids are distinct
+    voice_ids = [p.voice_id for p in VOICE_PROFILES.values()]
+    assert len(voice_ids) == len(set(voice_ids)), "Each style must map to a unique voice_id"

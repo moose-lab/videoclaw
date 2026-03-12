@@ -1,0 +1,213 @@
+{
+  "episode_title": "当众打脸",
+  "scenes": [
+    {
+      "scene_id": "ep02_s01",
+      "description": "林薇手腕特写，现代疤痕与古代玉镯形成对比，眼神坚定",
+      "visual_prompt": "Close-up of left wrist, subtle scar visible under jade bracelet, Young Chinese woman, early 20s, delicate oval face, phoenix eyes with sharp gaze, long black hair with jade hairpin, wearing tattered but elegant white hanfu with red inner lining, slender build, soft candlelight, atmospheric, moody",
+      "camera_movement": "static",
+      "duration_seconds": 5.0,
+      "dialogue": "",
+      "narration": "上一世的伤疤，这一世的铠甲",
+      "speaking_character": "",
+      "shot_scale": "close_up",
+      "shot_type": "detail",
+      "emotion": "tense",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "fade_in",
+      "sfx": "玉镯轻碰声"
+    },
+    {
+      "scene_id": "ep02_s02",
+      "description": "王府宴会厅全景，慕容雪站起手持折扇挑衅林薇",
+      "visual_prompt": "Grand banquet hall with red lanterns, Beautiful Chinese woman, mid 20s, round face with dimples, gentle almond eyes hiding cunning, elaborate updo with golden phoenix hairpins, wearing pink silk hanfu with floral patterns, holding folding fan with mandala flower painting, smug expression, golden hour lighting, cinematic",
+      "camera_movement": "dolly_in",
+      "duration_seconds": 7.5,
+      "dialogue": "姐姐，今日老太君寿宴，可否作诗助兴？",
+      "narration": "",
+      "speaking_character": "慕容雪",
+      "shot_scale": "medium",
+      "shot_type": "action",
+      "emotion": "smug",
+      "characters_present": [
+        "慕容雪",
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "宴会嘈杂声"
+    },
+    {
+      "scene_id": "ep02_s03",
+      "description": "林薇抬头，嘴角微扬，眼神锐利",
+      "visual_prompt": "Young Chinese woman, early 20s, delicate oval face, phoenix eyes with sharp gaze, long black hair with jade hairpin, wearing tattered but elegant white hanfu with red inner lining, slender build, subtle scar on left wrist, slight smile with defiant eyes, dramatic shadows, moody atmosphere",
+      "camera_movement": "static",
+      "duration_seconds": 3.8,
+      "dialogue": "可以。",
+      "narration": "",
+      "speaking_character": "林薇",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "emotion": "defiant",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "筷子轻放声"
+    },
+    {
+      "scene_id": "ep02_s04",
+      "description": "宾客们窃笑嘲讽，等着看笑话",
+      "visual_prompt": "Group of aristocratic guests in colorful hanfu, whispering and smirking, dim lighting with focused spotlight on mocking faces, atmospheric, tense",
+      "camera_movement": "handheld",
+      "duration_seconds": 5.0,
+      "dialogue": "",
+      "narration": "众人等着看废妃出丑",
+      "speaking_character": "",
+      "shot_scale": "medium",
+      "shot_type": "reaction",
+      "emotion": "tense",
+      "characters_present": [],
+      "transition": "cut",
+      "sfx": "窃窃私语声"
+    },
+    {
+      "scene_id": "ep02_s05",
+      "description": "林薇起身，缓步走向厅中，自信从容",
+      "visual_prompt": "Young Chinese woman, early 20s, delicate oval face, phoenix eyes with sharp gaze, long black hair with jade hairpin, wearing tattered but elegant white hanfu with red inner lining, slender build, subtle scar on left wrist, walking confidently, slow motion, soft golden lighting, ethereal",
+      "camera_movement": "tracking",
+      "duration_seconds": 6.2,
+      "dialogue": "",
+      "narration": "她开口了",
+      "speaking_character": "",
+      "shot_scale": "medium_close",
+      "shot_type": "action",
+      "emotion": "triumphant",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "脚步声"
+    },
+    {
+      "scene_id": "ep02_s06",
+      "description": "林薇特写，朗诵现代诗，眼神穿透时空",
+      "visual_prompt": "Young Chinese woman, early 20s, delicate oval face, phoenix eyes with sharp gaze, long black hair with jade hairpin, wearing tattered but elegant white hanfu with red inner lining, slender build, subtle scar on left wrist, reciting poetry with piercing eyes, dramatic side lighting, cinematic",
+      "camera_movement": "dolly_in",
+      "duration_seconds": 10.0,
+      "dialogue": "黑夜给了我黑色的眼睛，我却用它寻找光明。",
+      "narration": "",
+      "speaking_character": "林薇",
+      "shot_scale": "close_up",
+      "shot_type": "pov",
+      "emotion": "triumphant",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "古筝骤停"
+    },
+    {
+      "scene_id": "ep02_s07",
+      "description": "老太君震惊，拐杖悬在半空",
+      "visual_prompt": "Elderly Chinese woman, 70s, silver hair in neat bun, wise piercing eyes, dignified posture, wearing deep purple silk robe, leaning on dragon-headed walking cane, jade bracelet, stunned expression, golden hour lighting, atmospheric",
+      "camera_movement": "static",
+      "duration_seconds": 3.8,
+      "dialogue": "好诗！",
+      "narration": "",
+      "speaking_character": "老太君",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "emotion": "shock",
+      "characters_present": [
+        "老太君"
+      ],
+      "transition": "jump_cut",
+      "sfx": "拐杖敲击声"
+    },
+    {
+      "scene_id": "ep02_s08",
+      "description": "萧衍首次正眼看林薇，眼神复杂",
+      "visual_prompt": "Tall Chinese man, late 20s, sharp angular jawline, intense dark eyes, long black hair in high ponytail with silver crown, wearing black brocade robe with dragon embroidery, broad shoulders, never-drawn sword at waist, looking at Lin Wei with revelation, soft focused lighting, moody",
+      "camera_movement": "static",
+      "duration_seconds": 5.0,
+      "dialogue": "",
+      "narration": "这个女人，不简单",
+      "speaking_character": "",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "emotion": "revelation",
+      "characters_present": [
+        "萧衍"
+      ],
+      "transition": "cut",
+      "sfx": "心跳声"
+    },
+    {
+      "scene_id": "ep02_s09",
+      "description": "慕容雪脸色铁青，折扇啪地合上",
+      "visual_prompt": "Beautiful Chinese woman, mid 20s, round face with dimples, gentle almond eyes hiding cunning, elaborate updo with golden phoenix hairpins, wearing pink silk hanfu with floral patterns, holding folding fan with mandala flower painting, furious expression, dramatic shadows, tense atmosphere",
+      "camera_movement": "static",
+      "duration_seconds": 3.8,
+      "dialogue": "",
+      "narration": "",
+      "speaking_character": "",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "emotion": "furious",
+      "characters_present": [
+        "慕容雪"
+      ],
+      "transition": "cut",
+      "sfx": "折扇合拢声"
+    },
+    {
+      "scene_id": "ep02_s10",
+      "description": "林薇回望慕容雪，微微一笑",
+      "visual_prompt": "Young Chinese woman, early 20s, delicate oval face, phoenix eyes with sharp gaze, long black hair with jade hairpin, wearing tattered but elegant white hanfu with red inner lining, slender build, subtle scar on left wrist, slight triumphant smile, side lighting, cinematic",
+      "camera_movement": "static",
+      "duration_seconds": 5.0,
+      "dialogue": "你确定？",
+      "narration": "",
+      "speaking_character": "林薇",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "emotion": "triumphant",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "轻笑声"
+    },
+    {
+      "scene_id": "ep02_s11",
+      "description": "慕容雪手中的毒粉包掉落桌面，特写",
+      "visual_prompt": "Extreme close-up of small paper packet with white poison powder, falling onto wooden table, golden phoenix hairpin in background, dramatic lighting, suspenseful atmosphere",
+      "camera_movement": "static",
+      "duration_seconds": 5.0,
+      "dialogue": "",
+      "narration": "下一局，她准备了什么？",
+      "speaking_character": "",
+      "shot_scale": "extreme_wide",
+      "shot_type": "detail",
+      "emotion": "suspense",
+      "characters_present": [
+        "慕容雪"
+      ],
+      "transition": "fade_out",
+      "sfx": "纸包轻响"
+    }
+  ],
+  "voice_over": {
+    "text": "废妃一首诗，震惊满堂宾客。靖王第一次正眼看她，却不知这不过是开始。慕容雪的毒计，才刚刚露出一角。",
+    "tone": "dramatic",
+    "language": "zh"
+  },
+  "music": {
+    "style": "chinese_traditional",
+    "mood": "triumphant",
+    "tempo": 85
+  },
+  "cliffhanger": "慕容雪掉落的毒粉包，下一局她会让林薇怎么死？"
+}

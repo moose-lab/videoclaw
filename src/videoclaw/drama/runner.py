@@ -24,14 +24,14 @@ def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, Proje
 
     Returns a (dag, project_state) tuple ready for DAGExecutor.
     """
-    # Build shots from scene prompts
+    # Build shots from typed DramaScene objects
     shots: list[Shot] = []
-    for scene in episode.scene_prompts:
+    for idx, scene in enumerate(episode.scenes):
         shots.append(Shot(
-            shot_id=scene.get("scene_id", f"ep{episode.number:02d}_s{len(shots)+1:02d}"),
-            description=scene.get("description", ""),
-            prompt=scene.get("visual_prompt", ""),
-            duration_seconds=float(scene.get("duration_seconds", 5.0)),
+            shot_id=scene.scene_id or f"ep{episode.number:02d}_s{idx+1:02d}",
+            description=scene.description,
+            prompt=scene.visual_prompt,
+            duration_seconds=scene.duration_seconds,
             model_id=series.model_id,
             status=ShotStatus.PENDING,
         ))

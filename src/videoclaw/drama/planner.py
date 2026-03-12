@@ -12,7 +12,7 @@ import logging
 from typing import Any
 
 from videoclaw.config import get_config
-from videoclaw.drama.models import Character, DramaSeries, DramaStatus, Episode, EpisodeStatus
+from videoclaw.drama.models import Character, DramaScene, DramaSeries, DramaStatus, Episode, EpisodeStatus
 from videoclaw.models.llm.litellm_wrapper import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -22,54 +22,75 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 SERIES_OUTLINE_PROMPT: str = """\
-You are an expert screenwriter for Chinese vertical short drama (竖屏短剧),
-targeting platforms like 抖音/快手/微信视频号. Each episode is 30-90 seconds long.
+你是一位资深的中国竖屏短剧（竖屏短剧）编剧，精通抖音/快手/微信视频号等平台的内容生态。
+每集时长30-90秒。你的作品需要在信息流中脱颖而出，驱动完播率和付费转化。
 
-Given a concept, produce a series outline with episode synopses and character
-descriptions. The drama should have clear story arcs, emotional hooks, and
-cliffhangers between episodes to maximize viewer retention and swipe-through rate.
+根据给定的概念，产出一份包含分集梗概和角色设定的剧集大纲。
 
-黄金3秒法则 (Golden 3-Second Rule):
-- 第1集开头必须在3秒内用强冲突、悬念或视觉冲击抓住观众。
-- Episode 1 MUST open with a high-impact visual or conflict in the FIRST 3 SECONDS.
-- 平铺直叙的开场会导致90%的观众划走。Start with action, mystery, or shock — never exposition.
+# 核心创作法则
 
-叙事弧结构 (Narrative Arc Structure, for N episodes):
-- 第1集: 激励事件 — 用爆发性开场介绍主角和核心冲突
-- 第2集到第N-2集: 递进升级 — 加深人物关系、升高赌注、引入新矛盾
-- 第N-1集: 至暗时刻 — 最大危机、重大揭示或背叛
-- 第N集: 高潮 + 解决 — 主角面临终极抉择，留有情感余韵
+## 黄金3秒法则
+- 第1集开头必须在3秒内用强冲突、悬念或视觉冲击抓住观众
+- 平铺直叙 = 90%划走率。必须以动作、悬念或震撼开场，绝不用铺垫
+- 经典开场模式：撞见出轨/突然重生/当众打脸/神秘能力觉醒/倒叙高潮
 
-情绪节奏曲线 (Emotional Rhythm per episode):
-- 每集遵循: 钩子(0-5s) → 铺垫(5-15s) → 递进(15-35s) → 高潮(35-50s) → 悬念(50-60s)
-- 集与集之间要有情绪对比（紧张→温柔→震撼）
+## 高概念提炼（一句话卖点）
+- 每部剧必须能用一句话概括核心卖点，例如：
+  "重生回到被抛弃前一天，这次她要让所有人付出代价"
+  "每天凌晨3点，手机会收到24小时后的新闻"
+- 这句话要同时包含：主角身份 + 核心冲突 + 情感驱动力
 
-Guidelines:
-- Each episode should have a self-contained mini-arc while advancing the main plot.
-- End each episode with a hook or cliffhanger that compels the viewer to watch the next.
-- Characters should have distinct visual descriptions (for AI video generation consistency).
-- Write all narrative content (title, synopsis, description, opening_hook) in Chinese (中文).
-- Write visual_prompt in English (for AI image/video generation models).
-- Return ONLY valid JSON — no markdown fences, no commentary.
+## 叙事弧结构（N集剧本）
+- 第1集：激励事件 — 爆发性开场，3秒内建立主角处境和核心冲突
+- 第2~3集：上瘾铺垫 — 快速建立人物关系网，埋设悬念线，制造第一个小高潮
+- 第4~N-2集：递进升级 — 加深人物关系、升高赌注、引入新矛盾和反转
+- 第N-1集：至暗时刻 — 最大危机、重大揭示或背叛，情绪谷底
+- 第N集：高潮 + 解决 — 主角终极抉择，核心矛盾爆发，留有情感余韵
+
+## 爽点密度规则
+- 每15秒必须有一个"爽点"：逆袭、打脸、反转、揭秘、深情表白
+- 爽点类型交替使用，避免审美疲劳：智商碾压 → 情感爆发 → 身份揭示 → 实力展示
+- 第1集爽点密度最高（每10秒一个），后续集可适当放缓建立深度
+
+## 角色人设公式
+- 主角必须有"反差人设"：表面身份 vs 隐藏身份（例：保洁阿姨实为集团董事长）
+- 每个角色需要"记忆点"：一个标志性动作、口头禅或视觉符号
+- 角色关系必须形成"三角张力"：至少存在一组三角关系（情感/利益/权力）
+- 反派不能纯粹是坏人，需有可理解的动机
+
+## 情绪节奏曲线
+- 每集遵循：钩子(0-5s) → 铺垫(5-15s) → 递进(15-35s) → 高潮(35-50s) → 悬念(50-60s)
+- 集与集之间要有情绪对比：紧张→温柔→震撼→甜蜜→虐心
+- 情绪强度整体呈上升趋势，第N-1集达到情绪顶峰
+
+## 悬念阶梯
+- 每集结尾的悬念必须比上一集更强
+- 悬念类型递进：好奇型(这是谁？) → 担忧型(他会怎样？) → 震撼型(不可能！)
+- 禁止使用"未解决=悬念"的偷懒方式，每个悬念都要有情绪重量
+
+# 输出规范
+- 中文内容：标题、梗概、描述、opening_hook 用中文
+- visual_prompt 用英文（供AI视频生成模型使用）
+- 仅返回合法 JSON，不要 markdown 围栏或注释
 
 Output JSON schema:
 {
-  "title": "<中文剧名>",
+  "title": "<中文剧名，2-6字，朗朗上口，暗示核心冲突>",
   "genre": "<类型>",
-  "synopsis": "<中文整体剧情梗概>",
+  "synopsis": "<中文整体剧情梗概，包含高概念一句话卖点>",
   "characters": [
     {
       "name": "<中文角色名>",
-      "description": "<中文：性格、动机、在故事中的角色定位、与其他角色的关键关系>",
-      "visual_prompt": "<ENGLISH ONLY — PURE character appearance: age, gender, ethnicity, body type, face features, hair style/color, clothing, accessories, distinctive marks. Do NOT include camera angles, lighting, background, shot composition, or cinematography instructions.>",
+      "description": "<中文：表面身份/隐藏身份、性格反差、核心动机、与其他角色的三角关系、记忆点>",
+      "visual_prompt": "<ENGLISH ONLY — PURE appearance: age, gender, body type, face features, hair style/color, clothing, accessories, distinctive marks. Do NOT include camera angles, lighting, or background.>",
       "voice_style": "<warm | authoritative | playful | dramatic | calm>"
     }
   ],
   "episodes": [
     {
       "number": <int>,
-      "title": "<中文集标题>",
-      "synopsis": "<中文：2-3句分集梗概，包含情绪节拍>",
+      "title": "<中文集标题，4-8字，含悬念或情绪关键词>",
+      "synopsis": "<中文：2-3句分集梗概，标注每个爽点位置和类型>",
       "opening_hook": "<中文：一句话描述本集前3秒的视觉/情绪钩子>",
       "duration_seconds": <float>
     }
@@ -78,37 +99,77 @@ Output JSON schema:
 """
 
 EPISODE_SCRIPT_PROMPT: str = """\
-You are an expert screenwriter for Chinese vertical short drama (竖屏短剧).
+你是一位资深的中国竖屏短剧分镜编剧，精通AI视频生成的视觉提示词写作。
+根据剧集上下文和分集梗概，产出一份逐场景的分镜脚本。
 
-Given a series context and episode synopsis, produce a detailed shot-by-shot
-script for this episode. Each scene should be 3-8 seconds and have a precise
-visual description optimized for AI video generation models.
+# 角色视觉一致性（最高优先级）
+- 角色每次出镜时，visual_prompt 必须包含其完整的英文外貌描述
+- 同一角色跨场景必须使用完全相同的视觉关键词（衣着/发型/标志性特征）
+- 禁止在 visual_prompt 中省略角色外貌，即使是同一场景的连续镜头
 
-角色一致性规则 (Character consistency):
-- ALWAYS include the character's full English visual description when they appear.
-- Use the exact same visual prompt keywords for the same character across scenes.
-- Include clothing, hair style, and distinctive features in every scene prompt.
+# 竖屏构图法则（9:16）
+- 人物面部居于画面上1/3，这是竖屏观看的视觉焦点区
+- 单人特写效果远优于多人全景 — 竖屏上细节比场面更有冲击力
+- 景别分配：close_up + medium_close 占总场景的40-50%（竖屏核心优势）
+- wide/extreme_wide 仅用于建立场景或制造反差，不超过总场景的15%
+- 避免横向运镜（pan_left/pan_right），竖屏上效果差；优先使用 dolly_in 和 crane_up
 
-节奏控制 (Pacing rules):
-- 场景数量：60秒一集约8-12个场景，按时长等比缩放。
-- 所有场景的 duration_seconds 之和必须等于目标集时长（±2秒）。
-- 第一个场景(0-5s)：用视觉钩子开场，或衔接上集悬念。
-- 中间场景：特写与全景交替，营造视觉节奏（紧→松→紧）。
-- 最后一个场景：悬念/情绪高潮，驱动观众看下一集。
+# 景别与叙事节拍对应
+- establishing（建立镜头）→ wide/extreme_wide：开场/转场/新环境
+- reaction（反应镜头）→ close_up：角色情绪爆发、震惊、心碎时刻
+- action（动作镜头）→ medium/medium_close：对话、互动、冲突
+- detail（细节镜头）→ close_up：关键道具、手部动作、眼神特写
+- pov（主观镜头）→ medium_close：代入角色视角，增强沉浸感
 
-台词密度控制 (Dialogue density):
-- 中文对白总字数不超过100字（60秒集）。中文语速约4字/秒，对白占时不超过25秒。
-- 旁白用于推进叙事和内心独白，对白用于冲突和情感爆发。
-- 不是每个场景都需要台词。无声的视觉叙事同样有力。
+# 情绪控制词表
+- 情绪关键词必须精确，不要泛化。使用以下标准词汇：
+  紧张类: tense, anxious, dread, suspense
+  愤怒类: angry, furious, resentful, defiant
+  悲伤类: sad, heartbroken, grieving, melancholy
+  震惊类: shock, disbelief, stunned, revelation
+  温暖类: warm, tender, nostalgic, grateful
+  甜蜜类: sweet, flirty, blissful, intimate
+  恐惧类: fear, panic, horror, uneasy
+  得意类: triumphant, smug, vindicated, proud
 
-Guidelines:
-- Open with a hook (continue from previous episode's cliffhanger if applicable).
-- Build tension through the middle.
-- End with a cliffhanger or emotional peak.
-- Camera movements should serve the narrative.
-- visual_prompt MUST be in English (for AI video generation models).
-- dialogue and narration MUST be in Chinese (中文).
-- Return ONLY valid JSON — no markdown fences.
+# 音效设计
+- 每个场景应标注关键音效（门声、脚步、环境音等）
+- 音效服务于叙事节奏：紧张场景用尖锐/突发音效，温柔场景用环境白噪音
+- 音效与画面同步，标注在 sfx 字段中
+- 无音效的镜头留空即可
+
+# 转场策略
+- cut（硬切）：默认转场，节奏快，紧张/动作场景
+- dissolve（叠化）：时间流逝、回忆、温柔情绪过渡
+- fade_in/fade_out：开场/结尾、重大情绪转折
+- match_cut（匹配剪辑）：两个视觉相似画面之间的创意过渡
+- jump_cut（跳切）：同场景内时间压缩，制造紧迫感
+
+# 节奏控制
+- 场景数量：60秒约8-12个场景，按时长等比缩放
+- 所有场景的 duration_seconds 之和必须等于目标集时长（±2秒）
+- 节奏模板：钩子(0-5s) → 铺垫(5-15s) → 递进(15-35s) → 高潮(35-50s) → 悬念(50-60s)
+- 高潮场景用短镜头快切（2-3秒/镜头），铺垫场景可适当拉长（5-8秒）
+- 第一个场景必须是视觉钩子或衔接上集悬念，最后一个场景必须制造悬念
+
+# 台词与旁白
+- 中文对白总字数不超过100字（60秒集），语速约4字/秒
+- 对白要求："说人话" — 短句、口语化、有情绪爆发力，单句不超过15字
+- 旁白用于推进叙事和内心独白，对白用于冲突和情感爆发
+- 不是每个场景都需要台词，无声的表情特写同样有力
+- speaking_character 必须与 characters_present 中的角色一致
+
+# visual_prompt 写作规范
+- 必须用英文，针对AI视频生成模型优化
+- 结构：[环境/场景] + [角色完整外貌] + [动作/表情] + [光影/氛围]
+- 包含光影描述：soft lighting, dramatic shadows, golden hour, neon lights
+- 包含氛围词：cinematic, atmospheric, moody, ethereal
+- 禁止使用中文或抽象描述，要具象可视化
+
+# 输出规范
+- visual_prompt 必须用英文
+- dialogue 和 narration 必须用中文
+- 仅返回合法 JSON，不要 markdown 围栏
 
 Output JSON schema:
 {
@@ -116,12 +177,19 @@ Output JSON schema:
   "scenes": [
     {
       "scene_id": "<e.g. ep01_s01>",
-      "description": "<中文场景描述>",
-      "visual_prompt": "<ENGLISH ONLY — detailed AI video generation prompt, include character visual descriptions>",
+      "description": "<中文场景描述：谁在哪里做什么，情绪状态>",
+      "visual_prompt": "<ENGLISH ONLY — [setting] + [character full appearance] + [action/expression] + [lighting/mood]. Be specific and visual.>",
       "camera_movement": "<static | pan_left | pan_right | dolly_in | tracking | crane_up | handheld>",
       "duration_seconds": <float>,
-      "dialogue": "<中文角色对白，无则留空>",
-      "narration": "<中文旁白，无则留空>"
+      "dialogue": "<中文角色对白，短句口语化，无则留空>",
+      "narration": "<中文旁白，无则留空>",
+      "speaking_character": "<说话角色名，必须在 characters_present 中，无则留空>",
+      "shot_scale": "<close_up | medium_close | medium | wide | extreme_wide>",
+      "shot_type": "<establishing | reaction | action | detail | pov>",
+      "emotion": "<从情绪词表中选择精确词汇>",
+      "characters_present": ["<本场景出镜的角色名列表>"],
+      "transition": "<cut | dissolve | fade_in | fade_out | wipe | match_cut | jump_cut>",
+      "sfx": "<此镜头关键音效，如：门声、脚步声、雷鸣。无则留空>"
     }
   ],
   "voice_over": {
@@ -130,11 +198,11 @@ Output JSON schema:
     "language": "zh"
   },
   "music": {
-    "style": "<orchestral | electronic | acoustic | lo-fi>",
-    "mood": "<tense | romantic | mysterious | triumphant>",
+    "style": "<orchestral | electronic | acoustic | lo-fi | chinese_traditional>",
+    "mood": "<tense | romantic | mysterious | triumphant | melancholy | epic>",
     "tempo": <BPM int>
   },
-  "cliffhanger": "<中文悬念描述>"
+  "cliffhanger": "<中文悬念描述：用一句话制造'不看下一集会死'的冲动>"
 }
 """
 
@@ -267,7 +335,7 @@ class DramaPlanner:
                     s["duration_seconds"] = round(float(s["duration_seconds"]) * scale, 1)
 
         episode.script = json.dumps(script_data, ensure_ascii=False)
-        episode.scene_prompts = script_data.get("scenes", [])
+        episode.scenes = [DramaScene.from_dict(s) for s in scenes]
         return script_data
 
     @staticmethod

@@ -1,0 +1,235 @@
+{
+  "episode_number": 4,
+  "episode_title": "至暗时刻",
+  "duration_seconds": 60.0,
+  "scenes": [
+    {
+      "scene_id": "ep04_s01",
+      "description": "慕容雪得意诬陷，官兵冲入柴房抓人",
+      "visual_prompt": "Ancient Chinese palace chamber, dim candlelight flickering, Beautiful Chinese woman in her mid 20s with round face and dimples, gentle almond eyes hiding cunning, elaborate updo with golden phoenix hairpins, wearing pink silk hanfu with floral patterns, holding folding fan with mandala flower painting, smirking confidently while pointing accusingly, imperial guards with spears storming in from behind, dramatic shadows on walls, tense atmosphere, cinematic lighting",
+      "camera_movement": "dolly_in",
+      "duration_seconds": 5,
+      "dialogue": "通敌叛国，拿下！",
+      "narration": "",
+      "shot_scale": "medium_close",
+      "shot_type": "action",
+      "speaking_character": "慕容雪",
+      "emotion": "tense",
+      "characters_present": [
+        "慕容雪"
+      ],
+      "transition": "cut",
+      "sfx": "官兵脚步声、铁链声",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep04_s02",
+      "description": "林薇被重链加身，押入阴森天牢",
+      "visual_prompt": "Dark medieval Chinese prison corridor, damp stone walls with green moss, Young Chinese woman in her early 20s with delicate oval face, phoenix eyes with sharp gaze, long black hair with jade hairpin, wearing tattered but elegant white hanfu with red inner lining, slender build, subtle scar on left wrist, hands bound in heavy iron chains, being pushed forward by guards, defiant expression, single beam of cold moonlight through high barred window, melancholic mood, atmospheric fog",
+      "camera_movement": "tracking",
+      "duration_seconds": 8,
+      "dialogue": "",
+      "narration": "慕容雪勾结朝中势力，诬陷林薇通敌叛国。",
+      "shot_scale": "wide",
+      "shot_type": "establishing",
+      "speaking_character": "",
+      "emotion": "dread",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "牢门关闭声、铁链拖地声",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep04_s03",
+      "description": "萧衍书房密查案卷，烛火下神色凝重",
+      "visual_prompt": "Shadowy ancient Chinese study room, wooden desk piled with scrolls, Tall Chinese man in his late 20s with sharp angular jawline, intense dark eyes, long black hair in high ponytail with silver crown, wearing black brocade robe with dragon embroidery, broad shoulders, never-drawn sword at waist, examining secret documents by candlelight, anxious expression, fingers tightly gripping paper, dramatic chiaroscuro lighting, mysterious atmosphere",
+      "camera_movement": "static",
+      "duration_seconds": 7,
+      "dialogue": "",
+      "narration": "靖王萧衍暗中调查，察觉事有蹊跷。",
+      "shot_scale": "medium_close",
+      "shot_type": "action",
+      "speaking_character": "",
+      "emotion": "anxious",
+      "characters_present": [
+        "萧衍"
+      ],
+      "transition": "cut",
+      "sfx": "翻阅纸张声",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep04_s04",
+      "description": "老太君龙头拐杖敲地，霸气护短",
+      "visual_prompt": "Grand Chinese ancestral hall, ornate wooden pillars and red lanterns, Elderly Chinese woman in her 70s with silver hair in neat bun, wise piercing eyes, dignified posture, wearing deep purple silk robe, leaning on dragon-headed walking cane, jade bracelet, slamming cane on floor three times with authority, fierce defiant expression, warm golden lighting from lanterns creating powerful silhouette, triumphant mood",
+      "camera_movement": "crane_up",
+      "duration_seconds": 8,
+      "dialogue": "谁动我萧家的人，试试！",
+      "narration": "",
+      "shot_scale": "medium",
+      "shot_type": "reaction",
+      "speaking_character": "老太君",
+      "emotion": "defiant",
+      "characters_present": [
+        "老太君"
+      ],
+      "transition": "dissolve",
+      "sfx": "拐杖敲击声",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep04_s05",
+      "description": "天牢中林薇靠墙沉思，月光照在她脸上",
+      "visual_prompt": "Gloomy Chinese prison cell, stone walls with water stains and straw floor, Young Chinese woman in her early 20s with delicate oval face, phoenix eyes with sharp gaze, long black hair with jade hairpin, wearing tattered but elegant white hanfu with red inner lining, slender build, subtle scar on left wrist, sitting against cold wall in contemplation, soft moonlight filtering through bars illuminating her face, melancholic atmosphere",
+      "camera_movement": "static",
+      "duration_seconds": 10,
+      "dialogue": "",
+      "narration": "而天牢之中，林薇竟发现一枚刻着现代二维码的古玉。",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "speaking_character": "",
+      "emotion": "melancholy",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "水滴声",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep04_s06",
+      "description": "林薇发现古玉，二维码特写震惊",
+      "visual_prompt": "Close-up of dirty prison floor, ancient jade pendant half-buried in straw, intricate carvings including modern QR code pattern visible, Young Chinese woman in her early 20s with delicate oval face, phoenix eyes with sharp gaze, long black hair with jade hairpin, wearing tattered but elegant white hanfu with red inner lining, slender build, subtle scar on left wrist, hand reaching down to pick up jade, shocked expression, dramatic spotlight from above, revelation mood, ethereal lighting",
+      "camera_movement": "dolly_in",
+      "duration_seconds": 12,
+      "dialogue": "这是...二维码？",
+      "narration": "",
+      "shot_scale": "close_up",
+      "shot_type": "detail",
+      "speaking_character": "林薇",
+      "emotion": "revelation",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "match_cut",
+      "sfx": "玉器碰撞声",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep04_s07",
+      "description": "神秘人牢房外威胁，二维码与眼睛匹配转场",
+      "visual_prompt": "Dark foggy Chinese prison corridor at midnight, Mysterious Chinese man in his 30s with sharp features, cold calculating eyes, long dark hair, wearing deep gray scholar robe, holding identical jade pendant, smirking ominously outside cell bars, menacing gaze directly at camera, cold blue moonlight creating long shadows, suspenseful atmosphere, horror mood",
+      "camera_movement": "static",
+      "duration_seconds": 10,
+      "dialogue": "",
+      "narration": "",
+      "shot_scale": null,
+      "shot_type": "pov",
+      "speaking_character": "",
+      "emotion": "suspense",
+      "characters_present": [],
+      "transition": "fade_out",
+      "sfx": "阴冷风声",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    }
+  ],
+  "characters": [
+    {
+      "name": "林薇",
+      "description": "表面身份：被休弃的废物王妃；隐藏身份：穿越而来的现代女特工。性格反差：外表柔弱 vs 内心冷酷。记忆点：每次反杀前微微一笑说'你确定？'",
+      "visual_prompt": "Young Chinese woman, early 20s, delicate oval face, phoenix eyes with sharp gaze, long black hair with jade hairpin, wearing tattered but elegant white hanfu with red inner lining, slender build, subtle scar on left wrist",
+      "voice_style": "calm",
+      "reference_image": null,
+      "voice_profile": {
+        "voice_id": "Calm_Woman",
+        "speed": 0.9,
+        "pitch": 0,
+        "emotion": "neutral",
+        "volume": 1.0
+      }
+    },
+    {
+      "name": "萧衍",
+      "description": "表面身份：冷面靖王；隐藏身份：暗中调查皇室血脉秘密。性格反差：对外冷酷 vs 对林薇逐渐温柔。记忆点：永远黑衣，腰间佩一把从不出鞘的剑。",
+      "visual_prompt": "Tall Chinese man, late 20s, sharp angular jawline, intense dark eyes, long black hair in high ponytail with silver crown, wearing black brocade robe with dragon embroidery, broad shoulders, never-drawn sword at waist",
+      "voice_style": "authoritative",
+      "reference_image": null,
+      "voice_profile": {
+        "voice_id": "Imposing_Manner",
+        "speed": 0.9,
+        "pitch": -2,
+        "emotion": "neutral",
+        "volume": 1.0
+      }
+    },
+    {
+      "name": "慕容雪",
+      "description": "表面身份：温婉贤淑的侧妃；隐藏身份：幕后势力的棋子。性格反差：人前温婉 vs 人后阴毒。记忆点：手持折扇，扇面画曼陀罗。",
+      "visual_prompt": "Beautiful Chinese woman, mid 20s, round face with dimples, gentle almond eyes hiding cunning, elaborate updo with golden phoenix hairpins, wearing pink silk hanfu with floral patterns, holding folding fan with mandala flower painting",
+      "voice_style": "playful",
+      "reference_image": null,
+      "voice_profile": {
+        "voice_id": "Lively_Girl",
+        "speed": 1.1,
+        "pitch": 2,
+        "emotion": "happy",
+        "volume": 1.0
+      }
+    },
+    {
+      "name": "老太君",
+      "description": "表面身份：德高望重的萧家老太君；隐藏身份：早年江湖女侠。记忆点：龙头拐杖，发怒时拐杖敲地三声。",
+      "visual_prompt": "Elderly Chinese woman, 70s, silver hair in neat bun, wise piercing eyes, dignified posture, wearing deep purple silk robe, leaning on dragon-headed walking cane, jade bracelet",
+      "voice_style": "dramatic",
+      "reference_image": null,
+      "voice_profile": {
+        "voice_id": "Determined_Man",
+        "speed": 0.9,
+        "pitch": -1,
+        "emotion": "neutral",
+        "volume": 1.0
+      }
+    }
+  ],
+  "series_metadata": {
+    "title": "这个王妃太狂野",
+    "genre": "穿越/古装/爽剧",
+    "style": "cinematic",
+    "language": "zh",
+    "aspect_ratio": "9:16"
+  },
+  "music": {
+    "style": "chinese_traditional",
+    "mood": "tense",
+    "tempo": 85
+  },
+  "voice_over": {
+    "text": "慕容雪勾结朝中势力，诬陷林薇通敌叛国。靖王萧衍暗中调查，老太君霸气护短。而天牢之中，林薇竟发现一枚刻着现代二维码的古玉。穿越的秘密，似乎与萧家有着千丝万缕的联系...",
+    "tone": "dramatic",
+    "language": "zh"
+  },
+  "cliffhanger": "古玉上的二维码扫描后，竟跳出一条来自现代的消息：'任务继续，小心萧衍。' 林薇震惊抬头，牢房外，萧衍正静静地看着她。"
+}

@@ -1015,7 +1015,7 @@ def drama_show(
                 str(ep.number),
                 ep.title,
                 ep.status.value,
-                str(len(ep.scene_prompts)),
+                str(len(ep.scenes)),
                 f"${ep.cost:.4f}",
                 ep.synopsis[:40],
             )
@@ -1170,12 +1170,12 @@ async def _drama_run_async(series, mgr, start: int, end: int | None) -> None:
         console.print(f"\n[bold cyan]Episode {ep.number}: {ep.title}[/bold cyan]")
 
         # Script the episode if not already scripted
-        if not ep.scene_prompts:
+        if not ep.scenes:
             with console.status(f"[cyan]Scripting episode {ep.number}...", spinner="dots"):
                 script_data = await planner.script_episode(series, ep, prev_cliffhanger)
             prev_cliffhanger = script_data.get("cliffhanger")
             mgr.save(series)
-            console.print(f"  Scenes: {len(ep.scene_prompts)}")
+            console.print(f"  Scenes: {len(ep.scenes)}")
 
         # Run the generation pipeline
         with Progress(
@@ -1188,10 +1188,10 @@ async def _drama_run_async(series, mgr, start: int, end: int | None) -> None:
         ) as progress:
             task = progress.add_task(
                 f"Episode {ep.number}...",
-                total=len(ep.scene_prompts) + 4,  # scenes + script/storyboard/compose/render
+                total=len(ep.scenes) + 4,  # scenes + script/storyboard/compose/render
             )
             state = await runner.run_episode(series, ep)
-            progress.update(task, completed=len(ep.scene_prompts) + 4)
+            progress.update(task, completed=len(ep.scenes) + 4)
 
         status_style = "green" if ep.status == "completed" else "red"
         console.print(f"  Status: [{status_style}]{ep.status}[/{status_style}]  Cost: ${ep.cost:.4f}")

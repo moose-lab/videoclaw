@@ -155,6 +155,180 @@ class EdgeTTSProvider:
         return audio_data
 
 
+class WaveSpeedTTSProvider:
+    """TTS provider using MiniMax speech-02-hd via WaveSpeed API.
+
+    Optimal for Chinese short drama with fine-grained voice control
+    (speed, pitch, emotion, volume per character).
+
+    Pricing: $0.05 per 1,000 characters.
+    """
+
+    API_BASE = "https://api.wavespeed.ai/api/v3"
+    SUBMIT_URL = f"{API_BASE}/minimax/speech-02-hd"
+    RESULT_URL = f"{API_BASE}/predictions/{{request_id}}/result"
+
+    # Defaults per language when no voice_id is specified
+    DEFAULT_VOICES: dict[str, str] = {
+        "zh": "Friendly_Person",
+        "en": "Friendly_Person",
+        "ja": "Calm_Woman",
+        "ko": "Calm_Woman",
+    }
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        timeout: float = 120.0,
+        poll_interval: float = 2.0,
+    ) -> None:
+        from videoclaw.config import get_config
+        import os
+
+        self._api_key = (
+            api_key
+            or os.environ.get("WAVESPEED_API_KEY")
+            or get_config().wavespeed_api_key
+        )
+        if not self._api_key:
+            raise ValueError(
+                "WaveSpeed API key is required. Set WAVESPEED_API_KEY or "
+                "VIDEOCLAW_WAVESPEED_API_KEY environment variable."
+            )
+        self._timeout = timeout
+        self._poll_interval = poll_interval
+
+    async def synthesize(
+        self,
+        text: str,
+        voice: str = "",
+        language: str = "zh",
+        *,
+        speed: float = 1.0,
+        pitch: int = 0,
+        emotion: str = "neutral",
+        volume: float = 1.0,
+    ) -> bytes:
+        """Synthesize speech via MiniMax speech-02-hd.
+
+        Parameters
+        ----------
+        text:
+            Text to convert (max 10,000 chars).
+        voice:
+            MiniMax voice_id (e.g. ``"Friendly_Person"``).
+        language:
+            ISO language code (used for default voice selection).
+        speed:
+            Speech speed 0.50-2.00, default 1.0.
+        pitch:
+            Pitch adjustment -12 to 12, default 0.
+        emotion:
+            One of: happy, sad, angry, fearful, disgusted, surprised, neutral.
+        volume:
+            Volume 0.10-10.00, default 1.0.
+        """
+        import httpx
+
+        if not voice or voice == "default":
+            voice = self.DEFAULT_VOICES.get(language, "Friendly_Person")
+
+        logger.info(
+            "WaveSpeed TTS: %d chars, voice=%s, speed=%.2f, pitch=%d, emotion=%s",
+            len(text), voice, speed, pitch, emotion,
+        )
+
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "text": text,
+            "voice_id": voice,
+            "speed": max(0.50, min(2.00, speed)),
+            "pitch": max(-12, min(12, pitch)),
+            "emotion": emotion,
+            "volume": max(0.10, min(10.00, volume)),
+        }
+
+        async with httpx.AsyncClient(timeout=self._timeout) as client:
+            # Submit synthesis job
+            resp = await client.post(self.SUBMIT_URL, json=payload, headers=headers)
+            resp.raise_for_status()
+            result = resp.json()
+
+            # Check if result is returned synchronously
+            if isinstance(result, bytes):
+                return result
+
+            # Async mode: poll for result
+            request_id = result.get("id") or result.get("requestId") or result.get("request_id")
+            if not request_id:
+                # Response might contain the audio URL directly
+                output = result.get("output") or result.get("result")
+                if isinstance(output, str) and output.startswith("http"):
+                    audio_resp = await client.get(output, headers=headers)
+                    audio_resp.raise_for_status()
+                    return audio_resp.content
+                raise RuntimeError(f"Unexpected WaveSpeed response: {result}")
+
+            # Poll for completion
+            result_url = self.RESULT_URL.format(request_id=request_id)
+            import asyncio
+
+            elapsed = 0.0
+            while elapsed < self._timeout:
+                await asyncio.sleep(self._poll_interval)
+                elapsed += self._poll_interval
+
+                poll_resp = await client.get(result_url, headers=headers)
+                poll_resp.raise_for_status()
+                poll_data = poll_resp.json()
+
+                status = poll_data.get("status", "")
+                if status in ("completed", "succeeded"):
+                    # Download the audio
+                    output = poll_data.get("output") or poll_data.get("result")
+                    if isinstance(output, dict):
+                        audio_url = output.get("audio") or output.get("url")
+                    elif isinstance(output, str):
+                        audio_url = output
+                    else:
+                        raise RuntimeError(f"Unexpected output format: {poll_data}")
+
+                    audio_resp = await client.get(audio_url)
+                    audio_resp.raise_for_status()
+                    audio_data = audio_resp.content
+                    logger.info("WaveSpeed TTS produced %d bytes", len(audio_data))
+                    return audio_data
+
+                if status in ("failed", "error", "canceled"):
+                    error_msg = poll_data.get("error") or poll_data.get("message") or str(poll_data)
+                    raise RuntimeError(f"WaveSpeed TTS failed: {error_msg}")
+
+                logger.debug("WaveSpeed TTS polling... status=%s elapsed=%.1fs", status, elapsed)
+
+            raise TimeoutError(f"WaveSpeed TTS timed out after {self._timeout}s")
+
+    async def synthesize_with_profile(
+        self,
+        text: str,
+        voice_profile: dict,
+        language: str = "zh",
+    ) -> bytes:
+        """Synthesize using a VoiceProfile dict (convenience wrapper)."""
+        return await self.synthesize(
+            text=text,
+            voice=voice_profile.get("voice_id", ""),
+            language=language,
+            speed=voice_profile.get("speed", 1.0),
+            pitch=voice_profile.get("pitch", 0),
+            emotion=voice_profile.get("emotion", "neutral"),
+            volume=voice_profile.get("volume", 1.0),
+        )
+
+
 # ---------------------------------------------------------------------------
 # TTSManager
 # ---------------------------------------------------------------------------
