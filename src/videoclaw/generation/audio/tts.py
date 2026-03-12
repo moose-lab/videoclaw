@@ -13,6 +13,10 @@ import logging
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from videoclaw.drama.models import (
+    AudioSegment, AudioType, DialogueLine, LineType, VoiceProfile,
+)
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -413,3 +417,96 @@ class TTSManager:
             len(audio_data),
         )
         return output_path
+
+    # Map LineType → AudioType
+    _LINE_TYPE_TO_AUDIO_TYPE: dict[LineType, AudioType] = {
+        LineType.NARRATION: AudioType.NARRATION,
+        LineType.DIALOGUE: AudioType.DIALOGUE,
+        LineType.INNER_MONOLOGUE: AudioType.INNER_MONOLOGUE,
+    }
+
+    async def generate_multi_role(
+        self,
+        lines: list[DialogueLine],
+        voice_map: dict[str, VoiceProfile],
+        output_dir: Path,
+        language: str = "zh",
+    ) -> list[AudioSegment]:
+        """Generate TTS audio for multiple dialogue lines with per-role voices.
+
+        Parameters
+        ----------
+        lines:
+            Ordered list of dialogue lines to synthesize.
+        voice_map:
+            Mapping of speaker name to :class:`VoiceProfile`.
+        output_dir:
+            Directory to write individual audio files into.
+        language:
+            ISO language code.
+
+        Returns
+        -------
+        list[AudioSegment]
+            One :class:`AudioSegment` per non-empty line, in order.
+        """
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        segments: list[AudioSegment] = []
+
+        for i, line in enumerate(lines):
+            if not line.text.strip():
+                continue
+
+            speaker = line.speaker
+            profile = voice_map.get(speaker) or voice_map.get("narrator")
+            if profile is None:
+                # Last-resort fallback: default VoiceProfile
+                profile = VoiceProfile()
+
+            emotion = line.emotion_hint or profile.emotion
+
+            # Synthesize audio
+            if isinstance(self._provider, WaveSpeedTTSProvider):
+                audio_data = await self._provider.synthesize(
+                    text=line.text,
+                    voice=profile.voice_id,
+                    language=language,
+                    speed=profile.speed,
+                    pitch=profile.pitch,
+                    emotion=emotion,
+                    volume=profile.volume,
+                )
+            else:
+                audio_data = await self._provider.synthesize(
+                    text=line.text,
+                    voice=profile.voice_id,
+                    language=language,
+                )
+
+            # Write audio file
+            audio_path = output_dir / f"line_{i:04d}_{speaker}.mp3"
+            audio_path.write_bytes(audio_data)
+
+            # Map LineType to AudioType
+            audio_type = self._LINE_TYPE_TO_AUDIO_TYPE.get(
+                line.line_type, AudioType.DIALOGUE,
+            )
+
+            segment = AudioSegment(
+                scene_id=line.scene_id,
+                audio_type=audio_type,
+                text=line.text,
+                character_name=speaker,
+                audio_path=str(audio_path),
+                line_type=line.line_type,
+            )
+            segments.append(segment)
+
+        logger.info(
+            "generate_multi_role: produced %d segments from %d lines",
+            len(segments),
+            len(lines),
+        )
+        return segments
