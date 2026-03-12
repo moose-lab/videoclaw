@@ -23,6 +23,10 @@ def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, Proje
     """Convert an episode's scene prompts into a DAG + ProjectState.
 
     Returns a (dag, project_state) tuple ready for DAGExecutor.
+
+    Unlike the generic ``build_dag()``, this builds a drama-specific DAG
+    with richer node params so handlers can access scene dialogue,
+    character voices, and subtitle data.
     """
     # Build shots from typed DramaScene objects
     shots: list[Shot] = []
@@ -47,15 +51,148 @@ def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, Proje
             "episode_number": episode.number,
             "style": series.style,
             "aspect_ratio": series.aspect_ratio,
+            "language": series.language,
+            "voice_map": {
+                c.name: c.voice_profile.to_dict()
+                for c in series.characters
+                if c.voice_profile
+            },
         },
     )
     episode.project_id = state.project_id
 
-    # Build the DAG using the standard pipeline builder
-    from videoclaw.core.planner import build_dag
-    dag = build_dag(state)
+    # Build drama-specific DAG with enriched params
+    dag = _build_drama_dag(state, episode, series)
 
     return dag, state
+
+
+def _build_drama_dag(
+    state: ProjectState,
+    episode: Episode,
+    series: DramaSeries,
+) -> DAG:
+    """Build a drama-specific DAG with enriched handler params.
+
+    Pipeline shape::
+
+        script_gen
+            |
+        storyboard
+            |
+        +---+---+---+      tts      music
+        | video shots |      |        |
+        +---+---+---+      |        |
+            |               |        |
+            +-------+-------+--------+
+                    |
+                 compose
+                    |
+                  render
+    """
+    dag = DAG()
+
+    # -- 1. Script generation (already done by DramaPlanner) --
+    script_node = TaskNode(
+        node_id="script_gen",
+        task_type=TaskType.SCRIPT_GEN,
+        params={"prompt": state.prompt},
+    )
+    dag.add_node(script_node)
+
+    # -- 2. Storyboard (already populated from scenes) --
+    storyboard_node = TaskNode(
+        node_id="storyboard",
+        task_type=TaskType.STORYBOARD,
+        depends_on=["script_gen"],
+        params={"prompt": state.prompt},
+    )
+    dag.add_node(storyboard_node)
+
+    # -- 3. Parallel video generation per shot --
+    video_node_ids: list[str] = []
+    for shot in state.storyboard:
+        vid_id = f"video_{shot.shot_id}"
+        dag.add_node(TaskNode(
+            node_id=vid_id,
+            task_type=TaskType.VIDEO_GEN,
+            depends_on=["storyboard"],
+            params={
+                "shot_id": shot.shot_id,
+                "prompt": shot.prompt,
+                "duration": shot.duration_seconds,
+                "model_id": shot.model_id,
+                "aspect_ratio": series.aspect_ratio,
+            },
+        ))
+        video_node_ids.append(vid_id)
+
+    # -- 4. TTS with per-scene dialogue/narration data --
+    # Build voice lookup from series characters
+    character_voices: dict[str, dict] = {}
+    for char in series.characters:
+        if char.voice_profile:
+            character_voices[char.name] = char.voice_profile.to_dict()
+
+    scenes_data = []
+    for scene in episode.scenes:
+        voice = None
+        if scene.speaking_character and scene.speaking_character in character_voices:
+            voice = character_voices[scene.speaking_character].get("voice_id")
+        scenes_data.append({
+            "scene_id": scene.scene_id,
+            "dialogue": scene.dialogue,
+            "dialogue_line_type": getattr(scene, "dialogue_line_type", "dialogue"),
+            "narration": scene.narration,
+            "speaking_character": scene.speaking_character,
+            "emotion": scene.emotion,
+            "duration_seconds": scene.duration_seconds,
+            "voice": voice,
+        })
+
+    tts_node = TaskNode(
+        node_id="tts",
+        task_type=TaskType.TTS,
+        depends_on=["storyboard"],
+        params={
+            "scenes": scenes_data,
+            "language": series.language,
+        },
+    )
+    dag.add_node(tts_node)
+
+    # -- 5. Music (placeholder -- no API yet) --
+    music_node = TaskNode(
+        node_id="music",
+        task_type=TaskType.MUSIC,
+        depends_on=["storyboard"],
+        params={},
+    )
+    dag.add_node(music_node)
+
+    # -- 6. Compose: waits for all video clips + audio tracks --
+    compose_deps = video_node_ids + ["tts", "music"]
+    compose_node = TaskNode(
+        node_id="compose",
+        task_type=TaskType.COMPOSE,
+        depends_on=compose_deps,
+        params={
+            "transition": "dissolve",
+            "scenes": scenes_data,  # needed for subtitle generation
+        },
+    )
+    dag.add_node(compose_node)
+
+    # -- 7. Final render --
+    render_node = TaskNode(
+        node_id="render",
+        task_type=TaskType.RENDER,
+        depends_on=["compose"],
+        params={},
+    )
+    dag.add_node(render_node)
+
+    return dag
 
 
 class DramaRunner:

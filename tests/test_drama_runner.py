@@ -1,11 +1,13 @@
 """Tests for drama runner (runner.py)."""
 
 from videoclaw.drama.models import (
+    Character,
     DramaScene,
     DramaSeries,
     Episode,
     ShotScale,
     ShotType,
+    VoiceProfile,
 )
 from videoclaw.drama.runner import build_episode_dag
 
@@ -99,3 +101,76 @@ def test_build_episode_dag_metadata():
     assert state.metadata["episode_number"] == 1
     assert state.metadata["style"] == "cinematic"
     assert state.metadata["aspect_ratio"] == "9:16"
+
+
+# ---------------------------------------------------------------------------
+# Voice map wiring
+# ---------------------------------------------------------------------------
+
+
+def test_build_episode_dag_includes_voice_map():
+    """build_episode_dag should store voice_map in state.metadata."""
+    series = DramaSeries(
+        title="Voice Test",
+        model_id="mock",
+        characters=[
+            Character(
+                name="林薇",
+                description="活泼少女",
+                voice_profile=VoiceProfile(
+                    voice_id="Lively_Girl", role_name="林薇", speed=1.05, pitch=2,
+                ),
+            ),
+            Character(name="萧衍", description="霸总"),  # no voice_profile
+        ],
+    )
+    ep = Episode(
+        number=1,
+        scenes=[
+            DramaScene(scene_id="s01", dialogue="你来了", speaking_character="林薇"),
+        ],
+    )
+
+    _, state = build_episode_dag(ep, series)
+
+    assert "voice_map" in state.metadata
+    voice_map = state.metadata["voice_map"]
+    assert "林薇" in voice_map
+    assert voice_map["林薇"]["voice_id"] == "Lively_Girl"
+    assert voice_map["林薇"]["speed"] == 1.05
+    # Characters without voice_profile should not appear
+    assert "萧衍" not in voice_map
+
+
+def test_build_episode_dag_scenes_have_dialogue_line_type():
+    """TTS node params should include dialogue_line_type per scene."""
+    series = DramaSeries(title="LineType Test", model_id="mock")
+    ep = Episode(
+        number=1,
+        scenes=[
+            DramaScene(
+                scene_id="s01",
+                dialogue="你来了",
+                speaking_character="林薇",
+                dialogue_line_type="dialogue",
+            ),
+            DramaScene(
+                scene_id="s02",
+                dialogue="不可能",
+                speaking_character="萧衍",
+                dialogue_line_type="inner_monologue",
+            ),
+            DramaScene(
+                scene_id="s03",
+                narration="夜幕降临",
+            ),
+        ],
+    )
+
+    dag, _ = build_episode_dag(ep, series)
+
+    tts_node = dag.nodes["tts"]
+    scenes = tts_node.params["scenes"]
+    assert scenes[0]["dialogue_line_type"] == "dialogue"
+    assert scenes[1]["dialogue_line_type"] == "inner_monologue"
+    assert scenes[2]["dialogue_line_type"] == "dialogue"  # default
