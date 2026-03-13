@@ -63,11 +63,13 @@ model_app = typer.Typer(help="Manage model adapters.", no_args_is_help=True)
 project_app = typer.Typer(help="Manage VideoClaw projects.", no_args_is_help=True)
 template_app = typer.Typer(help="Flow templates for common video types.", no_args_is_help=True)
 flow_app = typer.Typer(help="Run and validate ClawFlow YAML pipelines.", no_args_is_help=True)
+drama_app = typer.Typer(help="AI short drama series orchestration.", no_args_is_help=True)
 
 app.add_typer(model_app, name="model")
 app.add_typer(project_app, name="project")
 app.add_typer(template_app, name="template")
 app.add_typer(flow_app, name="flow")
+app.add_typer(drama_app, name="drama")
 
 
 # ---------------------------------------------------------------------------
@@ -826,35 +828,383 @@ def flow_validate(
 
 
 # ---------------------------------------------------------------------------
-# claw ui
+# claw drama new / list / show / plan / run
 # ---------------------------------------------------------------------------
 
 
-@app.command()
-def ui(
-    port: Annotated[int, typer.Option("--port", "-p", help="Dev server port.")] = 3000,
+@drama_app.command("new")
+def drama_new(
+    synopsis: Annotated[str, typer.Argument(help="High-level story concept for the drama series.")],
+    title: Annotated[Optional[str], typer.Option("--title", "-t", help="Series title.")] = None,
+    genre: Annotated[str, typer.Option("--genre", "-g", help="Genre.")] = "drama",
+    episodes: Annotated[int, typer.Option("--episodes", "-n", help="Number of episodes.")] = 5,
+    duration: Annotated[float, typer.Option("--duration", "-d", help="Target seconds per episode.")] = 60.0,
+    style: Annotated[str, typer.Option("--style", "-s", help="Visual style.")] = "cinematic",
+    language: Annotated[str, typer.Option("--lang", "-l", help="Script language (zh/en).")] = "zh",
+    aspect_ratio: Annotated[str, typer.Option("--aspect-ratio", "-a", help="Aspect ratio.")] = "9:16",
+    model: Annotated[str, typer.Option("--model", "-m", help="Video model id.")] = "mock",
+    plan: Annotated[bool, typer.Option("--plan/--no-plan", help="Immediately plan episodes via LLM.")] = False,
+    design_characters: Annotated[bool, typer.Option("--design-characters", help="Generate character reference images after planning.")] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
-    """Launch the VideoClaw web UI (Next.js dev server)."""
-    web_dir = Path(__file__).resolve().parent.parent.parent / "web"
-    if not (web_dir / "package.json").exists():
-        console.print("[red]Web UI not found. Expected at:[/red]")
-        console.print(f"  {web_dir}")
-        console.print("\n[dim]Run: cd web && npm install && npm run dev[/dim]")
+    """Create a new AI short drama series."""
+    _configure_logging(verbose)
+    _show_banner()
+
+    from videoclaw.drama.models import DramaManager
+
+    mgr = DramaManager()
+    series = mgr.create(
+        title=title or "",
+        synopsis=synopsis,
+        genre=genre,
+        total_episodes=episodes,
+        target_episode_duration=duration,
+        style=style,
+        language=language,
+        aspect_ratio=aspect_ratio,
+        model_id=model,
+    )
+
+    console.print(
+        Panel(
+            f"[bold]Series ID:[/bold]  {series.series_id}\n"
+            f"[bold]Synopsis:[/bold]   {synopsis[:80]}\n"
+            f"[bold]Genre:[/bold]      {genre}\n"
+            f"[bold]Episodes:[/bold]   {episodes}\n"
+            f"[bold]Duration:[/bold]   {duration}s/episode\n"
+            f"[bold]Style:[/bold]      {style}\n"
+            f"[bold]Model:[/bold]      {model}",
+            title="[bold green]New Drama Series[/bold green]",
+            border_style="green",
+        )
+    )
+
+    if plan:
+        console.print("\n[bold cyan]Planning episodes via LLM...[/bold cyan]")
+        asyncio.run(_drama_plan_async(series, mgr))
+
+    if design_characters and plan:
+        console.print("\n[bold cyan]Generating character reference images...[/bold cyan]")
+        asyncio.run(_design_characters_async(series, mgr, force=False))
+
+
+async def _drama_plan_async(series, mgr) -> None:
+    from videoclaw.drama.planner import DramaPlanner
+
+    planner = DramaPlanner()
+    with console.status("[cyan]Director is planning the series...", spinner="dots"):
+        series = await planner.plan_series(series)
+    mgr.save(series)
+
+    if series.title:
+        console.print(f"\n[bold]Title:[/bold] {series.title}")
+
+    if series.characters:
+        char_table = Table(title="Characters", show_header=True, header_style="bold magenta")
+        char_table.add_column("Name", style="cyan")
+        char_table.add_column("Description", style="white")
+        char_table.add_column("Visual", style="dim", max_width=40)
+        for c in series.characters:
+            char_table.add_row(c.name, c.description[:50], c.visual_prompt[:40])
+        console.print(char_table)
+
+    if series.episodes:
+        ep_table = Table(title="Episodes", show_header=True, header_style="bold cyan")
+        ep_table.add_column("#", width=4, style="dim")
+        ep_table.add_column("Title", style="cyan")
+        ep_table.add_column("Synopsis", style="white")
+        ep_table.add_column("Duration", justify="right", style="green")
+        for ep in series.episodes:
+            ep_table.add_row(
+                str(ep.number),
+                ep.title,
+                ep.synopsis[:60] + ("..." if len(ep.synopsis) > 60 else ""),
+                f"{ep.duration_seconds:.0f}s",
+            )
+        console.print(ep_table)
+
+    console.print(f"\n[bold green]Series planned: {series.series_id}[/bold green]")
+
+
+@drama_app.command("list")
+def drama_list() -> None:
+    """List all drama series."""
+    from videoclaw.drama.models import DramaManager
+
+    mgr = DramaManager()
+    series_ids = mgr.list_series()
+
+    if not series_ids:
+        console.print("[yellow]No drama series found.[/yellow]")
+        raise typer.Exit()
+
+    table = Table(title="Drama Series", show_header=True, header_style="bold cyan")
+    table.add_column("Series ID", style="cyan", min_width=18)
+    table.add_column("Title", style="white")
+    table.add_column("Status", style="magenta")
+    table.add_column("Episodes", justify="right")
+    table.add_column("Cost", justify="right", style="yellow")
+
+    for sid in sorted(series_ids):
+        try:
+            s = mgr.load(sid)
+            completed = sum(1 for ep in s.episodes if ep.status == "completed")
+            table.add_row(
+                sid,
+                s.title or s.synopsis[:30],
+                s.status.value,
+                f"{completed}/{len(s.episodes)}",
+                f"${s.cost_total:.4f}",
+            )
+        except Exception:
+            table.add_row(sid, "[red]error[/red]", "-", "-", "-")
+
+    console.print(table)
+
+
+@drama_app.command("show")
+def drama_show(
+    series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
+) -> None:
+    """Show detailed info about a drama series."""
+    from videoclaw.drama.models import DramaManager
+
+    mgr = DramaManager()
+    try:
+        series = mgr.load(series_id)
+    except FileNotFoundError:
+        console.print(f"[red]Series {series_id!r} not found.[/red]")
         raise typer.Exit(code=1)
 
     console.print(
         Panel(
-            f"[bold]Starting VideoClaw Web UI[/bold]\n\n"
-            f"  URL:  [cyan]http://localhost:{port}[/cyan]\n"
-            f"  API:  [cyan]http://localhost:8000[/cyan]\n\n"
-            "[dim]Make sure the API server is also running:\n"
-            "  uvicorn videoclaw.server.app:create_app --factory[/dim]",
-            title="[bold cyan]Web UI[/bold cyan]",
+            f"[bold]ID:[/bold]       {series.series_id}\n"
+            f"[bold]Title:[/bold]    {series.title}\n"
+            f"[bold]Genre:[/bold]    {series.genre}\n"
+            f"[bold]Status:[/bold]   {series.status.value}\n"
+            f"[bold]Style:[/bold]    {series.style}\n"
+            f"[bold]Language:[/bold] {series.language}\n"
+            f"[bold]Model:[/bold]    {series.model_id}\n"
+            f"[bold]Cost:[/bold]     ${series.cost_total:.4f}\n"
+            f"[bold]Synopsis:[/bold] {series.synopsis[:100]}",
+            title="[bold green]Drama Series[/bold green]",
+            border_style="green",
+        )
+    )
+
+    if series.characters:
+        char_table = Table(title="Characters", show_header=True, header_style="bold magenta")
+        char_table.add_column("Name", style="cyan")
+        char_table.add_column("Description", style="white")
+        char_table.add_column("Voice", style="dim")
+        for c in series.characters:
+            char_table.add_row(c.name, c.description[:50], c.voice_style)
+        console.print(char_table)
+
+    if series.episodes:
+        ep_table = Table(title="Episodes", show_header=True, header_style="bold cyan")
+        ep_table.add_column("#", width=4, style="dim")
+        ep_table.add_column("Title", style="cyan")
+        ep_table.add_column("Status", style="magenta")
+        ep_table.add_column("Scenes", justify="right")
+        ep_table.add_column("Cost", justify="right", style="yellow")
+        ep_table.add_column("Synopsis", style="dim", max_width=40)
+        for ep in series.episodes:
+            ep_table.add_row(
+                str(ep.number),
+                ep.title,
+                ep.status.value,
+                str(len(ep.scenes)),
+                f"${ep.cost:.4f}",
+                ep.synopsis[:40],
+            )
+        console.print(ep_table)
+
+
+@drama_app.command("plan")
+def drama_plan(
+    series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Plan episodes for an existing drama series using LLM."""
+    _configure_logging(verbose)
+
+    from videoclaw.drama.models import DramaManager
+
+    mgr = DramaManager()
+    try:
+        series = mgr.load(series_id)
+    except FileNotFoundError:
+        console.print(f"[red]Series {series_id!r} not found.[/red]")
+        raise typer.Exit(code=1)
+
+    asyncio.run(_drama_plan_async(series, mgr))
+
+
+@drama_app.command("design-characters")
+def drama_design_characters(
+    series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Regenerate existing images.")] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Generate reference images for characters in a drama series."""
+    _configure_logging(verbose)
+
+    from videoclaw.drama.models import DramaManager
+
+    mgr = DramaManager()
+    try:
+        series = mgr.load(series_id)
+    except FileNotFoundError:
+        console.print(f"[red]Series {series_id!r} not found.[/red]")
+        raise typer.Exit(code=1)
+
+    if not series.characters:
+        console.print("[yellow]No characters found. Run `claw drama plan` first.[/yellow]")
+        raise typer.Exit(code=1)
+
+    console.print(
+        Panel(
+            f"[bold]Series:[/bold]     {series.title}\n"
+            f"[bold]Characters:[/bold] {len(series.characters)}\n"
+            f"[bold]Force:[/bold]      {force}",
+            title="[bold cyan]Character Design[/bold cyan]",
             border_style="cyan",
         )
     )
 
-    os.execvp("npm", ["npm", "run", "dev", "--prefix", str(web_dir), "--", "-p", str(port)])
+    asyncio.run(_design_characters_async(series, mgr, force))
+
+
+async def _design_characters_async(series, mgr, force: bool) -> None:
+    from videoclaw.drama.character_designer import CharacterDesigner
+
+    designer = CharacterDesigner(drama_manager=mgr)
+
+    with console.status("[cyan]Generating character reference images...", spinner="dots"):
+        series = await designer.design_characters(series, force=force)
+
+    # Show results
+    table = Table(title="Character Reference Images", show_header=True, header_style="bold magenta")
+    table.add_column("Name", style="cyan")
+    table.add_column("Reference Image", style="green")
+    for c in series.characters:
+        table.add_row(c.name, c.reference_image or "[dim]none[/dim]")
+    console.print(table)
+
+    console.print(f"\n[bold green]Character designs complete for {series.series_id}[/bold green]")
+
+
+@drama_app.command("run")
+def drama_run(
+    series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
+    episode: Annotated[Optional[int], typer.Option("--episode", "-e", help="Run a specific episode number.")] = None,
+    start: Annotated[int, typer.Option("--start", help="Start from episode number.")] = 1,
+    end: Annotated[Optional[int], typer.Option("--end", help="End at episode number.")] = None,
+    budget: Annotated[Optional[float], typer.Option("--budget", "-b", help="Max budget in USD.")] = None,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Run the generation pipeline for drama episodes."""
+    _configure_logging(verbose)
+    _show_banner()
+
+    from videoclaw.drama.models import DramaManager
+    from videoclaw.drama.planner import DramaPlanner
+
+    mgr = DramaManager()
+    try:
+        series = mgr.load(series_id)
+    except FileNotFoundError:
+        console.print(f"[red]Series {series_id!r} not found.[/red]")
+        raise typer.Exit(code=1)
+
+    if not series.episodes:
+        console.print("[yellow]No episodes planned. Run `claw drama plan` first.[/yellow]")
+        raise typer.Exit(code=1)
+
+    if episode is not None:
+        start = episode
+        end = episode
+
+    console.print(
+        Panel(
+            f"[bold]Series:[/bold]   {series.title}\n"
+            f"[bold]Episodes:[/bold] {start} to {end or len(series.episodes)}\n"
+            f"[bold]Model:[/bold]    {series.model_id}",
+            title="[bold cyan]Drama Run[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+
+    asyncio.run(_drama_run_async(series, mgr, start, end))
+
+
+async def _drama_run_async(series, mgr, start: int, end: int | None) -> None:
+    from videoclaw.drama.planner import DramaPlanner
+    from videoclaw.drama.runner import DramaRunner
+
+    planner = DramaPlanner()
+    runner = DramaRunner(drama_manager=mgr)
+
+    episodes_to_run = [
+        ep for ep in series.episodes
+        if start <= ep.number <= (end or len(series.episodes))
+        and ep.status != "completed"
+    ]
+
+    # Retrieve cliffhanger from the episode before the first one we're running
+    prev_cliffhanger: str | None = None
+    if episodes_to_run:
+        prev_num = episodes_to_run[0].number - 1
+        for ep in series.episodes:
+            if ep.number == prev_num and ep.script:
+                try:
+                    prev_script = json.loads(ep.script)
+                    prev_cliffhanger = prev_script.get("cliffhanger")
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                break
+
+    for ep in episodes_to_run:
+        console.print(f"\n[bold cyan]Episode {ep.number}: {ep.title}[/bold cyan]")
+
+        # Script the episode if not already scripted
+        if not ep.scenes:
+            with console.status(f"[cyan]Scripting episode {ep.number}...", spinner="dots"):
+                script_data = await planner.script_episode(series, ep, prev_cliffhanger)
+            prev_cliffhanger = script_data.get("cliffhanger")
+            mgr.save(series)
+            console.print(f"  Scenes: {len(ep.scenes)}")
+
+        # Run the generation pipeline
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task(
+                f"Episode {ep.number}...",
+                total=len(ep.scenes) + 4,  # scenes + script/storyboard/compose/render
+            )
+            state = await runner.run_episode(series, ep)
+            progress.update(task, completed=len(ep.scenes) + 4)
+
+        status_style = "green" if ep.status == "completed" else "red"
+        console.print(f"  Status: [{status_style}]{ep.status}[/{status_style}]  Cost: ${ep.cost:.4f}")
+
+    console.print(
+        Panel(
+            f"[bold]Series:[/bold]  {series.title}\n"
+            f"[bold]Status:[/bold]  {series.status.value}\n"
+            f"[bold]Cost:[/bold]    ${series.cost_total:.4f}",
+            title="[bold green]Drama Complete[/bold green]",
+            border_style="green",
+        )
+    )
 
 
 # ---------------------------------------------------------------------------

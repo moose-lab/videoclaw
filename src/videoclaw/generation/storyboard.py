@@ -49,6 +49,20 @@ Prompt-writing rules:
 - Keep prompts in English regardless of the script language -- all major video
   models perform best with English prompts.
 
+Material description rules:
+- Characters must have a complete appearance description on first appearance
+  (age, gender, body type, hair style/color, clothing, accessories, distinctive marks).
+- Objects should describe material, color, size, and key visual features.
+- Maintain visual consistency: the same character across shots must use
+  identical visual keywords.
+
+Background audio considerations:
+- Note ambient sounds and environmental audio cues for each shot
+  (wind, traffic, crowd murmur, rain, silence, etc.).
+- Sound effects should serve the narrative rhythm: sharp/sudden sounds for
+  tension, soft ambient noise for calm scenes.
+- Record sound design notes in the sfx field.
+
 Output JSON schema (array of objects):
 [
   {
@@ -59,7 +73,9 @@ Output JSON schema (array of objects):
     "duration_seconds": <float>,
     "suggested_model": "<kling | runway | sora | pika | svd | auto>",
     "visual_style": "<cinematic | photorealistic | anime | etc.>",
-    "camera_movement": "<static | pan_left | dolly_in | etc.>"
+    "camera_movement": "<static | pan_left | dolly_in | etc.>",
+    "sfx": "<sound effects for this shot, e.g. footsteps, door slam, thunder>",
+    "notes": "<special considerations: character traits, mood, pacing>"
   }
 ]
 

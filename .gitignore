@@ -21,6 +21,7 @@ env/
 *.mov
 !templates/**
 !tests/fixtures/**
+!docs/deliverables/这个王妃太狂野/**
 
 .mypy_cache/
 .pytest_cache/
@@ -36,8 +37,8 @@ htmlcov/
 
 projects/
 models_cache/
-node_modules/
-web/.next/
-web/node_modules/
 .worktrees
-.devtool
+
+docs/deliverables/*
+!docs/deliverables/这个王妃太狂野/
+docs/plans

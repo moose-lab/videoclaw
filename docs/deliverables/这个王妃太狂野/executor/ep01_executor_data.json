@@ -1,0 +1,347 @@
+{
+  "episode_number": 1,
+  "episode_title": "废妃重生",
+  "duration_seconds": 60.0,
+  "scenes": [
+    {
+      "scene_id": "ep01_s01",
+      "description": "破旧柴房内，林薇躺在稻草上，一只脚踩住她的手",
+      "visual_prompt": "Dark shabby storage room, young Chinese woman lying on straw, delicate oval face with phoenix eyes, long black hair with jade hairpin, tattered white hanfu with red lining, a servant's foot stepping on her hand, dramatic shadows from a small window, cinematic lighting",
+      "camera_movement": "dolly_in",
+      "duration_seconds": 5.0,
+      "dialogue": "",
+      "narration": "她睁开眼的那一刻，不再是废物王妃",
+      "shot_scale": "close_up",
+      "shot_type": "detail",
+      "speaking_character": "",
+      "emotion": "dread",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "fade_in",
+      "sfx": "",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep01_s02",
+      "description": "林薇眼神骤变，从茫然到冰冷",
+      "visual_prompt": "Extreme close-up of young Chinese woman's phoenix eyes transitioning from confusion to lethal calm, jade hairpin visible, dramatic side lighting, moody atmosphere",
+      "camera_movement": "static",
+      "duration_seconds": 3.0,
+      "dialogue": "",
+      "narration": "",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "speaking_character": "",
+      "emotion": "defiant",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep01_s03",
+      "description": "林薇一个反擒拿翻转丫鬟手腕",
+      "visual_prompt": "Young Chinese woman in tattered white hanfu executing swift wrist-lock takedown on servant, straw flying, dynamic motion blur, dramatic shadows, cinematic action shot",
+      "camera_movement": "handheld",
+      "duration_seconds": 4.0,
+      "dialogue": "",
+      "narration": "",
+      "shot_scale": "medium",
+      "shot_type": "action",
+      "speaking_character": "",
+      "emotion": "triumphant",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep01_s04",
+      "description": "丫鬟跪在地上，惊恐地看着林薇",
+      "visual_prompt": "Low angle shot looking up at young Chinese woman standing over kneeling servant, tattered white hanfu with red lining, jade hairpin catching light, confident slight smile, atmospheric dust particles in shaft of light",
+      "camera_movement": "crane_up",
+      "duration_seconds": 5.0,
+      "dialogue": "你确定……要踩这双手？",
+      "narration": "",
+      "shot_scale": "medium_close",
+      "shot_type": "action",
+      "speaking_character": "林薇",
+      "emotion": "smug",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep01_s05",
+      "description": "林薇推开柴房门，逆光走出",
+      "visual_prompt": "Silhouette of slender young Chinese woman pushing open wooden door, brilliant backlight flooding in, tattered white hanfu with red inner lining billowing, long black hair flowing, dramatic lens flare, cinematic wide shot",
+      "camera_movement": "dolly_in",
+      "duration_seconds": 5.0,
+      "dialogue": "",
+      "narration": "从这一刻起，这个世界的规则，由她来改写",
+      "shot_scale": "wide",
+      "shot_type": "establishing",
+      "speaking_character": "",
+      "emotion": "triumphant",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep01_s06",
+      "description": "院中下人们纷纷转头看向走出的林薇，窃窃私语",
+      "visual_prompt": "Courtyard of ancient Chinese mansion, group of servants in grey uniforms turning to look with mocking expressions, young Chinese woman in tattered white hanfu walking forward with confident stride, warm sunlight, atmospheric",
+      "camera_movement": "tracking",
+      "duration_seconds": 5.0,
+      "dialogue": "",
+      "narration": "",
+      "shot_scale": "medium",
+      "shot_type": "establishing",
+      "speaking_character": "",
+      "emotion": "tense",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep01_s07",
+      "description": "林薇面对众人的嘲讽，嘴角微微上扬",
+      "visual_prompt": "Close-up of young Chinese woman's face with slight knowing smile, phoenix eyes with sharp gaze, jade hairpin, tattered white hanfu collar visible, golden hour lighting from side, cinematic depth of field",
+      "camera_movement": "static",
+      "duration_seconds": 4.0,
+      "dialogue": "你们确定？",
+      "narration": "",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "speaking_character": "林薇",
+      "emotion": "smug",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep01_s08",
+      "description": "慕容雪的丫鬟端着一碗汤来'送温暖'",
+      "visual_prompt": "Beautiful Chinese woman's servant in pink uniform carrying ornate bowl of soup on tray, walking through corridor with lanterns, gentle warm lighting, sinister atmosphere despite pleasant appearance",
+      "camera_movement": "tracking",
+      "duration_seconds": 5.0,
+      "dialogue": "王妃娘娘，侧妃让奴婢给您送碗暖汤",
+      "narration": "",
+      "shot_scale": "medium",
+      "shot_type": "action",
+      "speaking_character": "",
+      "emotion": "suspense",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "dissolve",
+      "sfx": "",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep01_s09",
+      "description": "林薇接过汤碗，指尖沾汤微微嗅了嗅",
+      "visual_prompt": "Close-up of delicate hand with subtle scar on left wrist dipping finger into ornate soup bowl, bringing finger close to nose, young Chinese woman's knowing expression in soft focus background, warm lamplight",
+      "camera_movement": "static",
+      "duration_seconds": 4.0,
+      "dialogue": "",
+      "narration": "乌头碱，剂量不大，但足以让人腹泻三天……手法真粗糙",
+      "shot_scale": "close_up",
+      "shot_type": "detail",
+      "speaking_character": "",
+      "emotion": "smug",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep01_s10",
+      "description": "林薇微笑着把汤递回给丫鬟",
+      "visual_prompt": "Medium close-up of young Chinese woman with subtle scar on left wrist handing soup bowl back to nervous servant with a dangerous smile, dramatic side lighting, tense atmosphere",
+      "camera_movement": "static",
+      "duration_seconds": 5.0,
+      "dialogue": "替我谢谢你家主子，这汤……她自己留着喝吧",
+      "narration": "",
+      "shot_scale": "medium_close",
+      "shot_type": "action",
+      "speaking_character": "林薇",
+      "emotion": "triumphant",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep01_s11",
+      "description": "远处暗处，慕容雪手中折扇猛然合拢",
+      "visual_prompt": "Silhouette of beautiful Chinese woman in pink silk hanfu standing in dark corridor, snapping folding fan shut with angry force, mandala flower fan barely visible, dramatic shadows, ominous atmosphere",
+      "camera_movement": "dolly_in",
+      "duration_seconds": 5.0,
+      "dialogue": "",
+      "narration": "她不知道，真正的敌人……远不止一个侧妃",
+      "shot_scale": "medium",
+      "shot_type": "reaction",
+      "speaking_character": "",
+      "emotion": "dread",
+      "characters_present": [
+        "慕容雪"
+      ],
+      "transition": "cut",
+      "sfx": "",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep01_s12",
+      "description": "月夜，林薇站在窗前望着星空，眼中映着现代城市的倒影",
+      "visual_prompt": "Young Chinese woman in tattered white hanfu with red lining standing by moon-lit window, long black hair with jade hairpin flowing in breeze, reflection of modern city skyline in her phoenix eyes, ethereal moonlight, cinematic composition",
+      "camera_movement": "crane_up",
+      "duration_seconds": 10.0,
+      "dialogue": "",
+      "narration": "回不去了……那就在这里，活出另一个传奇",
+      "shot_scale": "medium_close",
+      "shot_type": "pov",
+      "speaking_character": "",
+      "emotion": "melancholy",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "fade_out",
+      "sfx": "",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    }
+  ],
+  "characters": [
+    {
+      "name": "林薇",
+      "description": "表面身份：被休弃的废物王妃；隐藏身份：穿越而来的现代女特工。性格反差：外表柔弱 vs 内心冷酷。记忆点：每次反杀前微微一笑说'你确定？'",
+      "visual_prompt": "Young Chinese woman, early 20s, delicate oval face, phoenix eyes with sharp gaze, long black hair with jade hairpin, wearing tattered but elegant white hanfu with red inner lining, slender build, subtle scar on left wrist",
+      "voice_style": "calm",
+      "reference_image": null,
+      "voice_profile": {
+        "voice_id": "Calm_Woman",
+        "speed": 0.9,
+        "pitch": 0,
+        "emotion": "neutral",
+        "volume": 1.0
+      }
+    },
+    {
+      "name": "萧衍",
+      "description": "表面身份：冷面靖王；隐藏身份：暗中调查皇室血脉秘密。性格反差：对外冷酷 vs 对林薇逐渐温柔。记忆点：永远黑衣，腰间佩一把从不出鞘的剑。",
+      "visual_prompt": "Tall Chinese man, late 20s, sharp angular jawline, intense dark eyes, long black hair in high ponytail with silver crown, wearing black brocade robe with dragon embroidery, broad shoulders, never-drawn sword at waist",
+      "voice_style": "authoritative",
+      "reference_image": null,
+      "voice_profile": {
+        "voice_id": "Imposing_Manner",
+        "speed": 0.9,
+        "pitch": -2,
+        "emotion": "neutral",
+        "volume": 1.0
+      }
+    },
+    {
+      "name": "慕容雪",
+      "description": "表面身份：温婉贤淑的侧妃；隐藏身份：幕后势力的棋子。性格反差：人前温婉 vs 人后阴毒。记忆点：手持折扇，扇面画曼陀罗。",
+      "visual_prompt": "Beautiful Chinese woman, mid 20s, round face with dimples, gentle almond eyes hiding cunning, elaborate updo with golden phoenix hairpins, wearing pink silk hanfu with floral patterns, holding folding fan with mandala flower painting",
+      "voice_style": "playful",
+      "reference_image": null,
+      "voice_profile": {
+        "voice_id": "Lively_Girl",
+        "speed": 1.1,
+        "pitch": 2,
+        "emotion": "happy",
+        "volume": 1.0
+      }
+    },
+    {
+      "name": "老太君",
+      "description": "表面身份：德高望重的萧家老太君；隐藏身份：早年江湖女侠。记忆点：龙头拐杖，发怒时拐杖敲地三声。",
+      "visual_prompt": "Elderly Chinese woman, 70s, silver hair in neat bun, wise piercing eyes, dignified posture, wearing deep purple silk robe, leaning on dragon-headed walking cane, jade bracelet",
+      "voice_style": "dramatic",
+      "reference_image": null,
+      "voice_profile": {
+        "voice_id": "Determined_Man",
+        "speed": 0.9,
+        "pitch": -1,
+        "emotion": "neutral",
+        "volume": 1.0
+      }
+    }
+  ],
+  "series_metadata": {
+    "title": "这个王妃太狂野",
+    "genre": "穿越/古装/爽剧",
+    "style": "cinematic",
+    "language": "zh",
+    "aspect_ratio": "9:16"
+  },
+  "music": {
+    "style": "chinese_traditional",
+    "mood": "mysterious",
+    "tempo": 100
+  },
+  "voice_over": {
+    "text": "她睁开眼的那一刻，不再是废物王妃。从这一刻起，这个世界的规则，由她来改写。她不知道，真正的敌人远不止一个侧妃。回不去了，那就在这里，活出另一个传奇。",
+    "tone": "dramatic",
+    "language": "zh"
+  },
+  "cliffhanger": "林薇眼中映着的现代城市倒影——她到底是谁？穿越的背后又隐藏着什么秘密？"
+}

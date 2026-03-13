@@ -1,48 +1,495 @@
-"""Data models for drama series production."""
+"""Data models for AI short drama series."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import json
+import uuid
+from dataclasses import dataclass, field, fields, asdict
+from datetime import datetime, timezone
+from enum import StrEnum
+from pathlib import Path
 from typing import Any
+
+from videoclaw.config import get_config
+
+
+# ---------------------------------------------------------------------------
+# Enums
+# ---------------------------------------------------------------------------
+
+class DramaStatus(StrEnum):
+    DRAFT = "draft"
+    PLANNING = "planning"
+    GENERATING = "generating"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class EpisodeStatus(StrEnum):
+    PENDING = "pending"
+    PLANNING = "planning"
+    GENERATING = "generating"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ShotScale(StrEnum):
+    CLOSE_UP = "close_up"
+    MEDIUM_CLOSE = "medium_close"
+    MEDIUM = "medium"
+    WIDE = "wide"
+    EXTREME_WIDE = "extreme_wide"
+
+
+class ShotType(StrEnum):
+    ESTABLISHING = "establishing"
+    REACTION = "reaction"
+    ACTION = "action"
+    DETAIL = "detail"
+    POV = "pov"
+
+
+class AudioType(StrEnum):
+    DIALOGUE = "dialogue"
+    NARRATION = "narration"
+    INNER_MONOLOGUE = "inner_monologue"
+    SFX = "sfx"
+    MUSIC = "music"
+
+
+class LineType(StrEnum):
+    NARRATION = "narration"
+    DIALOGUE = "dialogue"
+    INNER_MONOLOGUE = "inner_monologue"
+
+
+class DramaGenre(StrEnum):
+    SWEET_ROMANCE = "sweet_romance"
+    MALE_POWER_FANTASY = "male_power_fantasy"
+    SUSPENSE_THRILLER = "suspense_thriller"
+    ANCIENT_XIANXIA = "ancient_xianxia"
+    COMEDY = "comedy"
+    FAMILY_DRAMA = "family_drama"
+    OTHER = "other"
+
+
+# ---------------------------------------------------------------------------
+# Data models
+# ---------------------------------------------------------------------------
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 @dataclass
 class Character:
-    """A character in a drama series."""
+    """A recurring character in the drama series."""
 
-    name: str = ""
+    name: str
     description: str = ""
-    reference_image: str = ""  # file path to character reference PNG
+    visual_prompt: str = ""
+    voice_style: str = ""
+    reference_image: str | None = None
+    voice_profile: VoiceProfile | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        if self.voice_profile is not None:
+            d["voice_profile"] = self.voice_profile.to_dict()
+        else:
+            d.pop("voice_profile", None)
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Character:
+        data = dict(data)
+        vp = data.pop("voice_profile", None)
+        c = cls(**data)
+        if vp is not None:
+            c.voice_profile = VoiceProfile.from_dict(vp)
+        return c
 
 
 @dataclass
 class DramaScene:
-    """A single scene within a drama episode."""
+    """A single scene within an episode."""
 
     scene_id: str = ""
     description: str = ""
-    prompt: str = ""
+    visual_prompt: str = ""
+    camera_movement: str = "static"
     duration_seconds: float = 5.0
-    characters_present: list[str] = field(default_factory=list)
+    dialogue: str = ""
+    dialogue_line_type: str = "dialogue"  # "dialogue" | "inner_monologue"
+    narration: str = ""
+    shot_scale: ShotScale | None = None
+    shot_type: ShotType | None = None
     speaking_character: str = ""
-    model_id: str = ""
+    emotion: str = ""
+    characters_present: list[str] = field(default_factory=list)
+    transition: str = ""
+    sfx: str = ""
+    video_asset_path: str | None = None
+    dialogue_audio_path: str | None = None
+    narration_audio_path: str | None = None
+    scene_status: str = "pending"
+
+    def to_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        if self.shot_scale is not None:
+            d["shot_scale"] = self.shot_scale.value
+        if self.shot_type is not None:
+            d["shot_type"] = self.shot_type.value
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> DramaScene:
+        known = {f.name for f in fields(cls)}
+        data = {k: v for k, v in data.items() if k in known}
+        if data.get("shot_scale") is not None:
+            try:
+                data["shot_scale"] = ShotScale(data["shot_scale"])
+            except ValueError:
+                data["shot_scale"] = None
+        if data.get("shot_type") is not None:
+            try:
+                data["shot_type"] = ShotType(data["shot_type"])
+            except ValueError:
+                data["shot_type"] = None
+        return cls(**data)
 
 
 @dataclass
-class DramaEpisode:
-    """An episode consisting of multiple scenes."""
+class VoiceProfile:
+    """TTS voice configuration mapped from character personality."""
+
+    voice_id: str = "Friendly_Person"
+    speed: float = 1.0
+    pitch: int = 0
+    emotion: str = "neutral"
+    volume: float = 1.0
+    role_name: str = ""
+    line_type: LineType = LineType.DIALOGUE
+    age_feel: str = "young_adult"
+    energy: str = "medium"
+    description: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        d["line_type"] = self.line_type.value
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> VoiceProfile:
+        known = {f.name for f in fields(cls)}
+        filtered = {k: v for k, v in data.items() if k in known}
+        if "line_type" in filtered:
+            try:
+                filtered["line_type"] = LineType(filtered["line_type"])
+            except ValueError:
+                filtered["line_type"] = LineType.DIALOGUE
+        return cls(**filtered)
+
+
+@dataclass
+class DialogueLine:
+    """A single line of dialogue, narration, or inner monologue."""
+
+    text: str
+    speaker: str
+    line_type: LineType = LineType.DIALOGUE
+    scene_id: str = ""
+    emotion_hint: str | None = None
+    duration_seconds: float = 0.0
+    asset_path: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        d["line_type"] = self.line_type.value
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> DialogueLine:
+        known = {f.name for f in fields(cls)}
+        filtered = {k: v for k, v in data.items() if k in known}
+        if "line_type" in filtered:
+            try:
+                filtered["line_type"] = LineType(filtered["line_type"])
+            except ValueError:
+                filtered["line_type"] = LineType.DIALOGUE
+        return cls(**filtered)
+
+
+@dataclass
+class AudioSegment:
+    """A single audio segment within an episode timeline."""
+
+    segment_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    scene_id: str = ""
+    audio_type: AudioType = AudioType.DIALOGUE
+    line_type: LineType = LineType.DIALOGUE
+    text: str = ""
+    character_name: str = ""
+    audio_path: str | None = None
+    start_time: float = 0.0
+    duration_seconds: float = 0.0
+    volume: float = 1.0
+
+    def to_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        d["audio_type"] = self.audio_type.value
+        d["line_type"] = self.line_type.value
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AudioSegment:
+        known = {f.name for f in fields(cls)}
+        data = {k: v for k, v in data.items() if k in known}
+        if data.get("audio_type") is not None:
+            data["audio_type"] = AudioType(data["audio_type"])
+        if data.get("line_type") is not None:
+            try:
+                data["line_type"] = LineType(data["line_type"])
+            except ValueError:
+                data["line_type"] = LineType.DIALOGUE
+        return cls(**data)
+
+
+@dataclass
+class EpisodeAudioManifest:
+    """Audio manifest describing all audio segments for an episode."""
 
     episode_id: str = ""
+    segments: list[AudioSegment] = field(default_factory=list)
+    total_duration: float = 0.0
+    mixed_audio_path: str | None = None
+    created_at: str = field(default_factory=_now_iso)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "episode_id": self.episode_id,
+            "segments": [s.to_dict() for s in self.segments],
+            "total_duration": self.total_duration,
+            "mixed_audio_path": self.mixed_audio_path,
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> EpisodeAudioManifest:
+        data = dict(data)
+        data["segments"] = [
+            AudioSegment.from_dict(s) for s in data.get("segments", [])
+        ]
+        return cls(**data)
+
+
+# MiniMax speech-02-hd voice profiles keyed by Character.voice_style
+VOICE_PROFILES: dict[str, VoiceProfile] = {
+    "warm": VoiceProfile(voice_id="Friendly_Person", speed=0.95, emotion="happy"),
+    "authoritative": VoiceProfile(voice_id="Imposing_Manner", speed=0.90, pitch=-2),
+    "playful": VoiceProfile(voice_id="Lively_Girl", speed=1.10, pitch=2, emotion="happy"),
+    "dramatic": VoiceProfile(voice_id="Determined_Man", speed=0.90, pitch=-1),
+    "calm": VoiceProfile(voice_id="Calm_Woman", speed=0.90),
+}
+
+
+# Genre-aware narrator voice presets
+NARRATOR_PRESETS: dict[DramaGenre, VoiceProfile] = {
+    DramaGenre.SWEET_ROMANCE: VoiceProfile(
+        voice_id="Friendly_Person", speed=1.0, pitch=1, emotion="happy",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="young_adult", energy="medium", description="warm female",
+    ),
+    DramaGenre.MALE_POWER_FANTASY: VoiceProfile(
+        voice_id="Imposing_Manner", speed=0.95, pitch=-2, emotion="neutral",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="middle_aged", energy="medium", description="mature male",
+    ),
+    DramaGenre.SUSPENSE_THRILLER: VoiceProfile(
+        voice_id="Determined_Man", speed=0.9, pitch=-3, emotion="fearful",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="middle_aged", energy="low", description="deep mysterious",
+    ),
+    DramaGenre.ANCIENT_XIANXIA: VoiceProfile(
+        voice_id="Calm_Woman", speed=0.95, pitch=2, emotion="neutral",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="young_adult", energy="low", description="ethereal female",
+    ),
+    DramaGenre.COMEDY: VoiceProfile(
+        voice_id="Lively_Girl", speed=1.1, pitch=1, emotion="happy",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="young_adult", energy="high", description="energetic",
+    ),
+    DramaGenre.FAMILY_DRAMA: VoiceProfile(
+        voice_id="Calm_Woman", speed=0.95, pitch=0, emotion="neutral",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="middle_aged", energy="medium", description="warm mature",
+    ),
+    DramaGenre.OTHER: VoiceProfile(
+        voice_id="Friendly_Person", speed=1.0, pitch=0, emotion="neutral",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="young_adult", energy="medium", description="default",
+    ),
+}
+
+
+def assign_voice_profile(character: Character) -> Character:
+    """Auto-assign a VoiceProfile based on character.voice_style.
+
+    Skips characters that already have a voice_profile set.
+    Falls back to 'warm' profile if voice_style is unknown.
+    """
+    if character.voice_profile is not None:
+        return character
+    template = VOICE_PROFILES.get(character.voice_style, VOICE_PROFILES["warm"])
+    character.voice_profile = VoiceProfile(
+        voice_id=template.voice_id,
+        speed=template.speed,
+        pitch=template.pitch,
+        emotion=template.emotion,
+        volume=template.volume,
+    )
+    return character
+
+
+@dataclass
+class Episode:
+    """A single episode in a drama series."""
+
+    episode_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    number: int = 1
     title: str = ""
+    synopsis: str = ""
+    opening_hook: str = ""
+    status: EpisodeStatus = EpisodeStatus.PENDING
+    project_id: str | None = None
+    duration_seconds: float = 60.0
+    script: str | None = None
     scenes: list[DramaScene] = field(default_factory=list)
+    cost: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        d = asdict(self)
+        d["status"] = self.status.value
+        d["scenes"] = [s.to_dict() for s in self.scenes]
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Episode:
+        data = dict(data)
+        data["status"] = EpisodeStatus(data.get("status", "pending"))
+        data["scenes"] = [DramaScene.from_dict(s) for s in data.get("scenes", [])]
+        return cls(**data)
 
 
 @dataclass
 class DramaSeries:
-    """A drama series with characters and episodes."""
+    """A complete short drama series with episodes and characters."""
 
-    series_id: str = ""
+    series_id: str = field(default_factory=lambda: uuid.uuid4().hex[:16])
     title: str = ""
-    aspect_ratio: str = "16:9"
+    genre: str = ""
+    synopsis: str = ""
+    style: str = "cinematic"
+    language: str = "zh"
+    aspect_ratio: str = "9:16"
+    target_episode_duration: float = 60.0
+    total_episodes: int = 5
+    status: DramaStatus = DramaStatus.DRAFT
     characters: list[Character] = field(default_factory=list)
-    episodes: list[DramaEpisode] = field(default_factory=list)
+    episodes: list[Episode] = field(default_factory=list)
+    created_at: str = field(default_factory=_now_iso)
+    updated_at: str = field(default_factory=_now_iso)
+    model_id: str = "mock"
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def touch(self) -> None:
+        self.updated_at = _now_iso()
+
+    @property
+    def cost_total(self) -> float:
+        return sum(ep.cost for ep in self.episodes)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "series_id": self.series_id,
+            "title": self.title,
+            "genre": self.genre,
+            "synopsis": self.synopsis,
+            "style": self.style,
+            "language": self.language,
+            "aspect_ratio": self.aspect_ratio,
+            "target_episode_duration": self.target_episode_duration,
+            "total_episodes": self.total_episodes,
+            "status": self.status.value,
+            "characters": [c.to_dict() for c in self.characters],
+            "episodes": [e.to_dict() for e in self.episodes],
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "model_id": self.model_id,
+            "metadata": self.metadata,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> DramaSeries:
+        data = dict(data)
+        data["status"] = DramaStatus(data.get("status", "draft"))
+        data["characters"] = [Character.from_dict(c) for c in data.get("characters", [])]
+        data["episodes"] = [Episode.from_dict(e) for e in data.get("episodes", [])]
+        return cls(**data)
+
+
+# ---------------------------------------------------------------------------
+# Drama state manager
+# ---------------------------------------------------------------------------
+
+class DramaManager:
+    """Persists DramaSeries as JSON files on disk.
+
+    Layout::
+
+        {projects_dir}/dramas/{series_id}/series.json
+        {projects_dir}/dramas/{series_id}/episodes/{episode_id}/
+    """
+
+    def __init__(self, base_dir: Path | None = None) -> None:
+        self.base_dir = (base_dir or get_config().projects_dir) / "dramas"
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+
+    def _series_path(self, series_id: str) -> Path:
+        return self.base_dir / series_id / "series.json"
+
+    def create(self, **kwargs: Any) -> DramaSeries:
+        series = DramaSeries(**kwargs)
+        self.save(series)
+        return series
+
+    def save(self, series: DramaSeries) -> Path:
+        series.touch()
+        path = self._series_path(series.series_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(series.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
+        return path
+
+    def load(self, series_id: str) -> DramaSeries:
+        path = self._series_path(series_id)
+        if not path.exists():
+            raise FileNotFoundError(f"Drama series {series_id!r} not found")
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return DramaSeries.from_dict(data)
+
+    def list_series(self) -> list[str]:
+        if not self.base_dir.exists():
+            return []
+        return [
+            p.name
+            for p in self.base_dir.iterdir()
+            if p.is_dir() and (p / "series.json").exists()
+        ]
+
+    def delete(self, series_id: str) -> None:
+        import shutil
+
+        series_dir = self.base_dir / series_id
+        if series_dir.exists():
+            shutil.rmtree(series_dir)

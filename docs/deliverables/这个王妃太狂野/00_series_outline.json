@@ -1,0 +1,141 @@
+{
+  "series_id": "ba88265e06de4e7d",
+  "title": "这个王妃太狂野",
+  "genre": "穿越/古装/爽剧",
+  "synopsis": "现代女特工林薇穿越成被休弃的废物王妃，众人等着看笑话，殊不知她前世是顶级杀手。这一世，她要让所有欺辱她的人跪着叫姐姐。",
+  "style": "cinematic",
+  "language": "zh",
+  "aspect_ratio": "9:16",
+  "target_episode_duration": 60.0,
+  "total_episodes": 5,
+  "status": "draft",
+  "characters": [
+    {
+      "name": "林薇",
+      "description": "表面身份：被休弃的废物王妃；隐藏身份：穿越而来的现代女特工。性格反差：外表柔弱 vs 内心冷酷。记忆点：每次反杀前微微一笑说'你确定？'",
+      "visual_prompt": "Young Chinese woman, early 20s, delicate oval face, phoenix eyes with sharp gaze, long black hair with jade hairpin, wearing tattered but elegant white hanfu with red inner lining, slender build, subtle scar on left wrist",
+      "voice_style": "calm",
+      "reference_image": null,
+      "voice_profile": {
+        "voice_id": "Calm_Woman",
+        "speed": 0.9,
+        "pitch": 0,
+        "emotion": "neutral",
+        "volume": 1.0
+      }
+    },
+    {
+      "name": "萧衍",
+      "description": "表面身份：冷面靖王；隐藏身份：暗中调查皇室血脉秘密。性格反差：对外冷酷 vs 对林薇逐渐温柔。记忆点：永远黑衣，腰间佩一把从不出鞘的剑。",
+      "visual_prompt": "Tall Chinese man, late 20s, sharp angular jawline, intense dark eyes, long black hair in high ponytail with silver crown, wearing black brocade robe with dragon embroidery, broad shoulders, never-drawn sword at waist",
+      "voice_style": "authoritative",
+      "reference_image": null,
+      "voice_profile": {
+        "voice_id": "Imposing_Manner",
+        "speed": 0.9,
+        "pitch": -2,
+        "emotion": "neutral",
+        "volume": 1.0
+      }
+    },
+    {
+      "name": "慕容雪",
+      "description": "表面身份：温婉贤淑的侧妃；隐藏身份：幕后势力的棋子。性格反差：人前温婉 vs 人后阴毒。记忆点：手持折扇，扇面画曼陀罗。",
+      "visual_prompt": "Beautiful Chinese woman, mid 20s, round face with dimples, gentle almond eyes hiding cunning, elaborate updo with golden phoenix hairpins, wearing pink silk hanfu with floral patterns, holding folding fan with mandala flower painting",
+      "voice_style": "playful",
+      "reference_image": null,
+      "voice_profile": {
+        "voice_id": "Lively_Girl",
+        "speed": 1.1,
+        "pitch": 2,
+        "emotion": "happy",
+        "volume": 1.0
+      }
+    },
+    {
+      "name": "老太君",
+      "description": "表面身份：德高望重的萧家老太君；隐藏身份：早年江湖女侠。记忆点：龙头拐杖，发怒时拐杖敲地三声。",
+      "visual_prompt": "Elderly Chinese woman, 70s, silver hair in neat bun, wise piercing eyes, dignified posture, wearing deep purple silk robe, leaning on dragon-headed walking cane, jade bracelet",
+      "voice_style": "dramatic",
+      "reference_image": null,
+      "voice_profile": {
+        "voice_id": "Determined_Man",
+        "speed": 0.9,
+        "pitch": -1,
+        "emotion": "neutral",
+        "volume": 1.0
+      }
+    }
+  ],
+  "episodes": [
+    {
+      "episode_id": "12b44bb22a62",
+      "number": 1,
+      "title": "废妃重生",
+      "synopsis": "林薇穿越醒来被丢在柴房，丫鬟踩着她的手。林薇一招反擒拿制服丫鬟，走出柴房微笑'你们确定？'慕容雪派人送毒汤被林薇识破。",
+      "opening_hook": "一双精致却沾满泥土的手被粗暴踩住",
+      "status": "pending",
+      "project_id": null,
+      "duration_seconds": 60.0,
+      "script": null,
+      "scenes": [],
+      "cost": 0.0
+    },
+    {
+      "episode_id": "c0166a2727bc",
+      "number": 2,
+      "title": "当众打脸",
+      "synopsis": "老太君寿宴，慕容雪设计让林薇当众出丑作诗。林薇用现代诗震惊全场，老太君欣赏，萧衍第一次正眼看她。",
+      "opening_hook": "满堂华服贵妇中，一身素衣的林薇被推到正中央",
+      "status": "pending",
+      "project_id": null,
+      "duration_seconds": 60.0,
+      "script": null,
+      "scenes": [],
+      "cost": 0.0
+    },
+    {
+      "episode_id": "7751a5ab9aa2",
+      "number": 3,
+      "title": "深夜试探",
+      "synopsis": "萧衍深夜来柴房试探林薇，林薇识破暗器并反手接住。两人月下交锋。慕容雪决定提前动手。密信：'你的前世，我都知道'。",
+      "opening_hook": "月光下一把匕首划破夜空",
+      "status": "pending",
+      "project_id": null,
+      "duration_seconds": 60.0,
+      "script": null,
+      "scenes": [],
+      "cost": 0.0
+    },
+    {
+      "episode_id": "469818a9c328",
+      "number": 4,
+      "title": "至暗时刻",
+      "synopsis": "慕容雪联合朝中势力诬陷林薇通敌，林薇被打入天牢。萧衍暗中调查，老太君'谁动我萧家的人试试'。林薇在牢中找到刻着现代二维码的古玉。",
+      "opening_hook": "大殿之上，一道通敌叛国的圣旨砸在林薇面前",
+      "status": "pending",
+      "project_id": null,
+      "duration_seconds": 60.0,
+      "script": null,
+      "scenes": [],
+      "cost": 0.0
+    },
+    {
+      "episode_id": "72ee20a2f30d",
+      "number": 5,
+      "title": "王妃驾到",
+      "synopsis": "林薇利用现代知识公堂翻案，揭露慕容雪与外敌勾结。慕容雪崩溃。萧衍当众拉住林薇的手'本王的王妃，谁敢动？'",
+      "opening_hook": "公堂之上，所有人都以为林薇必死",
+      "status": "pending",
+      "project_id": null,
+      "duration_seconds": 60.0,
+      "script": null,
+      "scenes": [],
+      "cost": 0.0
+    }
+  ],
+  "created_at": "2026-03-12T09:23:38.908681+00:00",
+  "updated_at": "2026-03-12T09:23:38.908691+00:00",
+  "model_id": "mock",
+  "metadata": {}
+}

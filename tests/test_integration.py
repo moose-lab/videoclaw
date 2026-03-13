@@ -13,15 +13,25 @@ from videoclaw.models.protocol import GenerationRequest
 
 @pytest.mark.asyncio
 async def test_full_pipeline_with_mock(tmp_path):
-    """Run the standard pipeline DAG with placeholder handlers.
+    """Run the standard pipeline DAG with real handlers + mock video adapter.
 
     Verifies that script → storyboard → [parallel shots + tts + music] →
     compose → render executes without error and produces a completed state.
+
+    Pre-populates script and storyboard so script_gen/storyboard handlers
+    skip LLM calls.  TTS and compose are mocked at the module level.
     """
+    from unittest.mock import AsyncMock, patch
+    from videoclaw.config import VideoClawConfig
+
+    # Use tmp_path as projects dir so all handler file I/O goes there
+    test_config = VideoClawConfig(projects_dir=tmp_path)
+
     sm = StateManager(projects_dir=tmp_path)
     ps = sm.create_project(prompt="Integration test video")
 
-    # Add a couple of shots so the DAG builds video_gen nodes.
+    # Pre-populate script and storyboard so handlers skip LLM calls.
+    ps.script = "Integration test script narration text."
     ps.storyboard = [
         Shot(shot_id="s1", prompt="Opening shot", duration_seconds=3.0, model_id="mock"),
         Shot(shot_id="s2", prompt="Closing shot", duration_seconds=3.0, model_id="mock"),
@@ -40,7 +50,32 @@ async def test_full_pipeline_with_mock(tmp_path):
     bus.subscribe("project.completed", _listener)
 
     executor = DAGExecutor(dag=dag, state=ps, state_manager=sm, bus=bus, max_concurrency=4)
-    result = await executor.run()
+
+    # Mock TTS, VideoComposer, and config so all I/O goes to tmp_path
+    with patch("videoclaw.generation.audio.tts.TTSManager") as MockTTS, \
+         patch("videoclaw.generation.compose.VideoComposer") as MockComposer, \
+         patch("videoclaw.config.get_config", return_value=test_config):
+        # TTS mock
+        tts_instance = MockTTS.return_value
+        tts_instance.generate_voiceover = AsyncMock(side_effect=lambda text, path, **kw: path)
+
+        # Composer mock — compose and render_final create their output files
+        composer_instance = MockComposer.return_value
+
+        async def _mock_compose(video_paths, output_path, **kw):
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"mock_composed")
+            return output_path
+
+        async def _mock_render_final(video_path, audio_tracks, subtitle_path, output_path):
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"mock_rendered")
+            return output_path
+
+        composer_instance.compose = AsyncMock(side_effect=_mock_compose)
+        composer_instance.render_final = AsyncMock(side_effect=_mock_render_final)
+
+        result = await executor.run()
 
     # Pipeline should complete successfully.
     assert result.status.value == "completed"

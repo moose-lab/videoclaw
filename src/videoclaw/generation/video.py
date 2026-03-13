@@ -19,6 +19,16 @@ from videoclaw.models.router import ModelRouter, RoutingStrategy
 
 logger = logging.getLogger(__name__)
 
+# Aspect-ratio to pixel-resolution mapping (shared with storyboard.py).
+_ASPECT_TO_RESOLUTION: dict[str, tuple[int, int]] = {
+    "16:9": (1280, 720),
+    "9:16": (720, 1280),
+    "1:1": (1024, 1024),
+    "4:3": (1024, 768),
+    "3:4": (768, 1024),
+    "21:9": (1280, 549),
+}
+
 
 class VideoGenerator:
     """Dispatches shots to video-model adapters via the routing layer.
@@ -55,7 +65,8 @@ class VideoGenerator:
         strategy:
             The routing strategy used to select a model adapter.
         aspect_ratio:
-            Optional aspect ratio override (e.g. "16:9").
+            Target aspect ratio (e.g. ``"9:16"``).  When provided, the
+            generation request width/height are computed from it.
         reference_image:
             Primary character reference image bytes for IMAGE_TO_VIDEO.
         extra_references:
@@ -69,10 +80,16 @@ class VideoGenerator:
         router = self._ensure_router()
 
         logger.info(
-            "Generating shot %s (%.1fs) with strategy=%s",
+            "Generating shot %s (%.1fs) with strategy=%s aspect_ratio=%s",
             shot.shot_id,
             shot.duration_seconds,
             strategy.value if hasattr(strategy, "value") else strategy,
+            aspect_ratio or "default",
+        )
+
+        # Resolve resolution from aspect ratio
+        width, height = _ASPECT_TO_RESOLUTION.get(
+            aspect_ratio or "16:9", (1280, 720),
         )
 
         # Build generation request from shot data
@@ -83,6 +100,8 @@ class VideoGenerator:
         request = GenerationRequest(
             prompt=shot.prompt,
             duration_seconds=shot.duration_seconds,
+            width=width,
+            height=height,
             reference_image=reference_image,
             extra=extra,
         )

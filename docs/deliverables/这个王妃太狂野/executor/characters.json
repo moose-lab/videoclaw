@@ -1,0 +1,62 @@
+[
+  {
+    "name": "林薇",
+    "description": "表面身份：被休弃的废物王妃；隐藏身份：穿越而来的现代女特工。性格反差：外表柔弱 vs 内心冷酷。记忆点：每次反杀前微微一笑说'你确定？'",
+    "visual_prompt": "Young Chinese woman, early 20s, delicate oval face, phoenix eyes with sharp gaze, long black hair with jade hairpin, wearing tattered but elegant white hanfu with red inner lining, slender build, subtle scar on left wrist",
+    "voice_style": "calm",
+    "voice_profile": {
+      "voice_id": "Calm_Woman",
+      "speed": 0.9,
+      "pitch": 0,
+      "emotion": "neutral",
+      "volume": 1.0
+    },
+    "reference_image": "images/characters/林薇.png",
+    "voice_sample": "audio/voice_samples/林薇_voice_sample.mp3"
+  },
+  {
+    "name": "萧衍",
+    "description": "表面身份：冷面靖王；隐藏身份：暗中调查皇室血脉秘密。性格反差：对外冷酷 vs 对林薇逐渐温柔。记忆点：永远黑衣，腰间佩一把从不出鞘的剑。",
+    "visual_prompt": "Tall Chinese man, late 20s, sharp angular jawline, intense dark eyes, long black hair in high ponytail with silver crown, wearing black brocade robe with dragon embroidery, broad shoulders, never-drawn sword at waist",
+    "voice_style": "authoritative",
+    "voice_profile": {
+      "voice_id": "Imposing_Manner",
+      "speed": 0.9,
+      "pitch": -2,
+      "emotion": "neutral",
+      "volume": 1.0
+    },
+    "reference_image": "images/characters/萧衍.png",
+    "voice_sample": "audio/voice_samples/萧衍_voice_sample.mp3"
+  },
+  {
+    "name": "慕容雪",
+    "description": "表面身份：温婉贤淑的侧妃；隐藏身份：幕后势力的棋子。性格反差：人前温婉 vs 人后阴毒。记忆点：手持折扇，扇面画曼陀罗。",
+    "visual_prompt": "Beautiful Chinese woman, mid 20s, round face with dimples, gentle almond eyes hiding cunning, elaborate updo with golden phoenix hairpins, wearing pink silk hanfu with floral patterns, holding folding fan with mandala flower painting",
+    "voice_style": "playful",
+    "voice_profile": {
+      "voice_id": "Lively_Girl",
+      "speed": 1.1,
+      "pitch": 2,
+      "emotion": "happy",
+      "volume": 1.0
+    },
+    "reference_image": "images/characters/慕容雪.png",
+    "voice_sample": "audio/voice_samples/慕容雪_voice_sample.mp3"
+  },
+  {
+    "name": "老太君",
+    "description": "表面身份：德高望重的萧家老太君；隐藏身份：早年江湖女侠。记忆点：龙头拐杖，发怒时拐杖敲地三声。",
+    "visual_prompt": "Elderly Chinese woman, 70s, silver hair in neat bun, wise piercing eyes, dignified posture, wearing deep purple silk robe, leaning on dragon-headed walking cane, jade bracelet",
+    "voice_style": "dramatic",
+    "voice_profile": {
+      "voice_id": "Determined_Man",
+      "speed": 0.9,
+      "pitch": -1,
+      "emotion": "neutral",
+      "volume": 1.0
+    },
+    "reference_image": "images/characters/老太君.png",
+    "voice_sample": "audio/voice_samples/老太君_voice_sample.mp3"
+  }
+]

@@ -1,0 +1,332 @@
+{
+  "episode_number": 5,
+  "episode_title": "王妃驾到",
+  "duration_seconds": 60.0,
+  "scenes": [
+    {
+      "scene_id": "ep05_s01",
+      "description": "天牢内，林薇震惊地看着古玉弹出的'小心萧衍'消息，牢门开启，萧衍逆光而立，眼神审视",
+      "visual_prompt": "Dark medieval Chinese prison cell, flickering torchlight, close_up of Lin Wei, a young Chinese woman with delicate oval face, sharp phoenix eyes, long black hair secured with jade hairpin, wearing tattered white hanfu with red inner lining, slender build, subtle scar on left wrist, holding ancient jade with glowing QR code, expression of shock and suspicion, dramatic side lighting creating strong shadows, atmospheric and tense mood, Biao Yan stands silhouetted in the opened cell door, tall Chinese man with sharp angular jawline, intense dark eyes, long black hair in high ponytail with silver crown, wearing black brocade robe with dragon embroidery, broad shoulders, sword at waist, backlit figure with mysterious aura",
+      "camera_movement": "static",
+      "duration_seconds": 4.0,
+      "dialogue": "",
+      "narration": "任务继续，小心...萧衍？",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "speaking_character": "",
+      "emotion": "shock",
+      "characters_present": [
+        "林薇",
+        "萧衍"
+      ],
+      "transition": "cut",
+      "sfx": "牢门铁链声",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep05_s02",
+      "description": "公堂之上，慕容雪手持折扇，得意指证林薇通敌，官员们附和，林薇被押跪堂中却背脊挺直",
+      "visual_prompt": "Wide shot of Chinese imperial court hall, red pillars and wooden architecture, morning light through windows, officials in rows, center frame: Murong Xue, beautiful Chinese woman with round face and dimples, gentle almond eyes hiding cunning, elaborate updo with golden phoenix hairpins, wearing pink silk hanfu with floral patterns, holding folding fan with mandala flower painting, standing confidently with smug smile, pointing at Lin Wei who kneels but keeps straight posture, dramatic overhead lighting, tense courtroom atmosphere",
+      "camera_movement": "dolly_in",
+      "duration_seconds": 6.0,
+      "dialogue": "人证物证俱在！林薇通敌叛国！",
+      "narration": "",
+      "shot_scale": "wide",
+      "shot_type": "establishing",
+      "speaking_character": "慕容雪",
+      "emotion": "tense",
+      "characters_present": [
+        "林薇",
+        "慕容雪"
+      ],
+      "transition": "cut",
+      "sfx": "惊堂木声",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep05_s03",
+      "description": "林薇特写，嘴角勾起冷笑，凤眼微眯，经典'你确定？'表情浮现，左手腕疤痕若隐若现",
+      "visual_prompt": "Close_up of Lin Wei, young Chinese woman with delicate oval face, sharp phoenix eyes glinting with cold intelligence, long black hair with jade hairpin slightly disheveled, wearing tattered white hanfu with red inner lining, slender build, subtle scar on left wrist visible, slight smirk playing on lips, head tilted challengingly, dramatic side lighting from courtroom windows, cinematic shallow depth of field, moody and defiant atmosphere, confident micro-expression",
+      "camera_movement": "static",
+      "duration_seconds": 5.0,
+      "dialogue": "你确定？",
+      "narration": "",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "speaking_character": "林薇",
+      "emotion": "triumphant",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "低沉的鼓点声",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep05_s04",
+      "description": "林薇从怀中取出密信，展开在掌心，手指轻点信纸上的特殊标记，现代摩斯密码知识即将揭晓",
+      "visual_prompt": "Medium_close shot, Lin Wei's hands holding aged paper letter, close_up of her finger pointing at dot-dash patterns on paper margin, her hands slender with the scarred left wrist, tattered white hanfu sleeve visible, candlelight illuminating the paper texture, shallow depth of field focusing on the mysterious markings, atmospheric lighting, detail shot of the evidence, mysterious and revelatory mood",
+      "camera_movement": "static",
+      "duration_seconds": 4.0,
+      "dialogue": "",
+      "narration": "这些标记，是摩斯密码。",
+      "shot_scale": null,
+      "shot_type": "detail",
+      "speaking_character": "",
+      "emotion": "revelation",
+      "characters_present": [
+        "林薇"
+      ],
+      "transition": "cut",
+      "sfx": "纸张摩擦声",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep05_s05",
+      "description": "POV镜头，林薇抬头环视公堂众人，目光如炬，最后定格在脸色渐变的慕容雪脸上",
+      "visual_prompt": "POV shot from Lin Wei's perspective, camera pans across shocked faces of court officials, ending on Murong Xue, beautiful Chinese woman with round face, golden phoenix hairpins, pink silk hanfu, holding mandala fan, her expression shifting from smug to panic, almond eyes widening in disbelief, dramatic courtroom lighting, handheld camera movement for urgency, tense atmospheric mood",
+      "camera_movement": "handheld",
+      "duration_seconds": 5.0,
+      "dialogue": "这密信，出自谁手？",
+      "narration": "",
+      "shot_scale": "medium_close",
+      "shot_type": "pov",
+      "speaking_character": "林薇",
+      "emotion": "suspense",
+      "characters_present": [
+        "林薇",
+        "慕容雪"
+      ],
+      "transition": "jump_cut",
+      "sfx": "心跳声加速",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep05_s06",
+      "description": "慕容雪崩溃特写，折扇从颤抖的手中滑落，扇面曼陀罗花朝上，脸色惨白如纸",
+      "visual_prompt": "Close_up of Murong Xue, beautiful Chinese woman with round face and dimples now pale with fear, elaborate golden phoenix hairpins catching light, pink silk hanfu, gentle almond eyes now wide with panic and disbelief, her hand trembling as folding fan with mandala flower painting slips from grasp, fan falling in slow motion, dramatic top lighting creating stark shadows on her face, cinematic fall of the incriminating object, atmospheric and panic-filled mood",
+      "camera_movement": "crane_up",
+      "duration_seconds": 5.0,
+      "dialogue": "不可能...你怎么会懂...",
+      "narration": "",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "speaking_character": "慕容雪",
+      "emotion": "panic",
+      "characters_present": [
+        "慕容雪"
+      ],
+      "transition": "cut",
+      "sfx": "折扇落地声",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep05_s07",
+      "description": "萧衍突然闯入公堂，黑色锦袍翻飞，一把拉起跪地的林薇，银冠高马尾，眼神凌厉扫视全场",
+      "visual_prompt": "Dynamic action shot, Biao Yan, tall Chinese man with sharp angular jawline, intense dark eyes, long black hair in high ponytail with silver crown, black brocade robe with dragon embroidery flowing dramatically, broad shoulders, sword at waist, entering courtroom with powerful stride, reaching down to grasp Lin Wei's hand, pulling her up, protective stance, dramatic motion blur on robe, strong side lighting creating heroic silhouette, atmospheric and defiant mood",
+      "camera_movement": "tracking",
+      "duration_seconds": 6.0,
+      "dialogue": "本王的王妃，谁敢动？",
+      "narration": "",
+      "shot_scale": "medium",
+      "shot_type": "action",
+      "speaking_character": "萧衍",
+      "emotion": "defiant",
+      "characters_present": [
+        "林薇",
+        "萧衍"
+      ],
+      "transition": "cut",
+      "sfx": "衣袍猎猎声",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep05_s08",
+      "description": "手部特写，萧衍有力的大手紧握住林薇的手腕，恰好覆盖住她左手腕的疤痕，两人肌肤接触",
+      "visual_prompt": "Extreme close_up of hands, Biao Yan's strong masculine hand gripping Lin Wei's slender wrist, his fingers covering the subtle scar on her left wrist, contrast of their skin tones, tattered white hanfu sleeve against black brocade robe, intimate and tense moment, shallow depth of field, soft focus on background, dramatic lighting highlighting the physical connection, moody and intimate atmosphere",
+      "camera_movement": "static",
+      "duration_seconds": 4.0,
+      "dialogue": "",
+      "narration": "他的手，恰好盖住我的疤痕。",
+      "shot_scale": null,
+      "shot_type": "detail",
+      "speaking_character": "",
+      "emotion": "tense",
+      "characters_present": [
+        "林薇",
+        "萧衍"
+      ],
+      "transition": "dissolve",
+      "sfx": "心跳声",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep05_s09",
+      "description": "林薇抬头看向萧衍，凤眼中闪过警惕与疑惑，与萧衍深邃的黑眸对视，两人距离极近",
+      "visual_prompt": "Close_up two-shot, Lin Wei, young Chinese woman with delicate oval face, sharp phoenix eyes showing suspicion and confusion, long black hair with jade hairpin, tattered white hanfu, looking up at Biao Yan, tall Chinese man with sharp angular jawline, intense dark eyes, high ponytail with silver crown, black brocade robe, their faces close together, dramatic eye contact, candlelight flickering between them, cinematic shallow depth of field, atmospheric and mysterious mood",
+      "camera_movement": "dolly_in",
+      "duration_seconds": 7.0,
+      "dialogue": "",
+      "narration": "他到底，是敌是友？",
+      "shot_scale": "close_up",
+      "shot_type": "reaction",
+      "speaking_character": "",
+      "emotion": "suspense",
+      "characters_present": [
+        "林薇",
+        "萧衍"
+      ],
+      "transition": "cut",
+      "sfx": "呼吸声",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep05_s10",
+      "description": "慕容雪瘫软在地，粉色汉服散开如凋零的花，金簪歪斜，眼神空洞绝望",
+      "visual_prompt": "Wide shot from above, Murong Xue collapsed on courtroom floor, beautiful Chinese woman with round face now expressionless, golden phoenix hairpins askew, pink silk hanfu with floral patterns spread around her like fallen petals, folding fan with mandala painting lying beside her, officials in background looking shocked, dramatic top-down perspective, soft lighting from windows, melancholic and defeated atmosphere",
+      "camera_movement": "crane_up",
+      "duration_seconds": 5.0,
+      "dialogue": "",
+      "narration": "",
+      "shot_scale": "wide",
+      "shot_type": "reaction",
+      "speaking_character": "",
+      "emotion": "defeated",
+      "characters_present": [
+        "慕容雪"
+      ],
+      "transition": "cut",
+      "sfx": "远处议论声",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    },
+    {
+      "scene_id": "ep05_s11",
+      "description": "萧衍与林薇并肩而立，黑衣白裳形成强烈对比，萧衍侧脸看向林薇，眼神复杂难测",
+      "visual_prompt": "Medium_close shot, Biao Yan and Lin Wei standing side by side in courtroom, contrast of his black brocade robe with dragon embroidery and her tattered white hanfu with red lining, Biao Yan's sharp angular profile with intense dark eyes looking sideways at Lin Wei, her phoenix eyes still wary, silver crown and jade hairpin glinting, dramatic side lighting creating strong visual contrast, cinematic composition, mysterious and tense mood",
+      "camera_movement": "static",
+      "duration_seconds": 6.0,
+      "dialogue": "",
+      "narration": "古玉的警告，还在我脑中回响。",
+      "shot_scale": "medium_close",
+      "shot_type": "reaction",
+      "speaking_character": "",
+      "emotion": "mysterious",
+      "characters_present": [
+        "林薇",
+        "萧衍"
+      ],
+      "transition": "fade_out",
+      "sfx": "风声",
+      "video_asset_path": null,
+      "dialogue_audio_path": null,
+      "narration_audio_path": null,
+      "scene_status": "pending"
+    }
+  ],
+  "characters": [
+    {
+      "name": "林薇",
+      "description": "表面身份：被休弃的废物王妃；隐藏身份：穿越而来的现代女特工。性格反差：外表柔弱 vs 内心冷酷。记忆点：每次反杀前微微一笑说'你确定？'",
+      "visual_prompt": "Young Chinese woman, early 20s, delicate oval face, phoenix eyes with sharp gaze, long black hair with jade hairpin, wearing tattered but elegant white hanfu with red inner lining, slender build, subtle scar on left wrist",
+      "voice_style": "calm",
+      "reference_image": null,
+      "voice_profile": {
+        "voice_id": "Calm_Woman",
+        "speed": 0.9,
+        "pitch": 0,
+        "emotion": "neutral",
+        "volume": 1.0
+      }
+    },
+    {
+      "name": "萧衍",
+      "description": "表面身份：冷面靖王；隐藏身份：暗中调查皇室血脉秘密。性格反差：对外冷酷 vs 对林薇逐渐温柔。记忆点：永远黑衣，腰间佩一把从不出鞘的剑。",
+      "visual_prompt": "Tall Chinese man, late 20s, sharp angular jawline, intense dark eyes, long black hair in high ponytail with silver crown, wearing black brocade robe with dragon embroidery, broad shoulders, never-drawn sword at waist",
+      "voice_style": "authoritative",
+      "reference_image": null,
+      "voice_profile": {
+        "voice_id": "Imposing_Manner",
+        "speed": 0.9,
+        "pitch": -2,
+        "emotion": "neutral",
+        "volume": 1.0
+      }
+    },
+    {
+      "name": "慕容雪",
+      "description": "表面身份：温婉贤淑的侧妃；隐藏身份：幕后势力的棋子。性格反差：人前温婉 vs 人后阴毒。记忆点：手持折扇，扇面画曼陀罗。",
+      "visual_prompt": "Beautiful Chinese woman, mid 20s, round face with dimples, gentle almond eyes hiding cunning, elaborate updo with golden phoenix hairpins, wearing pink silk hanfu with floral patterns, holding folding fan with mandala flower painting",
+      "voice_style": "playful",
+      "reference_image": null,
+      "voice_profile": {
+        "voice_id": "Lively_Girl",
+        "speed": 1.1,
+        "pitch": 2,
+        "emotion": "happy",
+        "volume": 1.0
+      }
+    },
+    {
+      "name": "老太君",
+      "description": "表面身份：德高望重的萧家老太君；隐藏身份：早年江湖女侠。记忆点：龙头拐杖，发怒时拐杖敲地三声。",
+      "visual_prompt": "Elderly Chinese woman, 70s, silver hair in neat bun, wise piercing eyes, dignified posture, wearing deep purple silk robe, leaning on dragon-headed walking cane, jade bracelet",
+      "voice_style": "dramatic",
+      "reference_image": null,
+      "voice_profile": {
+        "voice_id": "Determined_Man",
+        "speed": 0.9,
+        "pitch": -1,
+        "emotion": "neutral",
+        "volume": 1.0
+      }
+    }
+  ],
+  "series_metadata": {
+    "title": "这个王妃太狂野",
+    "genre": "穿越/古装/爽剧",
+    "style": "cinematic",
+    "language": "zh",
+    "aspect_ratio": "9:16"
+  },
+  "music": {
+    "style": "chinese_traditional",
+    "mood": "tense",
+    "tempo": 85
+  },
+  "voice_over": {
+    "text": "任务继续，小心萧衍。古玉的警告还在脑中回响，可他的手，为何恰好盖住我的疤痕？他到底，是敌是友？",
+    "tone": "tense",
+    "language": "zh"
+  },
+  "cliffhanger": "萧衍当众护妻，可林薇脑中却回响着'小心萧衍'的警告。他紧握她手腕的手，是保护，还是另一种控制？"
+}
