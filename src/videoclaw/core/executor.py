@@ -473,7 +473,7 @@ class DAGExecutor:
         from pathlib import Path
 
         from videoclaw.generation.compose import AudioTrack, AudioType, VideoComposer
-        from videoclaw.generation.subtitle import generate_srt
+        from videoclaw.generation.subtitle import SubtitleGenerator
 
         project_dir = Path(self._config.projects_dir) / state.project_id
         composer = VideoComposer()
@@ -511,8 +511,38 @@ class DAGExecutor:
         scenes = node.params.get("scenes", [])
         subtitle_path = None
         if scenes and any(s.get("dialogue") for s in scenes):
-            subtitle_path = project_dir / "subtitles.srt"
-            generate_srt(scenes, subtitle_path)
+            sub_gen = SubtitleGenerator()
+
+            # Resolve audio manifest for accurate timing
+            audio_manifest: dict[str, Any] | None = None
+            raw_manifest = state.assets.get("audio_manifest")
+            if raw_manifest:
+                try:
+                    audio_manifest = _json.loads(raw_manifest)
+                except (TypeError, _json.JSONDecodeError):
+                    audio_manifest = None
+
+            # Extract character colors from metadata
+            character_colors: dict[str, str] | None = state.metadata.get("character_colors")
+
+            # Try ASS first (better styling), fall back to SRT
+            try:
+                subtitle_path = project_dir / "subtitles.ass"
+                sub_gen.generate_ass(
+                    scenes,
+                    subtitle_path,
+                    audio_manifest=audio_manifest,
+                    character_colors=character_colors,
+                )
+            except Exception:
+                logger.warning("[compose] ASS generation failed, falling back to SRT")
+                subtitle_path = project_dir / "subtitles.srt"
+                sub_gen.generate_srt(
+                    scenes,
+                    subtitle_path,
+                    audio_manifest=audio_manifest,
+                )
+
             state.assets["subtitles"] = str(subtitle_path)
             logger.info("[compose] Generated subtitles -> %s", subtitle_path)
 
