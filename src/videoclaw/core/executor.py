@@ -54,6 +54,8 @@ class DAGExecutor:
             TaskType.STORYBOARD: self._handle_storyboard,
             TaskType.VIDEO_GEN: self._handle_video_gen,
             TaskType.TTS: self._handle_tts,
+            TaskType.PER_SCENE_TTS: self._handle_per_scene_tts,
+            TaskType.SUBTITLE_GEN: self._handle_subtitle_gen,
             TaskType.MUSIC: self._handle_music,
             TaskType.COMPOSE: self._handle_compose,
             TaskType.RENDER: self._handle_render,
@@ -461,6 +463,179 @@ class DAGExecutor:
         logger.info("[tts] No content to synthesize")
         return {"audio_paths": [], "count": 0}
 
+    async def _handle_per_scene_tts(self, node: TaskNode, state: ProjectState) -> Any:
+        """Synthesize TTS audio for a single scene's dialogue and narration.
+
+        Each per-scene TTS node runs independently, enabling parallel execution
+        and per-scene fault isolation / checkpoint.  Results are stored in
+        ``state.assets["tts_scene_{scene_id}"]`` as JSON-serialised AudioSegment
+        dicts so the downstream subtitle_gen node can aggregate them.
+        """
+        import json as _json
+        from pathlib import Path
+
+        from videoclaw.generation.audio.tts import TTSManager
+
+        tts = TTSManager()
+        language = node.params.get("language", state.metadata.get("language", "zh"))
+        project_dir = Path(self._config.projects_dir) / state.project_id
+        audio_dir = project_dir / "audio"
+        audio_dir.mkdir(parents=True, exist_ok=True)
+
+        scene_data: dict = node.params.get("scene", {})
+        scene_id = scene_data.get("scene_id", "unknown")
+
+        from videoclaw.drama.models import (
+            AudioSegment as DramaAudioSegment,
+            DialogueLine,
+            LineType,
+            VoiceProfile,
+        )
+
+        # Reconstruct voice_map
+        raw_voice_map: dict[str, dict] = (
+            node.params.get("voice_map")
+            or state.metadata.get("voice_map")
+            or {}
+        )
+        voice_map: dict[str, VoiceProfile] = {
+            name: VoiceProfile.from_dict(vp_data)
+            for name, vp_data in raw_voice_map.items()
+        }
+
+        # Build DialogueLine list for this scene
+        lines: list[DialogueLine] = []
+        dialogue = scene_data.get("dialogue", "").strip()
+        narration = scene_data.get("narration", "").strip()
+        speaking_character = scene_data.get("speaking_character", "")
+        emotion = scene_data.get("emotion", "")
+        dialogue_line_type_str = scene_data.get("dialogue_line_type", "dialogue")
+
+        try:
+            dialogue_line_type = LineType(dialogue_line_type_str)
+        except ValueError:
+            dialogue_line_type = LineType.DIALOGUE
+
+        if dialogue:
+            lines.append(DialogueLine(
+                text=dialogue,
+                speaker=speaking_character or "narrator",
+                line_type=dialogue_line_type,
+                scene_id=scene_id,
+                emotion_hint=emotion or None,
+            ))
+
+        if narration:
+            lines.append(DialogueLine(
+                text=narration,
+                speaker="narrator",
+                line_type=LineType.NARRATION,
+                scene_id=scene_id,
+                emotion_hint=None,
+            ))
+
+        # Synthesize
+        segments: list[DramaAudioSegment] = await tts.generate_multi_role(
+            lines, voice_map, audio_dir, language=language,
+        )
+
+        # Store per-scene result for downstream aggregation
+        seg_dicts = [s.to_dict() for s in segments]
+        state.assets[f"tts_scene_{scene_id}"] = _json.dumps(seg_dicts)
+
+        logger.info(
+            "[per_scene_tts] scene %s: synthesized %d segments",
+            scene_id,
+            len(segments),
+        )
+        return {
+            "scene_id": scene_id,
+            "segments": len(segments),
+            "audio_paths": [s.audio_path for s in segments],
+        }
+
+    async def _handle_subtitle_gen(self, node: TaskNode, state: ProjectState) -> Any:
+        """Generate subtitles as a standalone DAG node.
+
+        Collects per-scene AudioSegments from ``state.assets["tts_scene_*"]``
+        to build an :class:`EpisodeAudioManifest` for accurate timing, then
+        delegates to :class:`SubtitleGenerator`.
+        """
+        import json as _json
+        from pathlib import Path
+
+        from videoclaw.generation.subtitle import SubtitleGenerator
+
+        project_dir = Path(self._config.projects_dir) / state.project_id
+        scenes = node.params.get("scenes", [])
+
+        if not scenes:
+            logger.info("[subtitle_gen] No scenes data, skipping")
+            return {"status": "skipped"}
+
+        # Aggregate per-scene audio segments into a manifest dict
+        from videoclaw.drama.models import AudioSegment as DramaAudioSegment
+
+        all_segments: list[dict] = []
+        for scene_data in scenes:
+            scene_id = scene_data.get("scene_id", "")
+            raw = state.assets.get(f"tts_scene_{scene_id}")
+            if raw:
+                try:
+                    seg_dicts = _json.loads(raw)
+                    all_segments.extend(seg_dicts)
+                except (TypeError, _json.JSONDecodeError):
+                    pass
+
+        audio_manifest: dict | None = None
+        if all_segments:
+            total_duration = sum(s.get("duration_seconds", 0.0) for s in all_segments)
+            audio_manifest = {
+                "episode_id": state.metadata.get("episode_id", ""),
+                "segments": all_segments,
+                "total_duration": total_duration,
+            }
+            state.assets["audio_manifest"] = _json.dumps(audio_manifest)
+
+        # Also build backward-compat tts_audio list
+        audio_paths: list[dict[str, str]] = []
+        for seg in all_segments:
+            audio_paths.append({
+                "scene_id": seg.get("scene_id", ""),
+                "type": seg.get("audio_type", "dialogue"),
+                "path": seg.get("audio_path", ""),
+            })
+        state.assets["tts_audio"] = _json.dumps(audio_paths)
+
+        # Extract character colors from metadata
+        character_colors: dict[str, str] | None = state.metadata.get("character_colors")
+        title = state.metadata.get("series_id", "Untitled")
+
+        sub_gen = SubtitleGenerator()
+
+        # Generate ASS (primary) with SRT fallback
+        try:
+            subtitle_path = project_dir / "subtitles.ass"
+            sub_gen.generate_ass(
+                scenes,
+                subtitle_path,
+                audio_manifest=audio_manifest,
+                character_colors=character_colors,
+                title=title,
+            )
+        except Exception:
+            logger.warning("[subtitle_gen] ASS generation failed, falling back to SRT")
+            subtitle_path = project_dir / "subtitles.srt"
+            sub_gen.generate_srt(
+                scenes,
+                subtitle_path,
+                audio_manifest=audio_manifest,
+            )
+
+        state.assets["subtitles"] = str(subtitle_path)
+        logger.info("[subtitle_gen] Generated subtitles -> %s", subtitle_path)
+        return {"subtitle_path": str(subtitle_path), "segments_used": len(all_segments)}
+
     async def _handle_music(self, node: TaskNode, state: ProjectState) -> Any:
         """Background music generation (placeholder — no music API integrated yet)."""
         logger.info("[music] No music API configured, skipping BGM generation")
@@ -468,12 +643,16 @@ class DAGExecutor:
         return {"status": "skipped", "reason": "no_music_api"}
 
     async def _handle_compose(self, node: TaskNode, state: ProjectState) -> Any:
-        """Compose video clips + audio + subtitles into a single timeline."""
+        """Compose video clips + audio + subtitles into a single timeline.
+
+        Subtitles are now generated by the upstream ``subtitle_gen`` node and
+        read from ``state.assets["subtitles"]``.  Audio segments are aggregated
+        by ``subtitle_gen`` into ``state.assets["tts_audio"]``.
+        """
         import json as _json
         from pathlib import Path
 
         from videoclaw.generation.compose import AudioTrack, AudioType, VideoComposer
-        from videoclaw.generation.subtitle import SubtitleGenerator
 
         project_dir = Path(self._config.projects_dir) / state.project_id
         composer = VideoComposer()
@@ -507,44 +686,11 @@ class DAGExecutor:
         )
         logger.info("[compose] Composed %d clips -> %s", len(video_paths), composed_path)
 
-        # 3. Generate subtitles from scene dialogue
-        scenes = node.params.get("scenes", [])
-        subtitle_path = None
-        if scenes and any(s.get("dialogue") for s in scenes):
-            sub_gen = SubtitleGenerator()
-
-            # Resolve audio manifest for accurate timing
-            audio_manifest: dict[str, Any] | None = None
-            raw_manifest = state.assets.get("audio_manifest")
-            if raw_manifest:
-                try:
-                    audio_manifest = _json.loads(raw_manifest)
-                except (TypeError, _json.JSONDecodeError):
-                    audio_manifest = None
-
-            # Extract character colors from metadata
-            character_colors: dict[str, str] | None = state.metadata.get("character_colors")
-
-            # Try ASS first (better styling), fall back to SRT
-            try:
-                subtitle_path = project_dir / "subtitles.ass"
-                sub_gen.generate_ass(
-                    scenes,
-                    subtitle_path,
-                    audio_manifest=audio_manifest,
-                    character_colors=character_colors,
-                )
-            except Exception:
-                logger.warning("[compose] ASS generation failed, falling back to SRT")
-                subtitle_path = project_dir / "subtitles.srt"
-                sub_gen.generate_srt(
-                    scenes,
-                    subtitle_path,
-                    audio_manifest=audio_manifest,
-                )
-
-            state.assets["subtitles"] = str(subtitle_path)
-            logger.info("[compose] Generated subtitles -> %s", subtitle_path)
+        # 3. Read subtitles from upstream subtitle_gen node
+        subtitle_path: Path | None = None
+        raw_sub = state.assets.get("subtitles")
+        if raw_sub and Path(raw_sub).exists():
+            subtitle_path = Path(raw_sub)
 
         # 4. Collect audio tracks (TTS + music)
         audio_tracks: list[AudioTrack] = []

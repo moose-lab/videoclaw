@@ -290,6 +290,27 @@ VOICE_PROFILES: dict[str, VoiceProfile] = {
     "playful": VoiceProfile(voice_id="Lively_Girl", speed=1.10, pitch=2, emotion="happy"),
     "dramatic": VoiceProfile(voice_id="Determined_Man", speed=0.90, pitch=-1),
     "calm": VoiceProfile(voice_id="Calm_Woman", speed=0.90),
+    # Period / xianxia drama character voice styles
+    "ethereal": VoiceProfile(
+        voice_id="Calm_Woman", speed=0.90, pitch=3, emotion="neutral",
+        age_feel="young_adult", energy="low", description="飘逸仙气",
+    ),
+    "commanding": VoiceProfile(
+        voice_id="Imposing_Manner", speed=0.85, pitch=-3, emotion="neutral",
+        age_feel="middle_aged", energy="high", description="威严帝王",
+    ),
+    "scheming": VoiceProfile(
+        voice_id="Determined_Man", speed=0.95, pitch=-1, emotion="neutral",
+        age_feel="middle_aged", energy="medium", description="阴险谋士",
+    ),
+    "innocent": VoiceProfile(
+        voice_id="Lively_Girl", speed=1.05, pitch=3, emotion="happy",
+        age_feel="young_adult", energy="medium", description="天真少女",
+    ),
+    "weathered": VoiceProfile(
+        voice_id="Calm_Woman", speed=0.85, pitch=-2, emotion="sad",
+        age_feel="middle_aged", energy="low", description="沧桑老者",
+    ),
 }
 
 
@@ -331,6 +352,74 @@ NARRATOR_PRESETS: dict[DramaGenre, VoiceProfile] = {
         age_feel="young_adult", energy="medium", description="default",
     ),
 }
+
+
+# Genre-to-archetype voice style recommendations
+GENRE_VOICE_RECOMMENDATIONS: dict[DramaGenre, dict[str, str]] = {
+    DramaGenre.ANCIENT_XIANXIA: {
+        "hero": "ethereal",
+        "villain": "scheming",
+        "mentor": "weathered",
+        "love_interest": "innocent",
+        "ruler": "commanding",
+        "default": "dramatic",
+    },
+    DramaGenre.SWEET_ROMANCE: {
+        "hero": "warm",
+        "villain": "dramatic",
+        "love_interest": "playful",
+        "default": "warm",
+    },
+    DramaGenre.SUSPENSE_THRILLER: {
+        "hero": "calm",
+        "villain": "scheming",
+        "detective": "authoritative",
+        "default": "dramatic",
+    },
+    DramaGenre.MALE_POWER_FANTASY: {
+        "hero": "commanding",
+        "villain": "scheming",
+        "love_interest": "playful",
+        "default": "authoritative",
+    },
+    DramaGenre.COMEDY: {
+        "hero": "playful",
+        "villain": "dramatic",
+        "sidekick": "innocent",
+        "default": "playful",
+    },
+    DramaGenre.FAMILY_DRAMA: {
+        "hero": "warm",
+        "villain": "commanding",
+        "elder": "weathered",
+        "default": "calm",
+    },
+    DramaGenre.OTHER: {
+        "hero": "warm",
+        "villain": "dramatic",
+        "default": "warm",
+    },
+}
+
+
+def recommend_voice_style(genre: DramaGenre | str, archetype: str = "default") -> str:
+    """Recommend a voice style for a character archetype within a genre.
+
+    Returns a key from VOICE_PROFILES.
+    Falls back to genre default, then to "warm".
+    """
+    # Resolve string genre to DramaGenre enum
+    if isinstance(genre, str):
+        try:
+            genre = DramaGenre(genre)
+        except ValueError:
+            return "warm"
+
+    mapping = GENRE_VOICE_RECOMMENDATIONS.get(genre)
+    if mapping is None:
+        return "warm"
+
+    return mapping.get(archetype, mapping.get("default", "warm"))
 
 
 def assign_voice_profile(character: Character) -> Character:

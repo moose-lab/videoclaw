@@ -85,7 +85,7 @@ def _build_drama_dag(
     episode: Episode,
     series: DramaSeries,
 ) -> DAG:
-    """Build a drama-specific DAG with enriched handler params.
+    """Build a drama-specific DAG with per-scene TTS and subtitle nodes.
 
     Pipeline shape::
 
@@ -93,15 +93,16 @@ def _build_drama_dag(
             |
         storyboard
             |
-        +---+---+---+      tts      music
-        | video shots |      |        |
-        +---+---+---+      |        |
-            |               |        |
-            +-------+-------+--------+
-                    |
-                 compose
-                    |
-                  render
+        +---+---+---+   [per_scene_tts × N]   music
+        | video shots |          |                |
+        +---+---+---+          |                |
+            |              subtitle_gen           |
+            |                    |                |
+            +--------+-----------+----------------+
+                     |
+                  compose
+                     |
+                   render
     """
     dag = DAG()
 
@@ -142,19 +143,20 @@ def _build_drama_dag(
         ))
         video_node_ids.append(vid_id)
 
-    # -- 4. TTS with per-scene dialogue/narration data --
-    # Build voice lookup from series characters
+    # -- 4. Per-scene TTS nodes (parallel, one per scene) --
     character_voices: dict[str, dict] = {}
     for char in series.characters:
         if char.voice_profile:
             character_voices[char.name] = char.voice_profile.to_dict()
 
-    scenes_data = []
+    scenes_data: list[dict] = []
+    tts_node_ids: list[str] = []
     for scene in episode.scenes:
         voice = None
         if scene.speaking_character and scene.speaking_character in character_voices:
             voice = character_voices[scene.speaking_character].get("voice_id")
-        scenes_data.append({
+
+        scene_dict = {
             "scene_id": scene.scene_id,
             "dialogue": scene.dialogue,
             "dialogue_line_type": getattr(scene, "dialogue_line_type", "dialogue"),
@@ -164,21 +166,34 @@ def _build_drama_dag(
             "duration_seconds": scene.duration_seconds,
             "voice": voice,
             "transition": scene.transition,
-        })
+        }
+        scenes_data.append(scene_dict)
 
-    tts_node = TaskNode(
-        node_id="tts",
-        task_type=TaskType.TTS,
-        depends_on=["storyboard"],
+        tts_id = f"tts_{scene.scene_id}"
+        dag.add_node(TaskNode(
+            node_id=tts_id,
+            task_type=TaskType.PER_SCENE_TTS,
+            depends_on=["storyboard"],
+            params={
+                "scene": scene_dict,
+                "language": series.language,
+                "voice_map": character_voices,
+            },
+        ))
+        tts_node_ids.append(tts_id)
+
+    # -- 5. Subtitle generation (depends on all per-scene TTS for accurate timing) --
+    subtitle_node = TaskNode(
+        node_id="subtitle_gen",
+        task_type=TaskType.SUBTITLE_GEN,
+        depends_on=tts_node_ids,
         params={
             "scenes": scenes_data,
-            "language": series.language,
-            "voice_map": character_voices,
         },
     )
-    dag.add_node(tts_node)
+    dag.add_node(subtitle_node)
 
-    # -- 5. Music (placeholder -- no API yet) --
+    # -- 6. Music (placeholder -- no API yet) --
     music_node = TaskNode(
         node_id="music",
         task_type=TaskType.MUSIC,
@@ -187,20 +202,20 @@ def _build_drama_dag(
     )
     dag.add_node(music_node)
 
-    # -- 6. Compose: waits for all video clips + audio tracks --
-    compose_deps = video_node_ids + ["tts", "music"]
+    # -- 7. Compose: waits for all video clips + subtitle + music --
+    compose_deps = video_node_ids + ["subtitle_gen", "music"]
     compose_node = TaskNode(
         node_id="compose",
         task_type=TaskType.COMPOSE,
         depends_on=compose_deps,
         params={
             "transition": "dissolve",
-            "scenes": scenes_data,  # needed for subtitle generation
+            "scenes": scenes_data,
         },
     )
     dag.add_node(compose_node)
 
-    # -- 7. Final render --
+    # -- 8. Final render --
     render_node = TaskNode(
         node_id="render",
         task_type=TaskType.RENDER,

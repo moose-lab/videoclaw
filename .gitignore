@@ -42,3 +42,4 @@ models_cache/
 docs/deliverables/*
 !docs/deliverables/这个王妃太狂野/
 docs/plans
+.devtool/

@@ -34,8 +34,8 @@ def test_build_episode_dag():
 
     dag, state = build_episode_dag(ep, series)
 
-    # Should have: script_gen, storyboard, 2x video, tts, music, compose, render = 8 nodes
-    assert len(dag.nodes) == 8
+    # script_gen, storyboard, 2x video, 2x per_scene_tts, subtitle_gen, music, compose, render = 10
+    assert len(dag.nodes) == 10
     assert len(state.storyboard) == 2
     assert state.storyboard[0].shot_id == "ep01_s01"
     assert state.storyboard[1].model_id == "mock"
@@ -169,8 +169,7 @@ def test_build_episode_dag_scenes_have_dialogue_line_type():
 
     dag, _ = build_episode_dag(ep, series)
 
-    tts_node = dag.nodes["tts"]
-    scenes = tts_node.params["scenes"]
-    assert scenes[0]["dialogue_line_type"] == "dialogue"
-    assert scenes[1]["dialogue_line_type"] == "inner_monologue"
-    assert scenes[2]["dialogue_line_type"] == "dialogue"  # default
+    # Per-scene TTS nodes carry individual scene data
+    assert dag.nodes["tts_s01"].params["scene"]["dialogue_line_type"] == "dialogue"
+    assert dag.nodes["tts_s02"].params["scene"]["dialogue_line_type"] == "inner_monologue"
+    assert dag.nodes["tts_s03"].params["scene"]["dialogue_line_type"] == "dialogue"  # default

@@ -12,9 +12,11 @@ from videoclaw.drama.models import (
     DramaStatus,
     Episode,
     EpisodeStatus,
+    GENRE_VOICE_RECOMMENDATIONS,
     LineType,
     NARRATOR_PRESETS,
     VoiceProfile,
+    recommend_voice_style,
 )
 from videoclaw.drama.runner import build_episode_dag
 
@@ -30,8 +32,10 @@ __all__ = [
     "DramaStatus",
     "Episode",
     "EpisodeStatus",
+    "GENRE_VOICE_RECOMMENDATIONS",
     "LineType",
     "NARRATOR_PRESETS",
     "VoiceProfile",
     "build_episode_dag",
+    "recommend_voice_style",
 ]

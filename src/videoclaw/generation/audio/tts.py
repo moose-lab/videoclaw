@@ -11,13 +11,215 @@ from __future__ import annotations
 import io
 import logging
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import NamedTuple, Protocol, runtime_checkable
 
 from videoclaw.drama.models import (
     AudioSegment, AudioType, DialogueLine, LineType, VoiceProfile,
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Emotion → WaveSpeed voice parameter mapping
+# ---------------------------------------------------------------------------
+# Maps 32 scene emotions to WaveSpeed-compatible parameters.
+# WaveSpeed only accepts 7 emotions: happy, sad, angry, fearful,
+# disgusted, surprised, neutral.  The deltas modulate the character's
+# base VoiceProfile values to differentiate nuances within each group.
+
+
+class EmotionParams(NamedTuple):
+    """Voice-parameter blueprint for a scene emotion.
+
+    The first four fields define the WaveSpeed mapping and delta offsets
+    (unchanged from the original design).  The new ``intensity``,
+    ``pause_before_ms``, and ``breathiness`` fields add differentiation
+    dimensions that reduce the 32→7 precision loss.
+
+    ``intensity`` (0.0–1.0) scales all deltas at resolve time so the same
+    emotion can be delivered at different strengths.  ``pause_before_ms``
+    controls pacing (e.g. dread has a foreboding beat, panic does not).
+    ``breathiness`` (-1.0 crisp … 1.0 breathy) captures voice-quality
+    nuance for current and future TTS backends.
+    """
+
+    wavespeed_emotion: str
+    speed_delta: float
+    pitch_delta: int
+    volume_delta: float
+    intensity: float = 1.0
+    pause_before_ms: int = 0
+    breathiness: float = 0.0
+
+
+class ResolvedVoice(NamedTuple):
+    """Fully resolved voice parameters ready for TTS synthesis."""
+
+    emotion: str
+    speed: float
+    pitch: int
+    volume: float
+    pause_before_ms: int = 0
+    breathiness: float = 0.0
+
+
+# 8 groups × 4 variants — intensity increases left→right within each row.
+# Extended with pause_before_ms (temporal pacing) and breathiness (voice quality)
+# to reduce the 32→7 WaveSpeed emotion precision loss.
+EMOTION_VOICE_MAP: dict[str, EmotionParams] = {
+    # --- tension / suspense group → fearful ---
+    "tense":     EmotionParams("fearful",  -0.05, -1,  0.0,  pause_before_ms=200),
+    "anxious":   EmotionParams("fearful",   0.05,  1,  0.0,  breathiness=0.1),
+    "dread":     EmotionParams("fearful",  -0.10, -2, -0.1,  pause_before_ms=500, breathiness=0.3),
+    "suspense":  EmotionParams("fearful",  -0.08, -1, -0.05, pause_before_ms=350, breathiness=0.15),
+    # --- anger group → angry ---
+    "angry":     EmotionParams("angry",     0.05, -1,  0.15),
+    "furious":   EmotionParams("angry",     0.12, -2,  0.3,  breathiness=-0.2),
+    "resentful": EmotionParams("angry",    -0.05, -2,  0.05, pause_before_ms=300, breathiness=-0.3),
+    "defiant":   EmotionParams("angry",     0.08,  0,  0.2,  pause_before_ms=100, breathiness=-0.2),
+    # --- sadness group → sad ---
+    "sad":       EmotionParams("sad",      -0.05,  0, -0.1,  pause_before_ms=150),
+    "heartbroken": EmotionParams("sad",    -0.12, -1, -0.15, pause_before_ms=400, breathiness=0.25),
+    "grieving":  EmotionParams("sad",      -0.15, -2, -0.2,  pause_before_ms=500, breathiness=0.3),
+    "melancholy": EmotionParams("sad",     -0.08,  0, -0.1,  pause_before_ms=200, breathiness=0.1),
+    # --- shock / revelation group → surprised ---
+    "shock":     EmotionParams("surprised",  0.10,  2,  0.2),
+    "disbelief": EmotionParams("surprised",  0.05,  1,  0.1,  pause_before_ms=200),
+    "stunned":   EmotionParams("surprised", -0.05,  0,  0.0,  pause_before_ms=500),
+    "revelation": EmotionParams("surprised", 0.08,  3,  0.15, pause_before_ms=100),
+    # --- warmth group → happy ---
+    "warm":      EmotionParams("happy",     -0.03,  0,  0.0),
+    "tender":    EmotionParams("happy",     -0.08,  1, -0.05, pause_before_ms=100, breathiness=0.2),
+    "nostalgic": EmotionParams("happy",     -0.05,  0, -0.1,  pause_before_ms=200),
+    "grateful":  EmotionParams("happy",      0.0,   1,  0.05),
+    # --- romance group → happy ---
+    "sweet":     EmotionParams("happy",      0.0,   2,  0.0,  breathiness=0.1),
+    "flirty":    EmotionParams("happy",      0.08,  2,  0.1),
+    "blissful":  EmotionParams("happy",     -0.05,  1, -0.05, pause_before_ms=100, breathiness=0.15),
+    "intimate":  EmotionParams("happy",     -0.10,  0, -0.15, pause_before_ms=200, breathiness=0.4),
+    # --- fear group → fearful ---
+    "fear":      EmotionParams("fearful",    0.05,  1,  0.0,  pause_before_ms=100, breathiness=0.1),
+    "panic":     EmotionParams("fearful",    0.15,  3,  0.2),
+    "horror":    EmotionParams("fearful",   -0.05,  2,  0.15, pause_before_ms=600, breathiness=0.4),
+    "uneasy":    EmotionParams("fearful",    0.0,   0, -0.05, pause_before_ms=150, breathiness=0.05),
+    # --- triumph group → happy ---
+    "triumphant": EmotionParams("happy",     0.08, -1,  0.25),
+    "smug":      EmotionParams("happy",      0.05,  0,  0.1,  pause_before_ms=200),
+    "vindicated": EmotionParams("happy",     0.05, -1,  0.15, pause_before_ms=100),
+    "proud":     EmotionParams("happy",      0.0,  -1,  0.1),
+}
+
+
+def resolve_emotion(
+    emotion_hint: str,
+    base_profile: VoiceProfile,
+    intensity_override: float | None = None,
+) -> ResolvedVoice:
+    """Map a scene emotion to WaveSpeed parameters, applying deltas to the base profile.
+
+    Returns a :class:`ResolvedVoice` with emotion, speed, pitch, volume plus
+    extended fields (pause_before_ms, breathiness).
+
+    Parameters
+    ----------
+    emotion_hint:
+        One of the 32 scene emotions, a WaveSpeed-native emotion, or empty.
+    base_profile:
+        The character's base VoiceProfile whose values are used as the
+        starting point for delta application.
+    intensity_override:
+        When provided, scales all deltas by this factor (0.0–1.0).
+        Defaults to the emotion's own ``intensity`` value (typically 1.0).
+    """
+    params = EMOTION_VOICE_MAP.get(emotion_hint)
+    if params is None:
+        # Pass through if it's already a WaveSpeed emotion or unknown
+        return ResolvedVoice(
+            emotion_hint or base_profile.emotion,
+            base_profile.speed,
+            base_profile.pitch,
+            base_profile.volume,
+        )
+
+    intensity = params.intensity if intensity_override is None else intensity_override
+
+    return ResolvedVoice(
+        emotion=params.wavespeed_emotion,
+        speed=base_profile.speed + params.speed_delta * intensity,
+        pitch=base_profile.pitch + round(params.pitch_delta * intensity),
+        volume=base_profile.volume + params.volume_delta * intensity,
+        pause_before_ms=params.pause_before_ms,
+        breathiness=params.breathiness,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Text-driven prosody analysis
+# ---------------------------------------------------------------------------
+
+
+class ProsodyHints(NamedTuple):
+    """Adjustments derived from analysing the dialogue text itself.
+
+    Chinese punctuation carries strong prosody signals that the TTS model
+    can exploit even without SSML.  These hints are additive on top of the
+    emotion-based :class:`ResolvedVoice` values.
+    """
+
+    speed_adjust: float = 0.0
+    pitch_adjust: int = 0
+    volume_adjust: float = 0.0
+
+
+# Caps so that extreme punctuation doesn't push params out of WaveSpeed range.
+_MAX_SPEED_ADJUST = 0.08
+_MAX_VOLUME_ADJUST = 0.15
+_EXCL_SPEED_STEP = 0.03
+_EXCL_VOLUME_STEP = 0.05
+_ELLIPSIS_SPEED_PENALTY = -0.05
+_QUESTION_PITCH_BOOST = 1
+
+
+def analyze_text_prosody(text: str) -> ProsodyHints:
+    """Derive prosody adjustments from Chinese (and Western) punctuation cues.
+
+    Rules
+    -----
+    - ``！`` / ``!``  → speed + volume up  (exclamatory energy)
+    - ``……`` / ``...`` → speed down  (deliberate pacing, hesitation)
+    - ``？`` / ``?``  → pitch up  (interrogative rise)
+
+    All adjustments are capped to prevent extreme values.
+    """
+    if not text:
+        return ProsodyHints()
+
+    speed_adj = 0.0
+    pitch_adj = 0
+    volume_adj = 0.0
+
+    # Exclamation marks → louder, faster
+    excl_count = text.count("！") + text.count("!")
+    if excl_count:
+        speed_adj += min(_MAX_SPEED_ADJUST, _EXCL_SPEED_STEP * excl_count)
+        volume_adj += min(_MAX_VOLUME_ADJUST, _EXCL_VOLUME_STEP * excl_count)
+
+    # Ellipsis → slower (deliberate, weighty)
+    if "……" in text or "..." in text:
+        speed_adj += _ELLIPSIS_SPEED_PENALTY
+
+    # Question marks → pitch rise
+    q_count = text.count("？") + text.count("?")
+    if q_count:
+        pitch_adj += min(2, _QUESTION_PITCH_BOOST * q_count)
+
+    return ProsodyHints(
+        speed_adjust=speed_adj,
+        pitch_adjust=pitch_adj,
+        volume_adjust=volume_adj,
+    )
+
 
 # ---------------------------------------------------------------------------
 # TTSProvider protocol
@@ -465,7 +667,15 @@ class TTSManager:
                 # Last-resort fallback: default VoiceProfile
                 profile = VoiceProfile()
 
-            emotion = line.emotion_hint or profile.emotion
+            # Resolve scene emotion → WaveSpeed params (with deltas)
+            emotion_hint = line.emotion_hint or ""
+            resolved = resolve_emotion(emotion_hint, profile)
+
+            # Apply text-driven prosody adjustments
+            prosody = analyze_text_prosody(line.text)
+            final_speed = resolved.speed + prosody.speed_adjust
+            final_pitch = resolved.pitch + prosody.pitch_adjust
+            final_volume = resolved.volume + prosody.volume_adjust
 
             # Synthesize audio
             if isinstance(self._provider, WaveSpeedTTSProvider):
@@ -473,10 +683,10 @@ class TTSManager:
                     text=line.text,
                     voice=profile.voice_id,
                     language=language,
-                    speed=profile.speed,
-                    pitch=profile.pitch,
-                    emotion=emotion,
-                    volume=profile.volume,
+                    speed=final_speed,
+                    pitch=final_pitch,
+                    emotion=resolved.emotion,
+                    volume=final_volume,
                 )
             else:
                 audio_data = await self._provider.synthesize(

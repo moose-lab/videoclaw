@@ -15,6 +15,7 @@ from videoclaw.drama.models import (
     Episode,
     EpisodeAudioManifest,
     EpisodeStatus,
+    GENRE_VOICE_RECOMMENDATIONS,
     LineType,
     NARRATOR_PRESETS,
     ShotScale,
@@ -22,6 +23,7 @@ from videoclaw.drama.models import (
     VoiceProfile,
     VOICE_PROFILES,
     assign_voice_profile,
+    recommend_voice_style,
 )
 
 
@@ -352,8 +354,9 @@ def test_assign_voice_profile_unknown_style_falls_back():
 
 def test_voice_profiles_all_styles_covered():
     """Every VOICE_PROFILES entry should produce a valid, distinct VoiceProfile."""
-    expected_styles = {"warm", "authoritative", "playful", "dramatic", "calm"}
-    assert set(VOICE_PROFILES.keys()) == expected_styles
+    # Original 5 styles must still be present
+    original_styles = {"warm", "authoritative", "playful", "dramatic", "calm"}
+    assert original_styles.issubset(set(VOICE_PROFILES.keys()))
 
     for style, profile in VOICE_PROFILES.items():
         c = Character(name=f"test_{style}", voice_style=style)
@@ -363,10 +366,6 @@ def test_voice_profiles_all_styles_covered():
         assert c.voice_profile.speed == profile.speed
         assert c.voice_profile.pitch == profile.pitch
         assert c.voice_profile.emotion == profile.emotion
-
-    # Verify all voice_ids are distinct
-    voice_ids = [p.voice_id for p in VOICE_PROFILES.values()]
-    assert len(voice_ids) == len(set(voice_ids)), "Each style must map to a unique voice_id"
 
 
 # ---------------------------------------------------------------------------
@@ -440,3 +439,102 @@ def test_drama_scene_dialogue_line_type():
 def test_drama_scene_dialogue_line_type_default():
     scene = DramaScene(scene_id="s01", dialogue="你好")
     assert scene.dialogue_line_type == "dialogue"
+
+
+# ---------------------------------------------------------------------------
+# Task 3.1.4: Genre-specific voice recommendations
+# ---------------------------------------------------------------------------
+
+
+class TestGenreVoiceRecommendations:
+    """Tests for GENRE_VOICE_RECOMMENDATIONS and recommend_voice_style."""
+
+    def test_every_genre_has_recommendations(self):
+        """Every DramaGenre must have an entry in GENRE_VOICE_RECOMMENDATIONS."""
+        for genre in DramaGenre:
+            assert genre in GENRE_VOICE_RECOMMENDATIONS, (
+                f"Missing GENRE_VOICE_RECOMMENDATIONS entry for {genre}"
+            )
+
+    def test_every_recommended_style_exists_in_voice_profiles(self):
+        """Every style value in GENRE_VOICE_RECOMMENDATIONS must exist in VOICE_PROFILES."""
+        for genre, mapping in GENRE_VOICE_RECOMMENDATIONS.items():
+            for archetype, style in mapping.items():
+                assert style in VOICE_PROFILES, (
+                    f"Style {style!r} (genre={genre}, archetype={archetype}) "
+                    f"not found in VOICE_PROFILES"
+                )
+
+    def test_every_genre_has_default_archetype(self):
+        """Every genre mapping must include a 'default' archetype."""
+        for genre, mapping in GENRE_VOICE_RECOMMENDATIONS.items():
+            assert "default" in mapping, (
+                f"Missing 'default' archetype for genre {genre}"
+            )
+
+    def test_recommend_voice_style_known_genre_and_archetype(self):
+        """recommend_voice_style returns correct style for known genre+archetype."""
+        style = recommend_voice_style(DramaGenre.ANCIENT_XIANXIA, "hero")
+        assert style == "ethereal"
+        assert style in VOICE_PROFILES
+
+    def test_recommend_voice_style_falls_back_to_default_for_unknown_archetype(self):
+        """Unknown archetype should fall back to the genre's 'default' style."""
+        style = recommend_voice_style(DramaGenre.ANCIENT_XIANXIA, "side_character_99")
+        expected_default = GENRE_VOICE_RECOMMENDATIONS[DramaGenre.ANCIENT_XIANXIA]["default"]
+        assert style == expected_default
+
+    def test_recommend_voice_style_falls_back_to_warm_for_unknown_genre(self):
+        """Unknown genre string should fall back to 'warm'."""
+        style = recommend_voice_style("nonexistent_genre", "hero")
+        assert style == "warm"
+
+    def test_recommend_voice_style_accepts_string_genre(self):
+        """recommend_voice_style should accept string genre values."""
+        style = recommend_voice_style("ancient_xianxia", "hero")
+        assert style == "ethereal"
+
+    def test_recommend_voice_style_default_archetype_param(self):
+        """Calling with no archetype should use 'default'."""
+        style = recommend_voice_style(DramaGenre.SWEET_ROMANCE)
+        expected = GENRE_VOICE_RECOMMENDATIONS[DramaGenre.SWEET_ROMANCE]["default"]
+        assert style == expected
+
+    def test_new_voice_profiles_have_valid_fields(self):
+        """New period/xianxia VOICE_PROFILES entries should have valid field values."""
+        new_styles = ["ethereal", "commanding", "scheming", "innocent", "weathered"]
+        for style_name in new_styles:
+            assert style_name in VOICE_PROFILES, f"Missing new style: {style_name}"
+            vp = VOICE_PROFILES[style_name]
+            assert isinstance(vp, VoiceProfile)
+            assert vp.voice_id, f"voice_id must not be empty for {style_name}"
+            assert 0.5 <= vp.speed <= 2.0, (
+                f"speed {vp.speed} out of range for {style_name}"
+            )
+            assert -10 <= vp.pitch <= 10, (
+                f"pitch {vp.pitch} out of range for {style_name}"
+            )
+            assert vp.age_feel in ("young_adult", "middle_aged", "elderly"), (
+                f"unexpected age_feel {vp.age_feel!r} for {style_name}"
+            )
+            assert vp.energy in ("low", "medium", "high"), (
+                f"unexpected energy {vp.energy!r} for {style_name}"
+            )
+            assert vp.description, f"description must not be empty for {style_name}"
+
+    def test_original_voice_profiles_unchanged(self):
+        """Original 5 VOICE_PROFILES entries must not be modified."""
+        assert VOICE_PROFILES["warm"].voice_id == "Friendly_Person"
+        assert VOICE_PROFILES["warm"].speed == 0.95
+        assert VOICE_PROFILES["authoritative"].voice_id == "Imposing_Manner"
+        assert VOICE_PROFILES["playful"].voice_id == "Lively_Girl"
+        assert VOICE_PROFILES["dramatic"].voice_id == "Determined_Man"
+        assert VOICE_PROFILES["calm"].voice_id == "Calm_Woman"
+
+    def test_xianxia_has_all_key_archetypes(self):
+        """ANCIENT_XIANXIA should have hero, villain, mentor, love_interest, ruler."""
+        xianxia = GENRE_VOICE_RECOMMENDATIONS[DramaGenre.ANCIENT_XIANXIA]
+        for archetype in ("hero", "villain", "mentor", "love_interest", "ruler"):
+            assert archetype in xianxia, (
+                f"Missing archetype {archetype!r} for ANCIENT_XIANXIA"
+            )

@@ -19,6 +19,8 @@ class TaskType(StrEnum):
     STORYBOARD = "storyboard"
     VIDEO_GEN = "video_gen"
     TTS = "tts"
+    PER_SCENE_TTS = "per_scene_tts"
+    SUBTITLE_GEN = "subtitle_gen"
     MUSIC = "music"
     COMPOSE = "compose"
     RENDER = "render"

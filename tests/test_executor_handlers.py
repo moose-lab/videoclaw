@@ -86,7 +86,7 @@ class TestSubtitleGeneration:
 
 
 class TestEnrichedDAG:
-    def test_tts_node_has_scenes_data(self):
+    def test_per_scene_tts_nodes_have_scene_data(self):
         series = DramaSeries(
             title="Test", model_id="mock", language="zh",
             characters=[
@@ -108,20 +108,53 @@ class TestEnrichedDAG:
                     speaking_character="林薇",
                     duration_seconds=5.0,
                 ),
+                DramaScene(
+                    scene_id="s02",
+                    dialogue="再见",
+                    speaking_character="林薇",
+                    duration_seconds=3.0,
+                ),
             ],
         )
 
         dag, state = build_episode_dag(ep, series)
-        tts_node = dag.nodes["tts"]
 
-        assert tts_node.params["language"] == "zh"
-        assert len(tts_node.params["scenes"]) == 1
-        scene_data = tts_node.params["scenes"][0]
-        assert scene_data["dialogue"] == "你好"
-        assert scene_data["narration"] == "旁白"
-        assert scene_data["voice"] == "Calm_Woman"
+        # Per-scene TTS nodes exist
+        tts_s01 = dag.nodes["tts_s01"]
+        tts_s02 = dag.nodes["tts_s02"]
+        assert tts_s01.task_type == TaskType.PER_SCENE_TTS
+        assert tts_s02.task_type == TaskType.PER_SCENE_TTS
 
-    def test_compose_node_has_scenes_for_subtitles(self):
+        # Scene data is correct
+        assert tts_s01.params["language"] == "zh"
+        assert tts_s01.params["scene"]["dialogue"] == "你好"
+        assert tts_s01.params["scene"]["narration"] == "旁白"
+        assert tts_s01.params["scene"]["voice"] == "Calm_Woman"
+        assert tts_s02.params["scene"]["dialogue"] == "再见"
+
+        # Both depend on storyboard
+        assert "storyboard" in tts_s01.depends_on
+        assert "storyboard" in tts_s02.depends_on
+
+    def test_subtitle_gen_node_depends_on_all_tts(self):
+        series = DramaSeries(title="Test", model_id="mock")
+        ep = Episode(
+            number=1,
+            scenes=[
+                DramaScene(scene_id="s01", dialogue="A", duration_seconds=5.0),
+                DramaScene(scene_id="s02", dialogue="B", duration_seconds=3.0),
+            ],
+        )
+
+        dag, _ = build_episode_dag(ep, series)
+        sub_node = dag.nodes["subtitle_gen"]
+
+        assert sub_node.task_type == TaskType.SUBTITLE_GEN
+        assert "tts_s01" in sub_node.depends_on
+        assert "tts_s02" in sub_node.depends_on
+        assert len(sub_node.params["scenes"]) == 2
+
+    def test_compose_depends_on_subtitle_gen(self):
         series = DramaSeries(title="Test", model_id="mock")
         ep = Episode(
             number=1,
@@ -135,6 +168,8 @@ class TestEnrichedDAG:
 
         assert compose_node.params["transition"] == "dissolve"
         assert len(compose_node.params["scenes"]) == 1
+        assert "subtitle_gen" in compose_node.depends_on
+        assert "music" in compose_node.depends_on
 
     def test_video_node_has_aspect_ratio(self):
         series = DramaSeries(title="Test", model_id="mock", aspect_ratio="9:16")
@@ -390,6 +425,170 @@ class TestTTSHandler:
 
 
 # ---------------------------------------------------------------------------
+# Handler: _handle_per_scene_tts
+# ---------------------------------------------------------------------------
+
+
+class TestPerSceneTTSHandler:
+    @pytest.mark.asyncio
+    async def test_single_scene_tts(self, tmp_path):
+        from videoclaw.drama.models import AudioSegment, AudioType, LineType
+
+        sm = StateManager(projects_dir=tmp_path)
+        state = ProjectState(prompt="test")
+        dag = DAG()
+        node = TaskNode(
+            node_id="tts_s01",
+            task_type=TaskType.PER_SCENE_TTS,
+            params={
+                "language": "zh",
+                "scene": {
+                    "scene_id": "s01",
+                    "dialogue": "你确定？",
+                    "narration": "旁白文本",
+                    "speaking_character": "林薇",
+                    "emotion": "smug",
+                    "dialogue_line_type": "dialogue",
+                },
+            },
+        )
+        dag.add_node(node)
+
+        mock_segments = [
+            AudioSegment(
+                scene_id="s01", audio_type=AudioType.DIALOGUE,
+                text="你确定？", character_name="林薇",
+                audio_path=str(tmp_path / "audio" / "line_0000_林薇.mp3"),
+                line_type=LineType.DIALOGUE,
+            ),
+            AudioSegment(
+                scene_id="s01", audio_type=AudioType.NARRATION,
+                text="旁白文本", character_name="narrator",
+                audio_path=str(tmp_path / "audio" / "line_0001_narrator.mp3"),
+                line_type=LineType.NARRATION,
+            ),
+        ]
+
+        executor = DAGExecutor(dag=dag, state=state, state_manager=sm)
+
+        with patch("videoclaw.generation.audio.tts.TTSManager") as MockTTS:
+            mock_instance = MockTTS.return_value
+            mock_instance.generate_multi_role = AsyncMock(return_value=mock_segments)
+            result = await executor._handle_per_scene_tts(node, state)
+
+        assert result["scene_id"] == "s01"
+        assert result["segments"] == 2
+        # Per-scene data stored in assets
+        assert "tts_scene_s01" in state.assets
+
+    @pytest.mark.asyncio
+    async def test_empty_scene_no_audio(self, tmp_path):
+        sm = StateManager(projects_dir=tmp_path)
+        state = ProjectState(prompt="test")
+        dag = DAG()
+        node = TaskNode(
+            node_id="tts_s02",
+            task_type=TaskType.PER_SCENE_TTS,
+            params={
+                "language": "zh",
+                "scene": {
+                    "scene_id": "s02",
+                    "dialogue": "",
+                    "narration": "",
+                    "speaking_character": "",
+                    "emotion": "",
+                    "dialogue_line_type": "dialogue",
+                },
+            },
+        )
+        dag.add_node(node)
+
+        executor = DAGExecutor(dag=dag, state=state, state_manager=sm)
+
+        with patch("videoclaw.generation.audio.tts.TTSManager") as MockTTS:
+            mock_instance = MockTTS.return_value
+            mock_instance.generate_multi_role = AsyncMock(return_value=[])
+            result = await executor._handle_per_scene_tts(node, state)
+
+        assert result["segments"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Handler: _handle_subtitle_gen
+# ---------------------------------------------------------------------------
+
+
+class TestSubtitleGenHandler:
+    @pytest.mark.asyncio
+    async def test_aggregates_per_scene_audio_and_generates_subtitles(self, tmp_path):
+        sm = StateManager(projects_dir=tmp_path)
+
+        project_dir = tmp_path / "test_project"
+        project_dir.mkdir(parents=True)
+
+        state = ProjectState(
+            project_id="test_project",
+            prompt="test",
+            assets={
+                "tts_scene_s01": json.dumps([{
+                    "segment_id": "a1", "scene_id": "s01",
+                    "audio_type": "dialogue", "line_type": "dialogue",
+                    "text": "你好", "character_name": "林薇",
+                    "audio_path": "/fake/path.mp3",
+                    "start_time": 0.0, "duration_seconds": 3.0, "volume": 1.0,
+                }]),
+                "tts_scene_s02": json.dumps([{
+                    "segment_id": "a2", "scene_id": "s02",
+                    "audio_type": "narration", "line_type": "narration",
+                    "text": "旁白", "character_name": "narrator",
+                    "audio_path": "/fake/path2.mp3",
+                    "start_time": 0.0, "duration_seconds": 2.0, "volume": 1.0,
+                }]),
+            },
+        )
+
+        dag = DAG()
+        node = TaskNode(
+            node_id="subtitle_gen",
+            task_type=TaskType.SUBTITLE_GEN,
+            params={
+                "scenes": [
+                    {"scene_id": "s01", "dialogue": "你好", "duration_seconds": 5.0,
+                     "speaking_character": "林薇"},
+                    {"scene_id": "s02", "dialogue": "", "narration": "旁白",
+                     "duration_seconds": 3.0, "speaking_character": ""},
+                ],
+            },
+        )
+        dag.add_node(node)
+
+        executor = DAGExecutor(dag=dag, state=state, state_manager=sm)
+        result = await executor._handle_subtitle_gen(node, state)
+
+        assert result["segments_used"] == 2
+        assert "subtitles" in state.assets
+        assert "audio_manifest" in state.assets
+        assert "tts_audio" in state.assets
+
+    @pytest.mark.asyncio
+    async def test_skips_when_no_scenes(self, tmp_path):
+        sm = StateManager(projects_dir=tmp_path)
+        state = ProjectState(prompt="test")
+        dag = DAG()
+        node = TaskNode(
+            node_id="subtitle_gen",
+            task_type=TaskType.SUBTITLE_GEN,
+            params={},
+        )
+        dag.add_node(node)
+
+        executor = DAGExecutor(dag=dag, state=state, state_manager=sm)
+        result = await executor._handle_subtitle_gen(node, state)
+
+        assert result["status"] == "skipped"
+
+
+# ---------------------------------------------------------------------------
 # Handler: _handle_music
 # ---------------------------------------------------------------------------
 
@@ -416,7 +615,7 @@ class TestMusicHandler:
 
 class TestComposeHandler:
     @pytest.mark.asyncio
-    async def test_compose_with_videos_and_audio(self, tmp_path):
+    async def test_compose_with_videos_and_upstream_subtitles(self, tmp_path):
         sm = StateManager(projects_dir=tmp_path)
 
         # Create fake video files
@@ -432,6 +631,10 @@ class TestComposeHandler:
         audio_path = audio_dir / "s01_dialogue.mp3"
         audio_path.write_bytes(b"fake_audio")
 
+        # Create fake subtitles (produced by upstream subtitle_gen node)
+        subtitle_path = project_dir / "subtitles.ass"
+        subtitle_path.write_text("[Script Info]\nTitle: Test\n", encoding="utf-8")
+
         state = ProjectState(
             project_id="test_project",
             prompt="test",
@@ -439,7 +642,10 @@ class TestComposeHandler:
                 Shot(shot_id="s01", asset_path=str(shots_dir / "s01.mp4")),
                 Shot(shot_id="s02", asset_path=str(shots_dir / "s02.mp4")),
             ],
-            assets={"tts_audio": json.dumps([{"path": str(audio_path), "type": "dialogue"}])},
+            assets={
+                "tts_audio": json.dumps([{"path": str(audio_path), "type": "dialogue"}]),
+                "subtitles": str(subtitle_path),
+            },
         )
 
         dag = DAG()
@@ -449,7 +655,8 @@ class TestComposeHandler:
             params={
                 "transition": "dissolve",
                 "scenes": [
-                    {"dialogue": "你好", "duration_seconds": 5.0, "speaking_character": "林薇"},
+                    {"dialogue": "你好", "duration_seconds": 5.0,
+                     "speaking_character": "林薇", "transition": "dissolve"},
                 ],
             },
         )
@@ -465,9 +672,8 @@ class TestComposeHandler:
             result = await executor._handle_compose(node, state)
 
         assert "composed_path" in result
-        # Subtitle file should have been generated
-        assert "subtitles" in state.assets
-        # Composer should have been called
+        # Subtitles were read from upstream node, not generated inline
+        assert state.assets["subtitles"] == str(subtitle_path)
         mock_instance.compose.assert_called_once()
         mock_instance.render_final.assert_called_once()
 

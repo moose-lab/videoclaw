@@ -59,6 +59,112 @@ class AudioPostProcessor:
         return ""
 
     # ------------------------------------------------------------------
+    # EQ / Reverb / Silence filter builders (Task 3.1.3)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def build_eq_filter(line_type: LineType) -> str:
+        """Return an FFmpeg EQ filter string tailored to *line_type*.
+
+        - **DIALOGUE**: slight presence boost at 3kHz so speech cuts through
+          background music / SFX.
+        - **NARRATION**: warmth boost at 300Hz with a gentle high-shelf
+          roll-off to keep the narrator full but not boomy.
+        - **INNER_MONOLOGUE**: high-pass at 200Hz to thin the voice and
+          create a detached, "in-the-head" feel.
+        """
+        if line_type == LineType.DIALOGUE:
+            # Presence boost: +4dB at 3kHz, bandwidth 1.5 octaves
+            return "equalizer=f=3000:t=h:w=1.5:g=4"
+        if line_type == LineType.NARRATION:
+            # Warmth boost: +3dB at 300Hz, gentle shelf at 8kHz -2dB
+            return (
+                "equalizer=f=300:t=h:w=2.0:g=3,"
+                "equalizer=f=8000:t=h:w=1.0:g=-2"
+            )
+        if line_type == LineType.INNER_MONOLOGUE:
+            # Cut lows for a thin, ethereal quality
+            return "highpass=f=200:p=2"
+        return ""
+
+    @staticmethod
+    def build_reverb_filter(room_type: str) -> str:
+        """Return an FFmpeg reverb filter for the given *room_type*.
+
+        Since FFmpeg lacks a native reverb plugin, we approximate spatial
+        reverb using ``aecho`` with parameters tuned per environment:
+
+        - **palace**: long, bright reverb (large marble hall).
+        - **cave**: dark, resonant reverb with heavy decay.
+        - **outdoor**: short, diffuse reflections (open air).
+        - **chamber**: tight, intimate room reverb.
+        - **none**: no reverb (returns empty string).
+        """
+        presets: dict[str, str] = {
+            "palace": "aecho=0.8:0.9:120|180:0.4|0.25",
+            "cave": "aecho=0.8:0.85:200|300|400:0.5|0.35|0.2",
+            "outdoor": "aecho=0.8:0.7:40|80:0.2|0.1",
+            "chamber": "aecho=0.8:0.88:60|100:0.3|0.15",
+        }
+        return presets.get(room_type, "")
+
+    @staticmethod
+    def build_silence(duration_ms: int) -> str:
+        """Return an FFmpeg filter expression that generates silence.
+
+        Uses ``anullsrc`` to create a silent audio segment of the
+        requested duration (for inserting ``pause_before_ms`` gaps
+        between dialogue lines).
+
+        Returns an empty string when *duration_ms* is zero or negative.
+        """
+        if duration_ms <= 0:
+            return ""
+        duration_s = duration_ms / 1000.0
+        return (
+            f"anullsrc=r=44100:cl=mono,"
+            f"atrim=0:{duration_s:.3f},"
+            f"asetpts=N/SR/TB"
+        )
+
+    def build_filter_chain(
+        self,
+        line_type: LineType,
+        room_type: str = "none",
+        pause_before_ms: int = 0,
+    ) -> str:
+        """Combine EQ + reverb + silence into a single FFmpeg filter chain.
+
+        The three components are concatenated with ``,`` (FFmpeg filter
+        separator) in order: EQ, reverb, silence.  Empty components are
+        omitted.  If all three are empty the method returns ``""``.
+
+        Parameters
+        ----------
+        line_type:
+            Determines the EQ preset.
+        room_type:
+            Determines the reverb preset (``"none"`` skips reverb).
+        pause_before_ms:
+            Duration of leading silence in milliseconds (0 skips).
+        """
+        parts: list[str] = []
+
+        eq = self.build_eq_filter(line_type)
+        if eq:
+            parts.append(eq)
+
+        reverb = self.build_reverb_filter(room_type)
+        if reverb:
+            parts.append(reverb)
+
+        silence = self.build_silence(pause_before_ms)
+        if silence:
+            parts.append(silence)
+
+        return ",".join(parts)
+
+    # ------------------------------------------------------------------
     # Processing
     # ------------------------------------------------------------------
 

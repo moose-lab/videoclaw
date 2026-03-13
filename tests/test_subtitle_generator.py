@@ -447,21 +447,21 @@ class TestNarrationPositioning:
 
 
 # ===================================================================
-# 6. _handle_compose uses SubtitleGenerator
+# 6. _handle_subtitle_gen uses SubtitleGenerator
 # ===================================================================
 
-class TestHandleComposeIntegration:
-    """_handle_compose in DAGExecutor uses SubtitleGenerator."""
+class TestHandleSubtitleGenIntegration:
+    """_handle_subtitle_gen in DAGExecutor uses SubtitleGenerator."""
 
     @pytest.fixture()
     def executor_setup(self, tmp_path: Path):
-        """Set up a DAGExecutor with patched config for compose testing."""
+        """Set up a DAGExecutor with patched config for subtitle_gen testing."""
         from videoclaw.core.executor import DAGExecutor
         from videoclaw.core.planner import DAG, TaskNode, TaskType
         from videoclaw.core.state import ProjectState, StateManager
 
         dag = DAG()
-        dag.add_node(TaskNode(node_id="compose", task_type=TaskType.COMPOSE, params={}))
+        dag.add_node(TaskNode(node_id="subtitle_gen", task_type=TaskType.SUBTITLE_GEN, params={}))
         state = ProjectState(project_id="test-proj", prompt="test")
         state_mgr = StateManager(projects_dir=tmp_path)
 
@@ -475,49 +475,33 @@ class TestHandleComposeIntegration:
         return executor, state
 
     @pytest.mark.asyncio
-    async def test_compose_uses_subtitle_generator(self, executor_setup, tmp_path: Path):
-        """_handle_compose imports and uses SubtitleGenerator, not bare generate_srt."""
+    async def test_subtitle_gen_uses_subtitle_generator(self, executor_setup, tmp_path: Path):
+        """_handle_subtitle_gen uses SubtitleGenerator to produce ASS subtitles."""
         from videoclaw.core.planner import TaskNode, TaskType
 
         executor, state = executor_setup
 
-        # Create a fake video asset
         project_dir = Path(executor._config.projects_dir) / state.project_id
         project_dir.mkdir(parents=True, exist_ok=True)
-
-        shot_mock = MagicMock()
-        shot_mock.asset_path = str(project_dir / "shot.mp4")
-        Path(shot_mock.asset_path).write_bytes(b"fake")
-        state.storyboard = [shot_mock]
 
         scenes = [
             {"scene_id": "s01", "dialogue": "你好", "speaking_character": "小明",
              "duration_seconds": 3.0},
         ]
         node = TaskNode(
-            node_id="compose",
-            task_type=TaskType.COMPOSE,
+            node_id="subtitle_gen",
+            task_type=TaskType.SUBTITLE_GEN,
             params={"scenes": scenes},
         )
 
-        with patch("videoclaw.generation.subtitle.SubtitleGenerator") as MockGen, \
-             patch("videoclaw.generation.compose.VideoComposer") as MockComposer:
-            mock_instance = MagicMock()
-            mock_instance.generate_ass.return_value = project_dir / "subtitles.ass"
-            MockGen.return_value = mock_instance
+        result = await executor._handle_subtitle_gen(node, state)
 
-            mock_composer = AsyncMock()
-            MockComposer.return_value = mock_composer
-
-            await executor._handle_compose(node, state)
-
-            # SubtitleGenerator was instantiated and generate_ass was called
-            MockGen.assert_called_once()
-            mock_instance.generate_ass.assert_called_once()
+        assert "subtitle_path" in result
+        assert state.assets["subtitles"].endswith(".ass")
 
     @pytest.mark.asyncio
-    async def test_compose_passes_audio_manifest(self, executor_setup, tmp_path: Path):
-        """_handle_compose passes audio_manifest from state.assets."""
+    async def test_subtitle_gen_passes_audio_manifest(self, executor_setup, tmp_path: Path):
+        """_handle_subtitle_gen aggregates per-scene TTS into audio_manifest."""
         from videoclaw.core.planner import TaskNode, TaskType
 
         executor, state = executor_setup
@@ -525,40 +509,34 @@ class TestHandleComposeIntegration:
         project_dir = Path(executor._config.projects_dir) / state.project_id
         project_dir.mkdir(parents=True, exist_ok=True)
 
-        shot_mock = MagicMock()
-        shot_mock.asset_path = str(project_dir / "shot.mp4")
-        Path(shot_mock.asset_path).write_bytes(b"fake")
-        state.storyboard = [shot_mock]
+        # Simulate per-scene TTS output in state.assets
+        state.assets["tts_scene_s01"] = json.dumps([{
+            "segment_id": "seg1", "scene_id": "s01",
+            "audio_type": "dialogue", "line_type": "dialogue",
+            "text": "你好", "character_name": "小明",
+            "audio_path": "/tmp/s01.mp3",
+            "start_time": 0.0, "duration_seconds": 2.5, "volume": 1.0,
+        }])
 
-        manifest_data = {"episode_id": "ep01", "segments": [], "total_duration": 0}
-        state.assets["audio_manifest"] = json.dumps(manifest_data)
-
-        scenes = [{"scene_id": "s01", "dialogue": "你好", "speaking_character": "",
+        scenes = [{"scene_id": "s01", "dialogue": "你好", "speaking_character": "小明",
                     "duration_seconds": 3.0}]
         node = TaskNode(
-            node_id="compose",
-            task_type=TaskType.COMPOSE,
+            node_id="subtitle_gen",
+            task_type=TaskType.SUBTITLE_GEN,
             params={"scenes": scenes},
         )
 
-        with patch("videoclaw.generation.subtitle.SubtitleGenerator") as MockGen, \
-             patch("videoclaw.generation.compose.VideoComposer") as MockComposer:
-            mock_instance = MagicMock()
-            mock_instance.generate_ass.return_value = project_dir / "subtitles.ass"
-            MockGen.return_value = mock_instance
+        result = await executor._handle_subtitle_gen(node, state)
 
-            mock_composer = AsyncMock()
-            MockComposer.return_value = mock_composer
-
-            await executor._handle_compose(node, state)
-
-            # Check audio_manifest was passed
-            call_kwargs = mock_instance.generate_ass.call_args
-            assert call_kwargs.kwargs.get("audio_manifest") == manifest_data
+        # audio_manifest should have been built from per-scene TTS data
+        assert "audio_manifest" in state.assets
+        manifest = json.loads(state.assets["audio_manifest"])
+        assert len(manifest["segments"]) == 1
+        assert manifest["segments"][0]["duration_seconds"] == 2.5
 
     @pytest.mark.asyncio
-    async def test_compose_falls_back_to_srt(self, executor_setup, tmp_path: Path):
-        """If ASS generation fails, _handle_compose falls back to SRT."""
+    async def test_subtitle_gen_falls_back_to_srt(self, executor_setup, tmp_path: Path):
+        """If ASS generation fails, _handle_subtitle_gen falls back to SRT."""
         from videoclaw.core.planner import TaskNode, TaskType
 
         executor, state = executor_setup
@@ -566,47 +544,37 @@ class TestHandleComposeIntegration:
         project_dir = Path(executor._config.projects_dir) / state.project_id
         project_dir.mkdir(parents=True, exist_ok=True)
 
-        shot_mock = MagicMock()
-        shot_mock.asset_path = str(project_dir / "shot.mp4")
-        Path(shot_mock.asset_path).write_bytes(b"fake")
-        state.storyboard = [shot_mock]
-
         scenes = [{"scene_id": "s01", "dialogue": "你好", "speaking_character": "",
                     "duration_seconds": 3.0}]
         node = TaskNode(
-            node_id="compose",
-            task_type=TaskType.COMPOSE,
+            node_id="subtitle_gen",
+            task_type=TaskType.SUBTITLE_GEN,
             params={"scenes": scenes},
         )
 
-        with patch("videoclaw.generation.subtitle.SubtitleGenerator") as MockGen, \
-             patch("videoclaw.generation.compose.VideoComposer") as MockComposer:
+        with patch("videoclaw.generation.subtitle.SubtitleGenerator") as MockGen:
             mock_instance = MagicMock()
             mock_instance.generate_ass.side_effect = RuntimeError("ASS failed")
             mock_instance.generate_srt.return_value = project_dir / "subtitles.srt"
             MockGen.return_value = mock_instance
 
-            mock_composer = AsyncMock()
-            MockComposer.return_value = mock_composer
+            await executor._handle_subtitle_gen(node, state)
 
-            await executor._handle_compose(node, state)
-
-            # ASS was attempted, then SRT was called as fallback
             mock_instance.generate_ass.assert_called_once()
             mock_instance.generate_srt.assert_called_once()
             assert state.assets["subtitles"].endswith(".srt")
 
 
 # ===================================================================
-# 7. Fallback when no audio_manifest
+# 7. Compose reads upstream subtitles (no longer generates them)
 # ===================================================================
 
-class TestFallbackNoManifest:
-    """When no audio_manifest is available, scene durations are used."""
+class TestComposeReadsUpstreamSubtitles:
+    """Compose handler reads subtitles from upstream subtitle_gen node."""
 
     @pytest.mark.asyncio
-    async def test_compose_without_manifest_uses_scene_duration(self, tmp_path: Path):
-        """_handle_compose without manifest still generates subtitles."""
+    async def test_compose_reads_existing_subtitles(self, tmp_path: Path):
+        """_handle_compose uses subtitles from state.assets, not generating inline."""
         from videoclaw.core.executor import DAGExecutor
         from videoclaw.core.planner import DAG, TaskNode, TaskType
         from videoclaw.core.state import ProjectState, StateManager
@@ -631,29 +599,30 @@ class TestFallbackNoManifest:
         Path(shot_mock.asset_path).write_bytes(b"fake")
         state.storyboard = [shot_mock]
 
-        # No audio_manifest in state.assets
-        scenes = [{"scene_id": "s01", "dialogue": "你好", "speaking_character": "",
-                    "duration_seconds": 5.0}]
+        # Upstream subtitle_gen already generated subtitles
+        subtitle_file = project_dir / "subtitles.ass"
+        subtitle_file.write_text("[Script Info]\nTitle: Test\n", encoding="utf-8")
+        state.assets["subtitles"] = str(subtitle_file)
+
         node = TaskNode(
             node_id="compose",
             task_type=TaskType.COMPOSE,
-            params={"scenes": scenes},
+            params={"scenes": [{"dialogue": "你好", "duration_seconds": 3.0,
+                                 "speaking_character": "", "transition": "cut"}]},
         )
 
-        with patch("videoclaw.generation.subtitle.SubtitleGenerator") as MockGen, \
-             patch("videoclaw.generation.compose.VideoComposer") as MockComposer:
-            mock_instance = MagicMock()
-            mock_instance.generate_ass.return_value = project_dir / "subtitles.ass"
-            MockGen.return_value = mock_instance
-
+        with patch("videoclaw.generation.compose.VideoComposer") as MockComposer:
             mock_composer = AsyncMock()
             MockComposer.return_value = mock_composer
 
             await executor._handle_compose(node, state)
 
-            # audio_manifest should be None
-            call_kwargs = mock_instance.generate_ass.call_args
-            assert call_kwargs.kwargs.get("audio_manifest") is None
+            # Compose should use upstream subtitles, not generate new ones
+            mock_composer.compose.assert_called_once()
+            mock_composer.render_final.assert_called_once()
+            # Subtitle path passed to render_final should be the upstream file
+            render_call = mock_composer.render_final.call_args
+            assert render_call.kwargs.get("subtitle_path") == subtitle_file
 
 
 # ===================================================================

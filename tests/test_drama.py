@@ -383,8 +383,8 @@ def test_build_episode_dag():
 
     dag, state = build_episode_dag(ep, series)
 
-    # Should have: script_gen, storyboard, 2x video, tts, music, compose, render = 8 nodes
-    assert len(dag.nodes) == 8
+    # script_gen, storyboard, 2x video, 2x per_scene_tts, subtitle_gen, music, compose, render = 10
+    assert len(dag.nodes) == 10
     assert len(state.storyboard) == 2
     assert state.storyboard[0].shot_id == "ep01_s01"
     assert state.storyboard[1].model_id == "mock"
