@@ -163,6 +163,7 @@ def _build_drama_dag(
             "emotion": scene.emotion,
             "duration_seconds": scene.duration_seconds,
             "voice": voice,
+            "transition": scene.transition,
         })
 
     tts_node = TaskNode(
@@ -203,7 +204,12 @@ def _build_drama_dag(
         node_id="render",
         task_type=TaskType.RENDER,
         depends_on=["compose"],
-        params={},
+        params={
+            "codec": "libx264",
+            "preset": "medium",
+            "crf": 23,
+            "audio_bitrate": "192k",
+        },
     )
     dag.add_node(render_node)
 

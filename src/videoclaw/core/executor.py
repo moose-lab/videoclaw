@@ -413,7 +413,21 @@ class DAGExecutor:
         # 2. Concatenate videos with transitions
         composed_path = project_dir / "composed.mp4"
         transition = node.params.get("transition", "dissolve")
-        await composer.compose(video_paths, composed_path, transition=transition)
+
+        # Extract per-scene transitions when available
+        per_scene_transitions: list[str] | None = None
+        scenes = node.params.get("scenes", [])
+        if scenes:
+            per_scene_transitions = [
+                s.get("transition", "") or "" for s in scenes
+            ]
+
+        await composer.compose(
+            video_paths,
+            composed_path,
+            transition=transition,
+            transitions=per_scene_transitions,
+        )
         logger.info("[compose] Composed %d clips -> %s", len(video_paths), composed_path)
 
         # 3. Generate subtitles from scene dialogue
@@ -456,9 +470,14 @@ class DAGExecutor:
         return {"composed_path": str(output_path)}
 
     async def _handle_render(self, node: TaskNode, state: ProjectState) -> Any:
-        """Produce the final deliverable video file."""
+        """Produce the final deliverable video file via FFmpeg render pipeline.
+
+        Falls back to a simple file copy if FFmpeg encoding fails.
+        """
         import shutil
         from pathlib import Path
+
+        from videoclaw.generation.render import VideoRenderer, _ASPECT_TO_RENDER_RESOLUTION
 
         project_dir = Path(self._config.projects_dir) / state.project_id
         composed = state.assets.get("composed_video")
@@ -467,7 +486,42 @@ class DAGExecutor:
 
         output_path = project_dir / "final.mp4"
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(composed, output_path)
+
+        # Resolve render parameters from node.params and state.metadata
+        aspect_ratio = state.metadata.get("aspect_ratio")
+        resolution = _ASPECT_TO_RENDER_RESOLUTION.get(aspect_ratio) if aspect_ratio else None
+
+        codec = node.params.get("codec", "libx264")
+        preset = node.params.get("preset", "medium")
+        crf = node.params.get("crf", 23)
+        bitrate = node.params.get("bitrate", "8M")
+        audio_bitrate = node.params.get("audio_bitrate", "192k")
+
+        # Build metadata from state
+        render_metadata: dict[str, str] = {}
+        if state.metadata.get("series_id"):
+            render_metadata["title"] = state.prompt
+        if state.metadata.get("episode_number"):
+            render_metadata["episode_id"] = str(state.metadata["episode_number"])
+
+        try:
+            renderer = VideoRenderer()
+            await renderer.render(
+                input_path=Path(composed),
+                output_path=output_path,
+                resolution=resolution,
+                bitrate=bitrate,
+                audio_bitrate=audio_bitrate,
+                codec=codec,
+                preset=preset,
+                crf=crf,
+                metadata=render_metadata if render_metadata else None,
+            )
+        except Exception as exc:
+            logger.warning(
+                "[render] FFmpeg render failed (%s), falling back to file copy", exc,
+            )
+            shutil.copy2(composed, output_path)
 
         state.assets["final_video"] = str(output_path)
         logger.info("[render] Final video -> %s", output_path)

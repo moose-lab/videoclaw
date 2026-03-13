@@ -77,6 +77,7 @@ class VideoComposer:
         output_path: Path,
         transition: str = "dissolve",
         transition_duration: float = 0.5,
+        transitions: list[str] | None = None,
     ) -> Path:
         """Concatenate *video_paths* with transitions into *output_path*.
 
@@ -87,9 +88,15 @@ class VideoComposer:
         output_path:
             Destination file path for the composed video.
         transition:
-            Transition type between clips (see :data:`_SUPPORTED_TRANSITIONS`).
+            Default transition type between clips (see :data:`_SUPPORTED_TRANSITIONS`).
+            Used when *transitions* is ``None`` or when a per-boundary entry is empty.
         transition_duration:
             Duration of each transition in seconds.
+        transitions:
+            Per-boundary transition list (length = ``len(video_paths) - 1``).
+            Each entry specifies the transition for that clip boundary.
+            Empty strings fall back to *transition*.  When ``None``, the single
+            *transition* parameter is used for all boundaries.
 
         Returns
         -------
@@ -105,8 +112,21 @@ class VideoComposer:
             # No transition needed -- simple remux
             cmd = self._build_single_copy_cmd(video_paths[0], output_path)
         else:
+            # Build the resolved per-boundary transition list
+            n_boundaries = len(video_paths) - 1
+            if transitions is not None:
+                resolved = [
+                    (t if t and t in _SUPPORTED_TRANSITIONS else transition)
+                    for t in transitions[:n_boundaries]
+                ]
+                # Pad if transitions list is shorter than n_boundaries
+                while len(resolved) < n_boundaries:
+                    resolved.append(transition)
+            else:
+                resolved = [transition] * n_boundaries
+
             cmd = self._build_concat_cmd(
-                video_paths, output_path, transition, transition_duration,
+                video_paths, output_path, resolved, transition_duration,
             )
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -239,15 +259,21 @@ class VideoComposer:
     def _build_concat_cmd(
         video_paths: list[Path],
         output_path: Path,
-        transition: str,
+        transitions: list[str],
         transition_duration: float,
     ) -> list[str]:
         """Build an FFmpeg xfade filter-chain for concatenation with transitions.
 
         This constructs a chain of ``xfade`` filters that progressively merges
         each pair of adjacent clips.
+
+        Parameters
+        ----------
+        transitions:
+            A list of transition types, one per clip boundary
+            (length = ``len(video_paths) - 1``).  Each entry must already be a
+            valid supported transition string.
         """
-        trans = transition if transition in _SUPPORTED_TRANSITIONS else "dissolve"
         n = len(video_paths)
 
         # Input arguments
@@ -256,9 +282,7 @@ class VideoComposer:
             cmd.extend(["-i", str(vp)])
 
         if n == 2:
-            # Simple single-transition case
-            offset = 0  # xfade offset is calculated from clip duration at runtime
-            # We use a simple filter with xfade
+            trans = transitions[0] if transitions[0] in _SUPPORTED_TRANSITIONS else "dissolve"
             filter_str = (
                 f"[0:v][1:v]xfade=transition={trans}"
                 f":duration={transition_duration}:offset=0[outv]"
@@ -274,10 +298,10 @@ class VideoComposer:
             return cmd
 
         # General case: chain xfade filters for n > 2 clips
-        # Build filter graph
         filters: list[str] = []
         prev_label = "0:v"
         for i in range(1, n):
+            trans = transitions[i - 1] if transitions[i - 1] in _SUPPORTED_TRANSITIONS else "dissolve"
             out_label = f"v{i}" if i < n - 1 else "outv"
             filters.append(
                 f"[{prev_label}][{i}:v]xfade=transition={trans}"
