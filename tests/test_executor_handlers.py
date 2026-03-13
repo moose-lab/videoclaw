@@ -316,6 +316,8 @@ class TestStoryboardHandler:
 class TestTTSHandler:
     @pytest.mark.asyncio
     async def test_drama_mode_per_scene_tts(self, tmp_path):
+        from videoclaw.drama.models import AudioSegment, AudioType, LineType
+
         sm = StateManager(projects_dir=tmp_path)
         state = ProjectState(prompt="test")
         dag = DAG()
@@ -325,8 +327,12 @@ class TestTTSHandler:
             params={
                 "language": "zh",
                 "scenes": [
-                    {"scene_id": "s01", "dialogue": "你好", "narration": "", "voice": None},
-                    {"scene_id": "s02", "dialogue": "", "narration": "旁白", "voice": None},
+                    {"scene_id": "s01", "dialogue": "你好", "narration": "",
+                     "voice": None, "speaking_character": "林薇",
+                     "emotion": "", "dialogue_line_type": "dialogue"},
+                    {"scene_id": "s02", "dialogue": "", "narration": "旁白",
+                     "voice": None, "speaking_character": "",
+                     "emotion": "", "dialogue_line_type": "dialogue"},
                 ],
             },
         )
@@ -334,13 +340,28 @@ class TestTTSHandler:
 
         executor = DAGExecutor(dag=dag, state=state, state_manager=sm)
 
+        mock_segments = [
+            AudioSegment(
+                scene_id="s01", audio_type=AudioType.DIALOGUE,
+                text="你好", character_name="林薇",
+                audio_path=str(tmp_path / "audio" / "line_0000_林薇.mp3"),
+                line_type=LineType.DIALOGUE,
+            ),
+            AudioSegment(
+                scene_id="s02", audio_type=AudioType.NARRATION,
+                text="旁白", character_name="narrator",
+                audio_path=str(tmp_path / "audio" / "line_0001_narrator.mp3"),
+                line_type=LineType.NARRATION,
+            ),
+        ]
+
         with patch("videoclaw.generation.audio.tts.TTSManager") as MockTTS:
             mock_instance = MockTTS.return_value
-            mock_instance.generate_voiceover = AsyncMock(side_effect=lambda text, path, **kw: path)
+            mock_instance.generate_multi_role = AsyncMock(return_value=mock_segments)
             result = await executor._handle_tts(node, state)
 
         assert result["count"] == 2
-        assert mock_instance.generate_voiceover.call_count == 2
+        mock_instance.generate_multi_role.assert_called_once()
 
         # Check assets stored
         audio_entries = json.loads(state.assets["tts_audio"])

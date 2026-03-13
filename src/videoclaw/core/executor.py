@@ -330,7 +330,17 @@ class DAGExecutor:
         }
 
     async def _handle_tts(self, node: TaskNode, state: ProjectState) -> Any:
-        """Synthesize dialogue/narration audio per scene via TTSManager."""
+        """Synthesize dialogue/narration audio per scene via TTSManager.
+
+        In drama mode (when ``scenes`` is present in node params), this builds
+        :class:`DialogueLine` objects and delegates to
+        :meth:`TTSManager.generate_multi_role` for per-character voice routing.
+        An :class:`EpisodeAudioManifest` is built and stored in
+        ``state.assets["audio_manifest"]``.
+
+        In generic mode (no scenes), falls back to a single
+        ``generate_voiceover()`` call for backward compatibility.
+        """
         import json as _json
         from pathlib import Path
 
@@ -342,47 +352,114 @@ class DAGExecutor:
         audio_dir = project_dir / "audio"
         audio_dir.mkdir(parents=True, exist_ok=True)
 
-        audio_paths: list[dict[str, str]] = []
         scenes = node.params.get("scenes", [])
 
         if scenes:
-            # Drama mode: per-scene dialogue + narration
+            # --- Drama mode: multi-role voice pipeline ---
+            from videoclaw.drama.models import (
+                AudioSegment as DramaAudioSegment,
+                DialogueLine,
+                EpisodeAudioManifest,
+                LineType,
+                VoiceProfile,
+            )
+
+            # 1. Reconstruct voice_map from node.params or state.metadata
+            raw_voice_map: dict[str, dict] = (
+                node.params.get("voice_map")
+                or state.metadata.get("voice_map")
+                or {}
+            )
+            voice_map: dict[str, VoiceProfile] = {
+                name: VoiceProfile.from_dict(vp_data)
+                for name, vp_data in raw_voice_map.items()
+            }
+
+            # 2. Build DialogueLine list from scenes_data
+            lines: list[DialogueLine] = []
             for scene_data in scenes:
                 scene_id = scene_data.get("scene_id", "unknown")
                 dialogue = scene_data.get("dialogue", "").strip()
                 narration = scene_data.get("narration", "").strip()
-                voice = scene_data.get("voice")
+                speaking_character = scene_data.get("speaking_character", "")
+                emotion = scene_data.get("emotion", "")
+                dialogue_line_type_str = scene_data.get(
+                    "dialogue_line_type", "dialogue",
+                )
+
+                # Map dialogue_line_type string to LineType enum
+                try:
+                    dialogue_line_type = LineType(dialogue_line_type_str)
+                except ValueError:
+                    dialogue_line_type = LineType.DIALOGUE
 
                 if dialogue:
-                    path = audio_dir / f"{scene_id}_dialogue.mp3"
-                    await tts.generate_voiceover(
-                        dialogue, path, voice=voice, language=language,
-                    )
-                    audio_paths.append({
-                        "scene_id": scene_id,
-                        "type": "dialogue",
-                        "path": str(path),
-                    })
+                    lines.append(DialogueLine(
+                        text=dialogue,
+                        speaker=speaking_character or "narrator",
+                        line_type=dialogue_line_type,
+                        scene_id=scene_id,
+                        emotion_hint=emotion or None,
+                    ))
 
                 if narration:
-                    path = audio_dir / f"{scene_id}_narration.mp3"
-                    await tts.generate_voiceover(
-                        narration, path, language=language,
-                    )
-                    audio_paths.append({
-                        "scene_id": scene_id,
-                        "type": "narration",
-                        "path": str(path),
-                    })
+                    lines.append(DialogueLine(
+                        text=narration,
+                        speaker="narrator",
+                        line_type=LineType.NARRATION,
+                        scene_id=scene_id,
+                        emotion_hint=None,
+                    ))
+
+            # 3. Call generate_multi_role
+            segments: list[DramaAudioSegment] = await tts.generate_multi_role(
+                lines, voice_map, audio_dir, language=language,
+            )
+
+            # 4. Build EpisodeAudioManifest
+            total_duration = sum(s.duration_seconds for s in segments)
+            manifest = EpisodeAudioManifest(
+                episode_id=state.metadata.get("episode_id", ""),
+                segments=segments,
+                total_duration=total_duration,
+            )
+            state.assets["audio_manifest"] = _json.dumps(manifest.to_dict())
+
+            # 5. Backward compat: populate tts_audio for compose handler
+            audio_paths: list[dict[str, str]] = []
+            for seg in segments:
+                audio_paths.append({
+                    "scene_id": seg.scene_id,
+                    "type": seg.audio_type.value,
+                    "path": seg.audio_path or "",
+                })
+            state.assets["tts_audio"] = _json.dumps(audio_paths)
+
+            logger.info(
+                "[tts] Multi-role: synthesized %d segments from %d lines",
+                len(segments),
+                len(lines),
+            )
+            return {
+                "audio_paths": audio_paths,
+                "count": len(segments),
+                "manifest_segments": len(segments),
+            }
         elif state.script:
-            # Generic mode: single voiceover from full script
+            # --- Generic mode: single voiceover from full script ---
             path = audio_dir / "voiceover.mp3"
             await tts.generate_voiceover(state.script, path, language=language)
-            audio_paths.append({"type": "voiceover", "path": str(path)})
+            audio_paths: list[dict[str, str]] = [
+                {"type": "voiceover", "path": str(path)},
+            ]
+            state.assets["tts_audio"] = _json.dumps(audio_paths)
+            logger.info("[tts] Synthesized 1 generic voiceover segment")
+            return {"audio_paths": audio_paths, "count": 1}
 
-        state.assets["tts_audio"] = _json.dumps(audio_paths)
-        logger.info("[tts] Synthesized %d audio segments", len(audio_paths))
-        return {"audio_paths": audio_paths, "count": len(audio_paths)}
+        # No scenes and no script -- nothing to synthesize
+        state.assets["tts_audio"] = _json.dumps([])
+        logger.info("[tts] No content to synthesize")
+        return {"audio_paths": [], "count": 0}
 
     async def _handle_music(self, node: TaskNode, state: ProjectState) -> Any:
         """Background music generation (placeholder — no music API integrated yet)."""

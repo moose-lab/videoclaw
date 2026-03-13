@@ -173,6 +173,7 @@ def _build_drama_dag(
         params={
             "scenes": scenes_data,
             "language": series.language,
+            "voice_map": character_voices,
         },
     )
     dag.add_node(tts_node)
