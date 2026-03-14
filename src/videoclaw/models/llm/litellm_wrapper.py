@@ -97,6 +97,10 @@ class LLMClient:
                 config["api_key"] = self._config.evolink_api_key
             config["api_base"] = self._config.evolink_api_base
 
+            # Ensure openai/ prefix for LiteLLM provider routing
+            if not model.startswith("openai/"):
+                config["model"] = f"openai/{model}"
+
         return config
 
     # ------------------------------------------------------------------
@@ -240,11 +244,29 @@ class LLMClient:
             kwargs["stream"] = True
             response = await litellm.acompletion(**kwargs)
             chunks: list[str] = []
+            reasoning_chunks: list[str] = []
             async for chunk in response:
                 delta = chunk.choices[0].delta
-                if delta and delta.content:
-                    chunks.append(delta.content)
+                if delta:
+                    if delta.content:
+                        chunks.append(delta.content)
+                    # Thinking models may put output in reasoning_content
+                    rc = getattr(delta, "reasoning_content", None)
+                    if rc:
+                        reasoning_chunks.append(rc)
             content = "".join(chunks)
+            if not content and reasoning_chunks:
+                # Fallback: extract JSON from reasoning output
+                reasoning_text = "".join(reasoning_chunks)
+                logger.warning("[llm] Streaming content empty, extracting from reasoning (%d chars)", len(reasoning_text))
+                # Try to find JSON in reasoning output
+                import re
+                json_match = re.search(r"```(?:json)?\s*\n([\s\S]*?)\n```", reasoning_text)
+                if json_match:
+                    content = json_match.group(1).strip()
+                elif reasoning_text.strip().startswith("{"):
+                    content = reasoning_text.strip()
+            logger.debug("[llm] Streamed %d content chunks, %d reasoning chunks", len(chunks), len(reasoning_chunks))
         else:
             response = await litellm.acompletion(**kwargs)
             if hasattr(response, "usage") and response.usage is not None:
