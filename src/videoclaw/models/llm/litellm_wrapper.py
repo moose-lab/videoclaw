@@ -56,13 +56,37 @@ class LLMClient:
     default_model:
         The model identifier to use when none is passed to individual calls.
         Accepts any LiteLLM-compatible model string (e.g. ``"gpt-4o"``,
-        ``"claude-sonnet-4-20250514"``, ``"ollama/llama3"``, ``"openai/moonshot-v1-8k"``).
+        ``"claude-sonnet-4-6"``, ``"kimi-k2-thinking"``, ``"gpt-5.1-chat"``,
+        ``"deepseek-chat"``, ``"gemini-3.1-pro"``).
+        Models matching Evolink prefixes are auto-routed via Evolink gateway.
     """
 
-    # Moonshot (Kimi) model prefix detection
+    # Moonshot (Kimi v1) model prefix detection
     MOONSHOT_PREFIXES = ("openai/moonshot", "moonshot")
-    # Evolink (Kimi) model prefix detection
-    EVOLINK_PREFIXES = ("openai/kimi-k2", "kimi-k2", "openai/kimi-2.5", "kimi-2.5")
+
+    # Evolink unified gateway — all models routed via OpenAI-compatible API
+    EVOLINK_PREFIXES = (
+        # Kimi K2
+        "kimi-k2", "openai/kimi-k2",
+        "kimi-2.5", "openai/kimi-2.5",
+        # Claude (via Evolink)
+        "claude-sonnet-4-6", "claude-opus-4-6",
+        "claude-sonnet-4-5", "claude-opus-4-5",
+        "claude-opus-4-1", "claude-sonnet-4-",
+        "claude-haiku-4-5",
+        # GPT (via Evolink)
+        "gpt-5.1", "gpt-5.2", "gpt-5.4",
+        # Gemini (via Evolink)
+        "gemini-2.5", "gemini-3",
+        # DeepSeek (via Evolink)
+        "deepseek-chat", "deepseek-reasoner",
+        # Doubao Seed (via Evolink)
+        "doubao-seed",
+        # MiniMax (via Evolink)
+        "minimax-m2.5",
+        # Evolink auto routing
+        "evolink/auto",
+    )
 
     def __init__(self, default_model: str = "gpt-4o") -> None:
         self._default_model = default_model
@@ -70,12 +94,13 @@ class LLMClient:
         self._config = get_config()
 
     def _is_moonshot_model(self, model: str) -> bool:
-        """Check if the model is a Moonshot (Kimi) model."""
+        """Check if the model is a Moonshot (Kimi v1) model."""
         return any(model.startswith(prefix) for prefix in self.MOONSHOT_PREFIXES)
 
     def _is_evolink_model(self, model: str) -> bool:
-        """Check if the model is an Evolink (Kimi K2) model."""
-        return any(model.startswith(prefix) for prefix in self.EVOLINK_PREFIXES)
+        """Check if the model is routable through Evolink gateway."""
+        bare = model.removeprefix("openai/")
+        return any(bare.startswith(prefix) for prefix in self.EVOLINK_PREFIXES)
 
     def _get_model_config(self, model: str) -> dict[str, Any]:
         """Get provider-specific configuration for the model."""
