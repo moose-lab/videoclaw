@@ -75,7 +75,7 @@ SERIES_OUTLINE_PROMPT: str = """\
 
 Output JSON schema:
 {
-  "title": "<中文剧名，2-6字，朗朗上口，暗示核心冲突>",
+  "title": "<中文剧名，不超过20个中文字，朗朗上口，暗示核心冲突>",
   "genre": "<类型>",
   "synopsis": "<中文整体剧情梗概，包含高概念一句话卖点>",
   "characters": [
