@@ -828,7 +828,7 @@ def flow_validate(
 
 
 # ---------------------------------------------------------------------------
-# claw drama new / list / show / plan / run
+# claw drama new / list / show / plan / script / assign-voices / run
 # ---------------------------------------------------------------------------
 
 
@@ -1205,6 +1205,157 @@ async def _drama_run_async(series, mgr, start: int, end: int | None) -> None:
             border_style="green",
         )
     )
+
+
+@drama_app.command("script")
+def drama_script(
+    series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
+    episode: Annotated[int, typer.Option("--episode", "-e", help="Episode number to script.")] = 1,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Script a specific episode — generate scene breakdown via LLM."""
+    _configure_logging(verbose)
+
+    from videoclaw.drama.models import DramaManager
+
+    mgr = DramaManager()
+    try:
+        series = mgr.load(series_id)
+    except FileNotFoundError:
+        console.print(f"[red]Series {series_id!r} not found.[/red]")
+        raise typer.Exit(code=1)
+
+    if not series.episodes:
+        console.print("[yellow]No episodes planned. Run `claw drama plan` first.[/yellow]")
+        raise typer.Exit(code=1)
+
+    ep = next((e for e in series.episodes if e.number == episode), None)
+    if ep is None:
+        console.print(f"[red]Episode {episode} not found in series.[/red]")
+        raise typer.Exit(code=1)
+
+    asyncio.run(_drama_script_async(series, ep, mgr))
+
+
+async def _drama_script_async(series, ep, mgr) -> None:
+    from videoclaw.drama.planner import DramaPlanner
+
+    planner = DramaPlanner()
+
+    # Retrieve cliffhanger from previous episode if available
+    prev_cliffhanger: str | None = None
+    for prev_ep in series.episodes:
+        if prev_ep.number == ep.number - 1 and prev_ep.script:
+            try:
+                prev_script = json.loads(prev_ep.script)
+                prev_cliffhanger = prev_script.get("cliffhanger")
+            except (json.JSONDecodeError, TypeError):
+                pass
+            break
+
+    with console.status(f"[cyan]Scripting episode {ep.number}: {ep.title}...", spinner="dots"):
+        script_data = await planner.script_episode(series, ep, prev_cliffhanger)
+
+    mgr.save(series)
+
+    # Shot-scale color mapping
+    _SCALE_COLOR = {
+        "close_up": "red",
+        "medium_close": "yellow",
+        "medium": "yellow",
+        "wide": "green",
+        "extreme_wide": "green",
+    }
+
+    table = Table(
+        title=f"Episode {ep.number}: {ep.title} — Scene Breakdown",
+        show_header=True,
+        header_style="bold cyan",
+    )
+    table.add_column("Scene", style="dim", width=8)
+    table.add_column("Shot Scale", width=14)
+    table.add_column("Camera", style="white", width=12)
+    table.add_column("Characters", style="magenta", max_width=20)
+    table.add_column("Dialogue", style="white", max_width=30)
+    table.add_column("Duration", justify="right", style="green", width=8)
+
+    total_duration = 0.0
+    for scene in ep.scenes:
+        scale_str = scene.shot_scale.value if scene.shot_scale else "-"
+        scale_color = _SCALE_COLOR.get(scale_str, "white")
+        dialogue_text = (scene.dialogue or scene.narration or "")[:28]
+        if len(scene.dialogue or scene.narration or "") > 28:
+            dialogue_text += ".."
+        chars = ", ".join(scene.characters_present) if scene.characters_present else "-"
+        if len(chars) > 18:
+            chars = chars[:16] + ".."
+        total_duration += scene.duration_seconds
+
+        table.add_row(
+            scene.scene_id,
+            f"[{scale_color}]{scale_str}[/{scale_color}]",
+            scene.camera_movement,
+            chars,
+            dialogue_text,
+            f"{scene.duration_seconds:.1f}s",
+        )
+
+    console.print(table)
+    console.print(f"\n[bold]Total duration:[/bold] [green]{total_duration:.1f}s[/green]  |  "
+                  f"[bold]Scenes:[/bold] {len(ep.scenes)}")
+    console.print(f"[bold green]Episode {ep.number} scripted and saved.[/bold green]")
+
+
+@drama_app.command("assign-voices")
+def drama_assign_voices(
+    series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Re-assign voices even if already set.")] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Assign TTS voice profiles to all characters in a drama series."""
+    _configure_logging(verbose)
+
+    from videoclaw.drama.models import DramaManager, assign_voice_profile
+
+    mgr = DramaManager()
+    try:
+        series = mgr.load(series_id)
+    except FileNotFoundError:
+        console.print(f"[red]Series {series_id!r} not found.[/red]")
+        raise typer.Exit(code=1)
+
+    if not series.characters:
+        console.print("[yellow]No characters found. Run `claw drama plan` first.[/yellow]")
+        raise typer.Exit(code=1)
+
+    # Assign voice profiles
+    if force:
+        for c in series.characters:
+            c.voice_profile = None
+
+    for c in series.characters:
+        assign_voice_profile(c)
+
+    mgr.save(series)
+
+    # Display voice assignment table
+    table = Table(title="Voice Assignments", show_header=True, header_style="bold magenta")
+    table.add_column("Character", style="cyan")
+    table.add_column("Voice Style", style="white")
+    table.add_column("TTS Voice ID", style="green")
+
+    voice_ids_seen: set[str] = set()
+    for c in series.characters:
+        vp = c.voice_profile
+        voice_id = vp.voice_id if vp else "-"
+        style = c.voice_style or "-"
+        duplicate = voice_id in voice_ids_seen and voice_id != "-"
+        voice_ids_seen.add(voice_id)
+        id_display = f"[yellow]{voice_id} (dup)[/yellow]" if duplicate else voice_id
+        table.add_row(c.name, style, id_display)
+
+    console.print(table)
+    console.print(f"\n[bold green]Voices assigned for {len(series.characters)} characters in {series_id}[/bold green]")
 
 
 # ---------------------------------------------------------------------------
