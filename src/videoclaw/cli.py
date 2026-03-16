@@ -1358,6 +1358,101 @@ def drama_assign_voices(
     console.print(f"\n[bold green]Voices assigned for {len(series.characters)} characters in {series_id}[/bold green]")
 
 
+@drama_app.command("regen-shot")
+def drama_regen_shot(
+    series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
+    scene: Annotated[str, typer.Option("--scene", "-s", help="Scene ID to regenerate (e.g. ep01_s03).")],
+    episode: Annotated[int, typer.Option("--episode", "-e", help="Episode number.")] = 1,
+    recompose: Annotated[bool, typer.Option("--recompose", help="Re-compose and re-render the full episode after regenerating.")] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Regenerate a single scene's video and audio assets.
+
+    Use `claw drama show <series_id>` to find scene IDs, then re-run only the
+    scene that needs fixing.  With --recompose, the entire episode is
+    re-assembled after the scene is regenerated.
+
+    Examples:
+
+        claw drama regen-shot abc123 -e 2 -s ep02_s03
+
+        claw drama regen-shot abc123 -e 1 -s ep01_s01 --recompose
+    """
+    _configure_logging(verbose)
+    _show_banner()
+
+    from videoclaw.drama.models import DramaManager
+
+    mgr = DramaManager()
+    try:
+        series = mgr.load(series_id)
+    except FileNotFoundError:
+        console.print(f"[red]Series {series_id!r} not found.[/red]")
+        raise typer.Exit(code=1)
+
+    # Find the target episode
+    ep = next((e for e in series.episodes if e.number == episode), None)
+    if ep is None:
+        console.print(f"[red]Episode {episode} not found in series.[/red]")
+        raise typer.Exit(code=1)
+
+    if not ep.scenes:
+        console.print("[yellow]Episode has no scenes. Run `claw drama script` first.[/yellow]")
+        raise typer.Exit(code=1)
+
+    # Verify scene_id exists
+    scene_ids = [s.scene_id for s in ep.scenes]
+    if scene not in scene_ids:
+        console.print(f"[red]Scene {scene!r} not found in episode {episode}.[/red]")
+        console.print(f"[dim]Available scenes: {', '.join(scene_ids)}[/dim]")
+        raise typer.Exit(code=1)
+
+    console.print(
+        Panel(
+            f"[bold]Series:[/bold]    {series.title}\n"
+            f"[bold]Episode:[/bold]   {episode}\n"
+            f"[bold]Scene:[/bold]     {scene}\n"
+            f"[bold]Recompose:[/bold] {'yes' if recompose else 'no'}",
+            title="[bold cyan]Regen Shot[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+
+    asyncio.run(_drama_regen_shot_async(series, mgr, ep, scene, recompose))
+
+
+async def _drama_regen_shot_async(
+    series, mgr, episode, scene_id: str, recompose: bool,
+) -> None:
+    from videoclaw.drama.runner import DramaRunner
+
+    runner = DramaRunner(drama_manager=mgr)
+
+    node_count = 2 + (3 if recompose else 0)  # video + tts + optional subtitle/compose/render
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task(f"Regenerating {scene_id}...", total=node_count)
+        state = await runner.regenerate_scene(series, episode, scene_id, recompose)
+        progress.update(task, completed=node_count)
+
+    status_style = "green" if state.status.value == "completed" else "red"
+    console.print(
+        Panel(
+            f"[bold]Scene:[/bold]  {scene_id}\n"
+            f"[bold]Status:[/bold] [{status_style}]{state.status.value}[/{status_style}]\n"
+            f"[bold]Cost:[/bold]   ${state.cost_total:.4f}",
+            title="[bold green]Regen Complete[/bold green]",
+            border_style="green",
+        )
+    )
+
+
 # ---------------------------------------------------------------------------
 # claw version
 # ---------------------------------------------------------------------------

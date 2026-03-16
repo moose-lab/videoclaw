@@ -232,6 +232,167 @@ def _build_drama_dag(
     return dag
 
 
+def build_scene_regen_dag(
+    episode: Episode,
+    series: DramaSeries,
+    scene_id: str,
+    state: ProjectState,
+    recompose: bool = False,
+) -> DAG:
+    """Build a mini-DAG to regenerate a single scene's assets.
+
+    The mini-DAG contains only the target scene's ``video_gen`` and
+    ``per_scene_tts`` nodes (with no dependencies so they run immediately).
+    When *recompose* is True, ``subtitle_gen``, ``compose``, and ``render``
+    nodes are appended so the full episode is re-assembled.
+
+    Raises:
+        ValueError: if *scene_id* is not found in the episode's scenes.
+    """
+    # Find the target scene
+    scene_idx: int | None = None
+    target_scene: DramaScene | None = None
+    for idx, scene in enumerate(episode.scenes):
+        if scene.scene_id == scene_id:
+            scene_idx = idx
+            target_scene = scene
+            break
+
+    if target_scene is None or scene_idx is None:
+        raise ValueError(
+            f"Scene {scene_id!r} not found in episode {episode.number} "
+            f"(available: {[s.scene_id for s in episode.scenes]})"
+        )
+
+    # Build character reference image lookup
+    char_ref_map: dict[str, str] = {
+        c.name: c.reference_image
+        for c in series.characters
+        if c.reference_image
+    }
+
+    # Build character voice lookup
+    character_voices: dict[str, dict] = {}
+    for char in series.characters:
+        if char.voice_profile:
+            character_voices[char.name] = char.voice_profile.to_dict()
+
+    # Find the corresponding shot in the storyboard
+    shot = next((s for s in state.storyboard if s.shot_id == scene_id), None)
+
+    dag = DAG()
+
+    # -- video_gen node (no dependencies) --
+    ref_images = {
+        name: char_ref_map[name]
+        for name in target_scene.characters_present
+        if name in char_ref_map
+    }
+    # Also include speaking character's reference
+    if target_scene.speaking_character and target_scene.speaking_character in char_ref_map:
+        ref_images[target_scene.speaking_character] = char_ref_map[target_scene.speaking_character]
+
+    vid_id = f"video_{scene_id}"
+    dag.add_node(TaskNode(
+        node_id=vid_id,
+        task_type=TaskType.VIDEO_GEN,
+        depends_on=[],
+        params={
+            "shot_id": scene_id,
+            "prompt": target_scene.visual_prompt,
+            "duration": target_scene.duration_seconds,
+            "model_id": shot.model_id if shot else series.model_id,
+            "aspect_ratio": series.aspect_ratio,
+            "reference_images": ref_images,
+            "speaking_character": target_scene.speaking_character,
+        },
+    ))
+
+    # -- per_scene_tts node (no dependencies) --
+    voice = None
+    if target_scene.speaking_character and target_scene.speaking_character in character_voices:
+        voice = character_voices[target_scene.speaking_character].get("voice_id")
+
+    scene_dict = {
+        "scene_id": target_scene.scene_id,
+        "dialogue": target_scene.dialogue,
+        "dialogue_line_type": getattr(target_scene, "dialogue_line_type", "dialogue"),
+        "narration": target_scene.narration,
+        "speaking_character": target_scene.speaking_character,
+        "emotion": target_scene.emotion,
+        "duration_seconds": target_scene.duration_seconds,
+        "voice": voice,
+        "transition": target_scene.transition,
+    }
+
+    tts_id = f"tts_{scene_id}"
+    dag.add_node(TaskNode(
+        node_id=tts_id,
+        task_type=TaskType.PER_SCENE_TTS,
+        depends_on=[],
+        params={
+            "scene": scene_dict,
+            "language": series.language,
+            "voice_map": character_voices,
+        },
+    ))
+
+    # -- Optional recompose pipeline --
+    if recompose:
+        # Build scenes_data for all scenes (subtitle_gen and compose need full context)
+        scenes_data: list[dict] = []
+        for sc in episode.scenes:
+            sc_voice = None
+            if sc.speaking_character and sc.speaking_character in character_voices:
+                sc_voice = character_voices[sc.speaking_character].get("voice_id")
+            scenes_data.append({
+                "scene_id": sc.scene_id,
+                "dialogue": sc.dialogue,
+                "dialogue_line_type": getattr(sc, "dialogue_line_type", "dialogue"),
+                "narration": sc.narration,
+                "speaking_character": sc.speaking_character,
+                "emotion": sc.emotion,
+                "duration_seconds": sc.duration_seconds,
+                "voice": sc_voice,
+                "transition": sc.transition,
+            })
+
+        subtitle_node = TaskNode(
+            node_id="subtitle_gen",
+            task_type=TaskType.SUBTITLE_GEN,
+            depends_on=[tts_id],
+            params={"scenes": scenes_data},
+        )
+        dag.add_node(subtitle_node)
+
+        compose_deps = [vid_id, "subtitle_gen"]
+        compose_node = TaskNode(
+            node_id="compose",
+            task_type=TaskType.COMPOSE,
+            depends_on=compose_deps,
+            params={
+                "transition": "dissolve",
+                "scenes": scenes_data,
+            },
+        )
+        dag.add_node(compose_node)
+
+        render_node = TaskNode(
+            node_id="render",
+            task_type=TaskType.RENDER,
+            depends_on=["compose"],
+            params={
+                "codec": "libx264",
+                "preset": "medium",
+                "crf": 23,
+                "audio_bitrate": "192k",
+            },
+        )
+        dag.add_node(render_node)
+
+    return dag
+
+
 class DramaRunner:
     """Runs drama episodes through the VideoClaw pipeline sequentially."""
 
@@ -318,3 +479,101 @@ class DramaRunner:
         logger.info("Series %r finished: status=%s cost=$%.4f",
                      series.title, series.status, series.cost_total)
         return series
+
+    async def regenerate_scene(
+        self,
+        series: DramaSeries,
+        episode: Episode,
+        scene_id: str,
+        recompose: bool = False,
+    ) -> ProjectState:
+        """Regenerate a single scene's video and audio assets.
+
+        Resets the target scene's status and asset paths, builds a mini-DAG
+        containing only that scene's ``video_gen`` and ``per_scene_tts`` nodes,
+        and executes it through the standard :class:`DAGExecutor`.
+
+        When *recompose* is ``True``, the full episode is re-composed and
+        re-rendered after the scene assets are regenerated.
+
+        Parameters
+        ----------
+        series:
+            The parent drama series (for character refs, voice profiles, etc.).
+        episode:
+            The episode containing the scene.
+        scene_id:
+            The ``scene_id`` of the scene to regenerate.
+        recompose:
+            If ``True``, run subtitle_gen → compose → render after regen.
+
+        Returns
+        -------
+        ProjectState
+            The updated project state.
+
+        Raises
+        ------
+        ValueError
+            If *scene_id* is not found in the episode's scenes.
+        """
+        logger.info(
+            "Regenerating scene %s in episode %d (recompose=%s)",
+            scene_id, episode.number, recompose,
+        )
+
+        # 1. Find and reset the target scene
+        target_scene: DramaScene | None = None
+        for scene in episode.scenes:
+            if scene.scene_id == scene_id:
+                target_scene = scene
+                break
+        if target_scene is None:
+            raise ValueError(
+                f"Scene {scene_id!r} not found in episode {episode.number}"
+            )
+
+        target_scene.video_asset_path = None
+        target_scene.dialogue_audio_path = None
+        target_scene.narration_audio_path = None
+        target_scene.scene_status = "pending"
+
+        # 2. Load or create ProjectState
+        state: ProjectState
+        if episode.project_id:
+            try:
+                state = self.state_mgr.load(episode.project_id)
+            except FileNotFoundError:
+                _, state = build_episode_dag(episode, series)
+        else:
+            _, state = build_episode_dag(episode, series)
+
+        # 3. Reset the corresponding shot in the storyboard
+        for shot in state.storyboard:
+            if shot.shot_id == scene_id:
+                shot.status = ShotStatus.PENDING
+                shot.asset_path = None
+                break
+
+        self.state_mgr.save(state)
+
+        # 4. Build and execute mini-DAG
+        dag = build_scene_regen_dag(episode, series, scene_id, state, recompose)
+
+        executor = DAGExecutor(
+            dag=dag,
+            state=state,
+            state_manager=self.state_mgr,
+            bus=event_bus,
+            max_concurrency=self.max_concurrency,
+        )
+
+        state = await executor.run()
+        self.drama_mgr.save(series)
+
+        logger.info(
+            "Scene %s regeneration %s",
+            scene_id,
+            "completed" if state.status.value == "completed" else "failed",
+        )
+        return state

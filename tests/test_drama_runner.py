@@ -1,5 +1,7 @@
 """Tests for drama runner (runner.py)."""
 
+import pytest
+
 from videoclaw.drama.models import (
     Character,
     DramaScene,
@@ -9,7 +11,7 @@ from videoclaw.drama.models import (
     ShotType,
     VoiceProfile,
 )
-from videoclaw.drama.runner import build_episode_dag
+from videoclaw.drama.runner import build_episode_dag, build_scene_regen_dag
 
 
 # ---------------------------------------------------------------------------
@@ -173,3 +175,93 @@ def test_build_episode_dag_scenes_have_dialogue_line_type():
     assert dag.nodes["tts_s01"].params["scene"]["dialogue_line_type"] == "dialogue"
     assert dag.nodes["tts_s02"].params["scene"]["dialogue_line_type"] == "inner_monologue"
     assert dag.nodes["tts_s03"].params["scene"]["dialogue_line_type"] == "dialogue"  # default
+
+
+# ---------------------------------------------------------------------------
+# Scene regeneration DAG (Task 3.4)
+# ---------------------------------------------------------------------------
+
+
+def _make_regen_fixtures():
+    """Build a series + episode with 3 scenes for regen tests."""
+    series = DramaSeries(
+        title="Regen Test",
+        model_id="mock",
+        characters=[
+            Character(
+                name="林薇",
+                description="活泼少女",
+                voice_profile=VoiceProfile(voice_id="Lively_Girl", speed=1.05),
+            ),
+        ],
+    )
+    ep = Episode(
+        number=1,
+        title="Pilot",
+        scenes=[
+            DramaScene(scene_id="ep01_s01", visual_prompt="shot 1", duration_seconds=5.0,
+                        dialogue="你好", speaking_character="林薇"),
+            DramaScene(scene_id="ep01_s02", visual_prompt="shot 2", duration_seconds=5.0,
+                        dialogue="再见", speaking_character="林薇"),
+            DramaScene(scene_id="ep01_s03", visual_prompt="shot 3", duration_seconds=5.0,
+                        narration="夜幕降临"),
+        ],
+    )
+    return series, ep
+
+
+def test_build_scene_regen_dag_basic():
+    """Mini-DAG for regen should contain only video_gen + per_scene_tts (2 nodes, no deps)."""
+    series, ep = _make_regen_fixtures()
+    # First build the full DAG to get a ProjectState
+    _, state = build_episode_dag(ep, series)
+
+    dag = build_scene_regen_dag(ep, series, "ep01_s02", state)
+
+    assert len(dag.nodes) == 2
+    node_ids = set(dag.nodes.keys())
+    assert "video_ep01_s02" in node_ids
+    assert "tts_ep01_s02" in node_ids
+    # Both nodes should have no dependencies (ready to run immediately)
+    for node in dag.nodes.values():
+        assert node.depends_on == []
+
+
+def test_build_scene_regen_dag_with_recompose():
+    """With recompose=True, DAG should also have subtitle_gen, compose, render."""
+    series, ep = _make_regen_fixtures()
+    _, state = build_episode_dag(ep, series)
+
+    dag = build_scene_regen_dag(ep, series, "ep01_s02", state, recompose=True)
+
+    node_ids = set(dag.nodes.keys())
+    assert "video_ep01_s02" in node_ids
+    assert "tts_ep01_s02" in node_ids
+    assert "subtitle_gen" in node_ids
+    assert "compose" in node_ids
+    assert "render" in node_ids
+    assert len(dag.nodes) == 5
+    # compose depends on video + subtitle_gen
+    assert "video_ep01_s02" in dag.nodes["compose"].depends_on
+    assert "subtitle_gen" in dag.nodes["compose"].depends_on
+
+
+def test_build_scene_regen_dag_invalid_scene_id():
+    """Should raise ValueError for a non-existent scene_id."""
+    series, ep = _make_regen_fixtures()
+    _, state = build_episode_dag(ep, series)
+
+    with pytest.raises(ValueError, match="not found"):
+        build_scene_regen_dag(ep, series, "ep01_s99", state)
+
+
+def test_build_scene_regen_dag_preserves_reference_images():
+    """Regen DAG should include character reference images in video_gen params."""
+    series, ep = _make_regen_fixtures()
+    series.characters[0].reference_image = "/path/to/linwei.png"
+    _, state = build_episode_dag(ep, series)
+
+    dag = build_scene_regen_dag(ep, series, "ep01_s01", state)
+
+    video_node = dag.nodes["video_ep01_s01"]
+    assert video_node.params["reference_images"] == {"林薇": "/path/to/linwei.png"}
