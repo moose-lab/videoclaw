@@ -693,17 +693,35 @@ class DAGExecutor:
             subtitle_path = Path(raw_sub)
 
         # 4. Collect audio tracks (TTS + music)
+        #    Prefer audio_manifest (has start_time + line_type for proper mix)
+        #    over the flat tts_audio list.
         audio_tracks: list[AudioTrack] = []
-        tts_data = state.assets.get("tts_audio")
-        if tts_data:
-            for entry in _json.loads(tts_data):
-                audio_path = Path(entry["path"])
-                if audio_path.exists():
+        raw_manifest = state.assets.get("audio_manifest")
+        if raw_manifest:
+            from videoclaw.drama.models import AudioSegment as DramaAudioSegment, LineType
+            manifest_data = _json.loads(raw_manifest)
+            for seg in manifest_data.get("segments", []):
+                seg_path = seg.get("audio_path", "")
+                if seg_path and Path(seg_path).exists():
+                    line_type = seg.get("line_type", "dialogue")
+                    vol = 0.85 if line_type == LineType.NARRATION else 1.0
                     audio_tracks.append(AudioTrack(
-                        path=audio_path,
+                        path=Path(seg_path),
                         type=AudioType.VOICE,
-                        volume=0.9,
+                        volume=vol,
+                        start_time=float(seg.get("start_time", 0.0)),
                     ))
+        else:
+            tts_data = state.assets.get("tts_audio")
+            if tts_data:
+                for entry in _json.loads(tts_data):
+                    audio_path = Path(entry["path"])
+                    if audio_path.exists():
+                        audio_tracks.append(AudioTrack(
+                            path=audio_path,
+                            type=AudioType.VOICE,
+                            volume=0.9,
+                        ))
 
         # 5. Final render: audio mix + subtitle burn
         output_path = project_dir / "composed_final.mp4"
