@@ -15,6 +15,7 @@ from videoclaw.core.executor import DAGExecutor
 from videoclaw.core.planner import DAG, TaskNode, TaskType
 from videoclaw.core.state import ProjectState, Shot, ShotStatus, StateManager
 from videoclaw.drama.models import DramaManager, DramaSeries, DramaStatus, Episode, EpisodeStatus
+from videoclaw.drama.prompt_enhancer import PromptEnhancer
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,10 @@ def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, Proje
         for c in series.characters
         if c.reference_image
     }
+
+    # Enhance visual prompts before building shots
+    enhancer = PromptEnhancer()
+    enhancer.enhance_all_scenes(episode, series)
 
     # Build shots from typed DramaScene objects with reference images injected
     shots: list[Shot] = []
@@ -279,6 +284,10 @@ def build_scene_regen_dag(
 
     # Find the corresponding shot in the storyboard
     shot = next((s for s in state.storyboard if s.shot_id == scene_id), None)
+
+    # Enhance the target scene's visual prompt
+    enhancer = PromptEnhancer()
+    target_scene.visual_prompt = enhancer.enhance_scene_prompt(target_scene, series)
 
     dag = DAG()
 

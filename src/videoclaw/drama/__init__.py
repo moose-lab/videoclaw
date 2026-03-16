@@ -18,6 +18,7 @@ from videoclaw.drama.models import (
     VoiceProfile,
     recommend_voice_style,
 )
+from videoclaw.drama.prompt_enhancer import PromptEnhancer
 from videoclaw.drama.runner import build_episode_dag
 
 __all__ = [
@@ -36,6 +37,7 @@ __all__ = [
     "LineType",
     "NARRATOR_PRESETS",
     "VoiceProfile",
+    "PromptEnhancer",
     "build_episode_dag",
     "recommend_voice_style",
 ]
