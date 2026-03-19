@@ -504,7 +504,7 @@ async def test_e2e_episode1_western_quality():
         if s.shot_scale in (ShotScale.CLOSE_UP, ShotScale.MEDIUM_CLOSE)
     )
     ratio = close_count / len(episode.scenes)
-    assert ratio >= 0.4, f"Close-up ratio {ratio:.0%} < 40%"
+    assert ratio >= 0.5, f"Close-up ratio {ratio:.0%} < 50% (benchmark: 59%)"
 
     # First scene ≤ 5s (scroll-stopping hook)
     assert episode.scenes[0].duration_seconds <= 5.0

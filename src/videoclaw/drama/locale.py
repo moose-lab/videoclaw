@@ -385,7 +385,7 @@ TikTok / YouTube Shorts / Instagram Reels (9:16 vertical video, 30-90 seconds).
 # Vertical Composition Rules (9:16)
 - Subjects' faces belong in the upper third — that is the viewer's eye anchor on a phone screen.
 - Single tight close-ups outperform group wide shots — detail beats spectacle on vertical.
-- Shot distribution: close_up + medium_close = 40-50% of all scenes (vertical's power zone).
+- Shot distribution: close_up + medium_close >= 50% of all scenes (real data: 59% in professional scripts).
 - wide / extreme_wide <= 15% of scenes — use only for scene-setting or contrast.
 - Avoid lateral camera moves (pan_left / pan_right) — ineffective on vertical; prefer dolly_in and crane_up.
 
@@ -419,18 +419,18 @@ TikTok / YouTube Shorts / Instagram Reels (9:16 vertical video, 30-90 seconds).
 - jump_cut: time compression within a scene, urgency
 
 # Pacing Rules
-- Scene count: ~8-12 scenes per 60 seconds; scale proportionally for other durations.
+- Scene count: ~15-20 shots per 60 seconds (avg ~3.5s per shot); scale proportionally for other durations.
 - ALL scene duration_seconds MUST sum to the target episode duration (+-2 seconds).
 - Rhythm template: Hook(0-5s) -> Build(5-15s) -> Escalate(15-35s) -> Peak(35-50s) -> Cliffhanger(50-60s)
-- Climax scenes: short fast cuts (2-3s/scene). Setup scenes: 5-8s each.
+- Climax scenes: short fast cuts (2-3s/shot). Setup scenes: 4-6s each.
 - First scene = visual hook or pickup from previous episode's cliffhanger.
 - Last scene = MUST manufacture a cliffhanger.
 
 # Dialogue and Voice-Over
-- Total spoken words <= ~150 for a 60s episode (spoken English ~150 wpm at comfortable pace).
+- Total spoken words ~100-170 for a 60s episode (real data benchmark: ~98 words/min dialogue + ~19% V.O.).
 - Dialogue must be punchy — short sentences, natural American English, emotional power.
   Single line <= 25 words. No exposition dumps.
-- Voice-over (narrator) advances story logic and sets tone.
+- Voice-over (V.O.) <= 20% of total spoken words — used for flashback, internal thought, or story setup.
 - Not every scene needs dialogue — a wordless close-up of a trembling hand can be more powerful.
 - speaking_character must match a name in characters_present.
 

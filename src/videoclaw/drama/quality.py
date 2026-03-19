@@ -103,7 +103,8 @@ def validate_western_quality(
             violations.append(f"Episode {ep_num}: missing cliffhanger field")
 
     # ------------------------------------------------------------------
-    # 6. Vertical framing — close_up + medium_close ≥ 40% of scenes
+    # 6. Vertical framing — close_up + medium_close ≥ 50% of scenes
+    #    (real data benchmark: 59% in professional TikTok short dramas)
     # ------------------------------------------------------------------
     for ep_num, script in episode_scripts.items():
         scenes = script.get("scenes", [])
@@ -113,10 +114,25 @@ def validate_western_quality(
             1 for s in scenes if s.get("shot_scale") in ("close_up", "medium_close")
         )
         ratio = close_count / len(scenes)
-        if ratio < 0.4:
+        if ratio < 0.5:
             violations.append(
                 f"Episode {ep_num}: vertical-framing ratio {ratio:.0%} "
-                f"(close_up + medium_close) < 40%"
+                f"(close_up + medium_close) < 50%"
+            )
+
+    # ------------------------------------------------------------------
+    # 6b. Shot density — avg shot duration ≤ 5s (benchmark: 3.7s)
+    # ------------------------------------------------------------------
+    for ep_num, script in episode_scripts.items():
+        scenes = script.get("scenes", [])
+        if not scenes:
+            continue
+        total_duration = sum(s.get("duration_seconds", 0) for s in scenes)
+        avg_shot = total_duration / len(scenes) if scenes else 0
+        if avg_shot > 5.0:
+            violations.append(
+                f"Episode {ep_num}: avg shot duration {avg_shot:.1f}s > 5.0s "
+                f"(benchmark: 3.7s for TikTok pacing)"
             )
 
     # ------------------------------------------------------------------
