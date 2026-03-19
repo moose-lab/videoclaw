@@ -105,6 +105,7 @@ MOCK_EPISODE_SCRIPTS = {
     1: {
         "episode_title": "Welcome to Maple Lane",
         "scenes": [
+            # --- ACT 1: Arrival (hook + setup) ---
             {
                 "scene_id": "ep01_s01",
                 "description": "Moving truck pulls up to a pristine suburban house",
@@ -112,7 +113,7 @@ MOCK_EPISODE_SCRIPTS = {
                 "camera_movement": "dolly_in",
                 "duration_seconds": 3.0,
                 "dialogue": "",
-                "narration": "Maple Lane looked like every street in every suburb in America. That was the point.",
+                "narration": "Maple Lane. Every suburb has one.",
                 "speaking_character": "",
                 "shot_scale": "wide",
                 "shot_type": "establishing",
@@ -125,7 +126,7 @@ MOCK_EPISODE_SCRIPTS = {
                 "description": "Sarah steps out of her car, scanning the neighborhood with trained eyes",
                 "visual_prompt": "Medium close-up of young Caucasian woman with auburn ponytail stepping out of SUV, hazel eyes scanning surroundings with subtle professional assessment, casual flannel shirt, Polaroid camera hanging from neck, suburban background soft focus",
                 "camera_movement": "tracking",
-                "duration_seconds": 4.0,
+                "duration_seconds": 3.5,
                 "dialogue": "",
                 "narration": "",
                 "speaking_character": "",
@@ -137,25 +138,40 @@ MOCK_EPISODE_SCRIPTS = {
             },
             {
                 "scene_id": "ep01_s03",
+                "description": "Sarah's daughter waves from the car window",
+                "visual_prompt": "Close-up of young girl waving excitedly from car window, innocent smile contrasting with Sarah's tension, soft golden light, shallow depth of field, suburban background",
+                "camera_movement": "static",
+                "duration_seconds": 3.5,
+                "dialogue": "Mom, this place is so pretty!",
+                "narration": "",
+                "speaking_character": "Sarah",
+                "shot_scale": "close_up",
+                "shot_type": "reaction",
+                "emotion": "tense",
+                "characters_present": ["Sarah"],
+                "transition": "cut",
+            },
+            {
+                "scene_id": "ep01_s04",
                 "description": "Marcus watches from behind his rose bushes, pruning shears frozen mid-cut",
                 "visual_prompt": "Over-the-shoulder shot through rose bushes, distinguished African-American man in corduroy jacket pausing with pruning shears, watching new neighbor arrive, warm afternoon light filtering through leaves, voyeuristic framing",
                 "camera_movement": "static",
-                "duration_seconds": 4.0,
+                "duration_seconds": 3.0,
                 "dialogue": "",
                 "narration": "",
                 "speaking_character": "",
-                "shot_scale": "medium",
+                "shot_scale": "medium_close",
                 "shot_type": "reaction",
                 "emotion": "suspense",
                 "characters_present": ["Marcus"],
                 "transition": "cut",
             },
             {
-                "scene_id": "ep01_s04",
-                "description": "Sarah catches Marcus watching, their eyes lock",
+                "scene_id": "ep01_s05",
+                "description": "Sarah catches Marcus watching, their eyes lock in silent assessment",
                 "visual_prompt": "Close-up of young Caucasian woman's hazel eyes narrowing with recognition of surveillance, shallow depth of field, subtle shift from casual to alert, golden hour side lighting",
                 "camera_movement": "static",
-                "duration_seconds": 3.0,
+                "duration_seconds": 4.0,
                 "dialogue": "",
                 "narration": "",
                 "speaking_character": "",
@@ -165,13 +181,14 @@ MOCK_EPISODE_SCRIPTS = {
                 "characters_present": ["Sarah", "Marcus"],
                 "transition": "cut",
             },
+            # --- ACT 2: Elena's probe ---
             {
-                "scene_id": "ep01_s05",
+                "scene_id": "ep01_s06",
                 "description": "Elena arrives with a casserole, all smiles",
                 "visual_prompt": "Medium shot of elegant Latina woman in designer sundress carrying casserole dish, walking up driveway with practiced warm smile, pearl earrings catching light, perfectly maintained lawn in background, warm welcoming atmosphere with underlying tension",
                 "camera_movement": "tracking",
-                "duration_seconds": 5.0,
-                "dialogue": "Welcome to Maple Lane! I'm Elena. We take care of each other here.",
+                "duration_seconds": 3.5,
+                "dialogue": "Welcome to Maple Lane! I am Elena. We look out for each other here.",
                 "narration": "",
                 "speaking_character": "Elena",
                 "shot_scale": "medium",
@@ -181,12 +198,12 @@ MOCK_EPISODE_SCRIPTS = {
                 "transition": "cut",
             },
             {
-                "scene_id": "ep01_s06",
-                "description": "Sarah takes the casserole with a smile, noticing Elena's probing questions",
+                "scene_id": "ep01_s07",
+                "description": "Sarah takes the casserole, deflecting with practiced ease",
                 "visual_prompt": "Two-shot of young Caucasian woman and elegant Latina woman on porch, exchanging casserole dish, both smiling but eyes revealing calculation, warm porch light, cinematic shallow focus",
                 "camera_movement": "static",
-                "duration_seconds": 5.0,
-                "dialogue": "That's so kind. We're just looking for somewhere quiet.",
+                "duration_seconds": 4.0,
+                "dialogue": "That is really sweet of you. My daughter and I just needed somewhere quiet to start fresh.",
                 "narration": "",
                 "speaking_character": "Sarah",
                 "shot_scale": "medium_close",
@@ -196,14 +213,60 @@ MOCK_EPISODE_SCRIPTS = {
                 "transition": "cut",
             },
             {
-                "scene_id": "ep01_s07",
+                "scene_id": "ep01_s08",
+                "description": "Elena probes deeper, eyes calculating behind her warm smile",
+                "visual_prompt": "Close-up of elegant Latina woman, dark bob framing calculating brown eyes, pearl earrings glinting, warm smile that does not reach her gaze, soft porch light, intimate framing",
+                "camera_movement": "static",
+                "duration_seconds": 4.0,
+                "dialogue": "Fresh start? You picked the right street. Everyone here has a story. What is yours?",
+                "narration": "",
+                "speaking_character": "Elena",
+                "shot_scale": "close_up",
+                "shot_type": "reaction",
+                "emotion": "tense",
+                "characters_present": ["Sarah", "Elena"],
+                "transition": "cut",
+            },
+            {
+                "scene_id": "ep01_s09",
+                "description": "Sarah deflects with a trained smile, eyes watchful",
+                "visual_prompt": "Close-up of young Caucasian woman with auburn hair, hazel eyes steady and guarded behind a warm smile, Polaroid camera strap visible on neck, golden hour backlighting, thriller atmosphere",
+                "camera_movement": "static",
+                "duration_seconds": 3.5,
+                "dialogue": "Nothing interesting. Just a mom who needed a change of scenery.",
+                "narration": "",
+                "speaking_character": "Sarah",
+                "shot_scale": "close_up",
+                "shot_type": "reaction",
+                "emotion": "defiant",
+                "characters_present": ["Sarah", "Elena"],
+                "transition": "cut",
+            },
+            {
+                "scene_id": "ep01_s10",
+                "description": "Elena glances toward Marcus, a loaded look passes between them",
+                "visual_prompt": "Medium close-up of elegant Latina woman turning to glance at distinguished man in garden across street, subtle knowing look exchanged, split focus composition, late afternoon shadows lengthening",
+                "camera_movement": "static",
+                "duration_seconds": 3.5,
+                "dialogue": "If you need anything let me know. Marcus over there knows everyone on this street.",
+                "narration": "",
+                "speaking_character": "Elena",
+                "shot_scale": "medium_close",
+                "shot_type": "reaction",
+                "emotion": "suspense",
+                "characters_present": ["Sarah", "Elena"],
+                "transition": "cut",
+            },
+            # --- ACT 3: Night revelation ---
+            {
+                "scene_id": "ep01_s11",
                 "description": "Night falls. Sarah unpacks alone, notices light from Marcus's house",
                 "visual_prompt": "Interior shot of dimly lit living room with moving boxes, young Caucasian woman pausing by window, warm lamplight on her face, through window: neighbor's house blazing with light at 3 AM, eerie blue-white glow against dark suburban night",
                 "camera_movement": "dolly_in",
-                "duration_seconds": 5.0,
-                "dialogue": "",
+                "duration_seconds": 4.0,
+                "dialogue": "What is he doing up at three in the morning?",
                 "narration": "",
-                "speaking_character": "",
+                "speaking_character": "Sarah",
                 "shot_scale": "medium",
                 "shot_type": "reaction",
                 "emotion": "suspense",
@@ -211,11 +274,11 @@ MOCK_EPISODE_SCRIPTS = {
                 "transition": "dissolve",
             },
             {
-                "scene_id": "ep01_s08",
-                "description": "A dark SUV pulls into Marcus's driveway, headlights off",
-                "visual_prompt": "Wide shot from high angle of dark suburban street at night, black SUV with headlights off slowly pulling into driveway, single streetlamp casting long shadows, noir atmosphere, ominous composition",
-                "camera_movement": "crane_down",
-                "duration_seconds": 5.0,
+                "scene_id": "ep01_s12",
+                "description": "Marcus's house from the street, every window blazing at 3 AM",
+                "visual_prompt": "Wide establishing shot of suburban house at night, every window lit with harsh fluorescent glow, single streetlamp, dark empty street, noir atmosphere, ominous still composition, blue-black sky",
+                "camera_movement": "static",
+                "duration_seconds": 4.5,
                 "dialogue": "",
                 "narration": "",
                 "speaking_character": "",
@@ -226,7 +289,22 @@ MOCK_EPISODE_SCRIPTS = {
                 "transition": "cut",
             },
             {
-                "scene_id": "ep01_s09",
+                "scene_id": "ep01_s13",
+                "description": "A dark SUV pulls into Marcus's driveway, headlights off",
+                "visual_prompt": "Medium shot of dark suburban driveway, black SUV with headlights off slowly pulling in, single streetlamp casting long shadows, noir atmosphere, ominous composition, engine barely audible",
+                "camera_movement": "crane_down",
+                "duration_seconds": 3.0,
+                "dialogue": "No headlights. They do not want to be seen.",
+                "narration": "",
+                "speaking_character": "Sarah",
+                "shot_scale": "medium",
+                "shot_type": "action",
+                "emotion": "tense",
+                "characters_present": [],
+                "transition": "cut",
+            },
+            {
+                "scene_id": "ep01_s14",
                 "description": "Sarah grabs her Polaroid and snaps a photo from her window",
                 "visual_prompt": "Close-up of hands holding vintage Polaroid camera, flash firing toward dark window, reflection of suburban night scene in lens, dramatic flash illumination, noir thriller atmosphere",
                 "camera_movement": "static",
@@ -241,13 +319,13 @@ MOCK_EPISODE_SCRIPTS = {
                 "transition": "cut",
             },
             {
-                "scene_id": "ep01_s10",
-                "description": "Sarah watches the Polaroid develop, her expression shifts to shock",
-                "visual_prompt": "Extreme close-up of Polaroid photo slowly developing, hand holding photo, face of young Caucasian woman going from curious to shocked reflected in window behind, dark suburban house visible in developing photo with shadowy figure, dramatic low-key lighting",
-                "camera_movement": "static",
-                "duration_seconds": 5.0,
+                "scene_id": "ep01_s15",
+                "description": "The Polaroid develops — a shadowy figure stands behind Marcus",
+                "visual_prompt": "Extreme close-up of Polaroid photo slowly developing, hand holding photo, dark suburban house visible in developing photo with shadowy figure that should not be there, dramatic low-key lighting, unsettling reveal",
+                "camera_movement": "dolly_in",
+                "duration_seconds": 4.5,
                 "dialogue": "",
-                "narration": "The camera sees what the eye can't.",
+                "narration": "The camera sees what the eye refuses to.",
                 "speaking_character": "",
                 "shot_scale": "close_up",
                 "shot_type": "detail",
@@ -256,38 +334,23 @@ MOCK_EPISODE_SCRIPTS = {
                 "transition": "cut",
             },
             {
-                "scene_id": "ep01_s11",
-                "description": "Close on the developed Polaroid — a figure stands behind Marcus, invisible to the naked eye",
-                "visual_prompt": "Insert shot of developed Polaroid photograph, suburban house at night, silhouette of distinguished man visible, but behind him a second shadowy figure that should not be there, unsettling uncanny atmosphere, dramatic vignette",
-                "camera_movement": "dolly_in",
-                "duration_seconds": 5.0,
-                "dialogue": "",
-                "narration": "",
-                "speaking_character": "",
-                "shot_scale": "close_up",
-                "shot_type": "detail",
-                "emotion": "revelation",
-                "characters_present": [],
-                "transition": "cut",
-            },
-            {
-                "scene_id": "ep01_s12",
+                "scene_id": "ep01_s16",
                 "description": "Sarah's face in the dark, lit only by streetlight, eyes calculating",
                 "visual_prompt": "Close-up portrait of young Caucasian woman's face half-lit by streetlight from window, auburn hair loose, hazel eyes intense and calculating, Polaroid clutched to chest, dark room, cinematic chiaroscuro lighting, thriller atmosphere",
                 "camera_movement": "static",
-                "duration_seconds": 12.0,
+                "duration_seconds": 4.5,
                 "dialogue": "",
-                "narration": "Some neighbors bring casseroles. Some bring secrets. Sarah brought both.",
+                "narration": "Some secrets park in the driveway at three AM.",
                 "speaking_character": "",
                 "shot_scale": "close_up",
                 "shot_type": "reaction",
-                "emotion": "defiant",
+                "emotion": "revelation",
                 "characters_present": ["Sarah"],
                 "transition": "fade_out",
             },
         ],
         "voice_over": {
-            "text": "Maple Lane looked like every street in every suburb in America. That was the point. The camera sees what the eye can't. Some neighbors bring casseroles. Some bring secrets. Sarah brought both.",
+            "text": "Maple Lane. Every suburb has one. The camera sees what the eye refuses to. Some secrets park in the driveway at three AM.",
             "tone": "suspenseful",
             "language": "en",
         },
@@ -474,7 +537,9 @@ async def test_e2e_western_full_pipeline(tmp_path):
 
 @pytest.mark.asyncio
 async def test_e2e_episode1_western_quality():
-    """Episode 1 detailed mock should pass Western quality checks."""
+    """Episode 1 detailed mock should pass ALL Western quality checks including
+    the 6 data-driven TikTok benchmarks: close-up ratio, shot density,
+    avg shot duration, dialogue density, V.O. share, setup shot duration."""
 
     mock_llm = AsyncMock()
     mock_llm.chat = AsyncMock(
@@ -491,36 +556,88 @@ async def test_e2e_episode1_western_quality():
 
     script_data = await planner.script_episode(series, episode)
 
+    scenes = episode.scenes
+    total_duration = sum(s.duration_seconds for s in scenes)
+    n_scenes = len(scenes)
+
     # Sufficient scenes for 60s
-    assert len(episode.scenes) >= 8
+    assert n_scenes >= 8
 
     # Duration validation
-    total = sum(s.duration_seconds for s in episode.scenes)
-    assert abs(total - 60.0) <= 5.0, f"Total {total}s deviates >5s from 60s target"
+    assert abs(total_duration - 60.0) <= 5.0, f"Total {total_duration}s deviates >5s from 60s target"
 
-    # Close-up ratio ≥ 40% (vertical framing)
+    # ----- Benchmark 1: Close-up ratio >= 50% (real benchmark: 59%) -----
     close_count = sum(
-        1 for s in episode.scenes
+        1 for s in scenes
         if s.shot_scale in (ShotScale.CLOSE_UP, ShotScale.MEDIUM_CLOSE)
     )
-    ratio = close_count / len(episode.scenes)
-    assert ratio >= 0.5, f"Close-up ratio {ratio:.0%} < 50% (benchmark: 59%)"
+    close_ratio = close_count / n_scenes
+    assert close_ratio >= 0.5, (
+        f"Close-up ratio {close_ratio:.0%} < 50% (benchmark: 59%)"
+    )
 
-    # First scene ≤ 5s (scroll-stopping hook)
-    assert episode.scenes[0].duration_seconds <= 5.0
+    # ----- Benchmark 2: Shot density 15-20 shots/60s (real benchmark: 16.2/min) -----
+    shots_per_minute = n_scenes * 60.0 / total_duration
+    assert 15.0 <= shots_per_minute <= 20.0, (
+        f"Shot density {shots_per_minute:.1f} shots/min outside 15-20 range "
+        f"(benchmark: 16.2/min)"
+    )
+
+    # ----- Benchmark 3: Avg shot duration <= 5.0s (real benchmark: 3.7s) -----
+    avg_shot_duration = total_duration / n_scenes
+    assert avg_shot_duration <= 5.0, (
+        f"Avg shot duration {avg_shot_duration:.1f}s > 5.0s "
+        f"(benchmark: 3.7s for TikTok pacing)"
+    )
+
+    # ----- Benchmark 4: Dialogue density <= 100 words/60s (real benchmark: 98w/min) -----
+    total_dialogue_words = sum(
+        len(s.dialogue.split()) for s in scenes if s.dialogue
+    )
+    dialogue_limit = int(100 * total_duration / 60)
+    assert total_dialogue_words <= dialogue_limit, (
+        f"Dialogue density {total_dialogue_words} words exceeds limit of "
+        f"{dialogue_limit} words for {total_duration:.0f}s episode "
+        f"(benchmark: ~98w/min)"
+    )
+
+    # ----- Benchmark 5: V.O. share <= 20% (real benchmark: 19%) -----
+    total_narration_words = sum(
+        len(s.narration.split()) for s in scenes if s.narration
+    )
+    total_spoken_words = total_dialogue_words + total_narration_words
+    if total_spoken_words > 0:
+        vo_share = total_narration_words / total_spoken_words
+        assert vo_share <= 0.20, (
+            f"V.O. share {vo_share:.0%} > 20% "
+            f"(narration={total_narration_words}, dialogue={total_dialogue_words}, "
+            f"benchmark: 19%)"
+        )
+
+    # ----- Benchmark 6: Setup shot duration 4-6s -----
+    # Setup shots = non-hook establishing/wide shots (skip scene 0 which is the hook)
+    for s in scenes[1:]:
+        if s.shot_type == ShotType.ESTABLISHING and s.shot_scale == ShotScale.WIDE:
+            assert 4.0 <= s.duration_seconds <= 6.0, (
+                f"Setup shot {s.scene_id} duration {s.duration_seconds}s "
+                f"outside 4-6s range for establishing shots"
+            )
+
+    # First scene <= 5s (scroll-stopping hook)
+    assert scenes[0].duration_seconds <= 5.0
 
     # Has cliffhanger
     assert script_data.get("cliffhanger")
     assert len(script_data["cliffhanger"]) > 10
 
     # Emotion diversity
-    emotions = {s.emotion for s in episode.scenes if s.emotion}
-    assert len(emotions) >= 3, f"Only {len(emotions)} distinct emotions, need ≥3"
+    emotions = {s.emotion for s in scenes if s.emotion}
+    assert len(emotions) >= 3, f"Only {len(emotions)} distinct emotions, need >= 3"
 
     # No CJK in any visual prompt
     import re
     cjk_re = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf]")
-    for scene in episode.scenes:
+    for scene in scenes:
         assert not cjk_re.search(scene.visual_prompt), \
             f"Scene {scene.scene_id} has CJK in visual_prompt"
 
@@ -528,9 +645,122 @@ async def test_e2e_episode1_western_quality():
     assert script_data["voice_over"]["language"] == "en"
 
     # speaking_character consistency
-    for scene in episode.scenes:
+    for scene in scenes:
         if scene.speaking_character:
             assert scene.speaking_character in scene.characters_present or not scene.characters_present
+
+
+def test_e2e_all_data_driven_benchmarks():
+    """Validate ALL 6 data-driven parameters from real TikTok short drama data.
+
+    Uses the mock episode 1 data directly (no LLM) to verify that:
+    1. validate_western_quality() returns ZERO violations
+    2. Each of the 6 benchmarks is explicitly checked with descriptive messages
+
+    Source benchmarks (TikTok海外拟真人短剧试稿):
+        close-up ratio:     >= 50%          (real: 59%)
+        shot density:       15-20 shots/60s (real: 16.2/min)
+        avg shot duration:  <= 5.0s         (real: 3.7s)
+        dialogue density:   <= 100w/60s     (real: 98w/min)
+        V.O. share:         <= 20%          (real: 19%)
+        setup shot duration: 4-6s           (real pacing)
+    """
+    # --- Build series + run the quality validator ---
+    series = DramaSeries(
+        title="The Neighbor",
+        language="en",
+        synopsis="When Sarah moves into a quiet suburb she notices her neighbor never sleeps and discovers the whole neighborhood is hiding a dark corporate conspiracy beneath its perfect facade",
+        characters=[
+            Character(
+                name="Sarah",
+                description="Friendly single mom but secretly a former CIA analyst",
+            ),
+            Character(
+                name="Marcus",
+                description="Charming professor but actually a former asset runner",
+            ),
+        ],
+    )
+    scripts = {1: MOCK_EPISODE_SCRIPTS[1]}
+
+    # Validator gate: zero violations means the mock is production-quality
+    violations = validate_western_quality(series, scripts)
+    assert not violations, (
+        f"validate_western_quality() reported {len(violations)} violation(s) "
+        f"on benchmark mock data:\n" + "\n".join(f"  - {v}" for v in violations)
+    )
+
+    # --- Manual benchmark checks on raw scene dicts ---
+    scenes = MOCK_EPISODE_SCRIPTS[1]["scenes"]
+    n_scenes = len(scenes)
+    total_duration = sum(s["duration_seconds"] for s in scenes)
+
+    # Benchmark 1: Close-up ratio >= 50% (real: 59%)
+    close_count = sum(
+        1 for s in scenes
+        if s.get("shot_scale") in ("close_up", "medium_close")
+    )
+    close_ratio = close_count / n_scenes
+    assert close_ratio >= 0.50, (
+        f"[Benchmark 1] Close-up ratio {close_ratio:.0%} < 50% "
+        f"({close_count}/{n_scenes} close/medium_close scenes, benchmark: 59%)"
+    )
+
+    # Benchmark 2: Shot density 15-20 shots per 60 seconds (real: 16.2/min)
+    shots_per_minute = n_scenes * 60.0 / total_duration
+    assert 15.0 <= shots_per_minute <= 20.0, (
+        f"[Benchmark 2] Shot density {shots_per_minute:.1f} shots/min "
+        f"outside 15-20 range ({n_scenes} scenes in {total_duration:.0f}s, "
+        f"benchmark: 16.2/min)"
+    )
+
+    # Benchmark 3: Avg shot duration <= 5.0s (real: 3.7s)
+    avg_shot = total_duration / n_scenes
+    assert avg_shot <= 5.0, (
+        f"[Benchmark 3] Avg shot duration {avg_shot:.1f}s > 5.0s "
+        f"(benchmark: 3.7s for TikTok pacing)"
+    )
+
+    # Benchmark 4: Dialogue density <= 100 words per 60 seconds (real: ~98w/min)
+    total_dialogue_words = sum(
+        len(s.get("dialogue", "").split())
+        for s in scenes if s.get("dialogue")
+    )
+    dialogue_limit = int(100 * total_duration / 60)
+    assert total_dialogue_words <= dialogue_limit, (
+        f"[Benchmark 4] Dialogue density {total_dialogue_words} words "
+        f"> {dialogue_limit} limit for {total_duration:.0f}s episode "
+        f"(benchmark: ~98w/min)"
+    )
+
+    # Benchmark 5: V.O. share <= 20% of total spoken words (real: 19%)
+    total_narration_words = sum(
+        len(s.get("narration", "").split())
+        for s in scenes if s.get("narration")
+    )
+    total_spoken = total_dialogue_words + total_narration_words
+    assert total_spoken > 0, "Mock data must have spoken words"
+    vo_share = total_narration_words / total_spoken
+    assert vo_share <= 0.20, (
+        f"[Benchmark 5] V.O. share {vo_share:.0%} > 20% "
+        f"(narration={total_narration_words}w, dialogue={total_dialogue_words}w, "
+        f"total={total_spoken}w, benchmark: 19%)"
+    )
+
+    # Benchmark 6: Setup shot duration 4-6s for non-hook establishing shots
+    # (scene 0 is the hook and is exempt; check remaining establishing/wide shots)
+    setup_shots = [
+        s for s in scenes[1:]
+        if s.get("shot_type") == "establishing" and s.get("shot_scale") == "wide"
+    ]
+    assert len(setup_shots) >= 1, (
+        "[Benchmark 6] No setup shots (establishing + wide) found after the hook"
+    )
+    for s in setup_shots:
+        assert 4.0 <= s["duration_seconds"] <= 6.0, (
+            f"[Benchmark 6] Setup shot {s['scene_id']} duration "
+            f"{s['duration_seconds']}s outside 4-6s range (real TikTok pacing)"
+        )
 
 
 def test_western_quality_validator_direct():

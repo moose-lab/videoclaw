@@ -188,6 +188,27 @@ def validate_western_quality(
                     f"visual_prompt contains CJK characters (must be English)"
                 )
 
+    # ------------------------------------------------------------------
+    # 11. V.O. ratio — narration ≤ 20% of total spoken words
+    #     (real data benchmark: 19% in professional TikTok short dramas)
+    # ------------------------------------------------------------------
+    for ep_num, script in episode_scripts.items():
+        scenes = script.get("scenes", [])
+        dialogue_words = sum(
+            len(s.get("dialogue", "").split()) for s in scenes
+        )
+        narration_words = sum(
+            len(s.get("narration", "").split()) for s in scenes
+        )
+        total_spoken = dialogue_words + narration_words
+        if total_spoken > 0:
+            ratio = narration_words / total_spoken
+            if ratio > 0.20:
+                violations.append(
+                    f"Episode {ep_num}: V.O. ratio {ratio:.0%} exceeds "
+                    f"20% limit (benchmark: 19%)"
+                )
+
     return violations
 
 

@@ -59,7 +59,8 @@ def _make_western_episode_scripts(
     first_scene_duration: float = 4.0,
     include_cliffhanger: bool = True,
     cjk_in_visual: bool = False,
-    dialogue_words: int = 10,
+    dialogue_words: int = 30,
+    narration_text: str | None = None,
 ) -> dict[int, dict]:
     """Build a minimal 1-episode scripts dict that passes all Western rules by default."""
     visual = "Dimly lit office, woman in leather jacket standing over a desk of files, dramatic shadows"
@@ -70,6 +71,7 @@ def _make_western_episode_scripts(
     characters_present = ["Elena Cross"]
 
     dialogue_text = " ".join(["word"] * dialogue_words)
+    scene1_narration = narration_text if narration_text is not None else "She had been running for three years."
 
     scenes = [
         # Scene 1 — hook (≤5s)
@@ -80,7 +82,7 @@ def _make_western_episode_scripts(
             "camera_movement": "dolly_in",
             "duration_seconds": first_scene_duration,
             "dialogue": "",
-            "narration": "She had been running for three years.",
+            "narration": scene1_narration,
             "speaking_character": "",
             "shot_scale": "close_up",
             "shot_type": "detail",
@@ -354,7 +356,7 @@ class TestValidateWesternQuality:
         assert any("dialogue density" in v.lower() for v in violations), violations
 
     def test_dialogue_within_limit_passes(self):
-        scripts = _make_western_episode_scripts(dialogue_words=5)
+        scripts = _make_western_episode_scripts(dialogue_words=5, narration_text="")
         violations = validate_western_quality(_make_western_series(), scripts)
         assert not any("dialogue density" in v.lower() for v in violations), violations
 
@@ -375,6 +377,36 @@ class TestValidateWesternQuality:
         scripts = _make_western_episode_scripts(cjk_in_visual=False)
         violations = validate_western_quality(_make_western_series(), scripts)
         assert not any("CJK" in v for v in violations), violations
+
+    # Rule 11: V.O. ratio — narration ≤ 20% of total spoken words
+    def test_vo_at_exactly_20_percent_passes(self):
+        # 8 narration words, 32 dialogue words → 8/40 = 20%, should pass
+        scripts = _make_western_episode_scripts(
+            dialogue_words=32,
+            narration_text="one two three four five six seven eight",
+        )
+        violations = validate_western_quality(_make_western_series(), scripts)
+        assert not any("V.O. ratio" in v for v in violations), violations
+
+    def test_vo_at_25_percent_triggers_violation(self):
+        # 10 narration words, 30 dialogue words → 10/40 = 25%, should fail
+        scripts = _make_western_episode_scripts(
+            dialogue_words=30,
+            narration_text="one two three four five six seven eight nine ten",
+        )
+        violations = validate_western_quality(_make_western_series(), scripts)
+        assert any("V.O. ratio" in v for v in violations), violations
+
+    def test_vo_no_narration_passes(self):
+        scripts = _make_western_episode_scripts(narration_text="")
+        violations = validate_western_quality(_make_western_series(), scripts)
+        assert not any("V.O. ratio" in v for v in violations), violations
+
+    def test_vo_all_silent_scenes_passes(self):
+        # No dialogue, no narration → total_spoken == 0 → skip check
+        scripts = _make_western_episode_scripts(dialogue_words=0, narration_text="")
+        violations = validate_western_quality(_make_western_series(), scripts)
+        assert not any("V.O. ratio" in v for v in violations), violations
 
 
 # ===========================================================================
