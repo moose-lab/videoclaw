@@ -27,7 +27,7 @@ _WESTERN_STRONG_EMOTIONS = frozenset({
 # Chinese strong-emotion keywords (爽点) for 爽点密度 check
 _CHINESE_STRONG_EMOTIONS = frozenset({
     "triumphant", "smug", "vindicated", "shock", "revelation", "defiant",
-    "shocked", "furious", "vindicated",
+    "shocked", "furious", "outraged",
 })
 
 # Duality keywords for English character-duality check
@@ -133,7 +133,8 @@ def validate_western_quality(
                 )
 
     # ------------------------------------------------------------------
-    # 8. Dialogue density — ≤40 English words per 60 seconds of episode
+    # 8. Dialogue density — ≤100 English dialogue words per 60 seconds
+    #    (prompt allows ~150 total spoken words including narration)
     # ------------------------------------------------------------------
     for ep_num, script in episode_scripts.items():
         scenes = script.get("scenes", [])
@@ -141,7 +142,7 @@ def validate_western_quality(
         total_words = sum(
             len(s.get("dialogue", "").split()) for s in scenes
         )
-        limit = int(40 * total_duration / 60)
+        limit = int(100 * total_duration / 60)
         if total_words > limit:
             violations.append(
                 f"Episode {ep_num}: dialogue density {total_words} words "

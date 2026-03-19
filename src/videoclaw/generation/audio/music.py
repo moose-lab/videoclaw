@@ -97,30 +97,3 @@ class MusicManager:
             output_path=output_path,
         )
 
-    async def generate_music(
-        self,
-        duration_seconds: float,
-        genre: str = "",
-        output_dir: Path | None = None,
-    ) -> Path:
-        """Generate a background music track and return its path.
-
-        Args:
-            duration_seconds: Length of the track to generate.
-            genre: Optional genre hint; mapped to *mood* for the underlying provider.
-            output_dir: Directory in which to place the output file.
-                        If *None* a default path under the system temp dir is used.
-        """
-        if output_dir is not None:
-            output_dir.mkdir(parents=True, exist_ok=True)
-            output_path = output_dir / "bgm.mp3"
-        else:
-            import tempfile
-            output_path = Path(tempfile.mktemp(suffix=".mp3"))
-
-        return await self._provider.generate(
-            mood=genre,
-            style="",
-            duration_seconds=duration_seconds,
-            output_path=output_path,
-        )

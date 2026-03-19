@@ -609,15 +609,18 @@ class TestMusicHandler:
 
         # Mock MusicManager to avoid ffmpeg dependency
         mock_manager = AsyncMock()
-        mock_manager.generate_music.return_value = tmp_path / "bgm.mp3"
-        (tmp_path / "bgm.mp3").write_bytes(b"fake")
+        music_file = tmp_path / state.project_id / "audio" / "bgm.aac"
+        music_file.parent.mkdir(parents=True, exist_ok=True)
+        music_file.write_bytes(b"fake")
+        mock_manager.generate_bgm.return_value = music_file
 
         with patch("videoclaw.generation.audio.music.MusicManager", return_value=mock_manager):
             result = await executor._handle_music(node, state)
 
+        mock_manager.generate_bgm.assert_called_once()
         assert "music_path" in result
         assert result["duration"] == 5.0
-        assert "music" in state.assets
+        assert state.assets["music"] == str(music_file)
 
 
 # ---------------------------------------------------------------------------
