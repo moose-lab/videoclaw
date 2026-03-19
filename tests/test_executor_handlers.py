@@ -595,17 +595,29 @@ class TestSubtitleGenHandler:
 
 class TestMusicHandler:
     @pytest.mark.asyncio
-    async def test_music_skips_gracefully(self, tmp_path):
+    async def test_music_generates_track(self, tmp_path):
         sm = StateManager(projects_dir=tmp_path)
         state = ProjectState(prompt="test")
+        state.storyboard = [
+            Shot(shot_id="s1", prompt="test", duration_seconds=5.0),
+        ]
         dag = DAG()
         node = TaskNode(node_id="music", task_type=TaskType.MUSIC)
         dag.add_node(node)
 
         executor = DAGExecutor(dag=dag, state=state, state_manager=sm)
-        result = await executor._handle_music(node, state)
 
-        assert result["status"] == "skipped"
+        # Mock MusicManager to avoid ffmpeg dependency
+        mock_manager = AsyncMock()
+        mock_manager.generate_music.return_value = tmp_path / "bgm.mp3"
+        (tmp_path / "bgm.mp3").write_bytes(b"fake")
+
+        with patch("videoclaw.generation.audio.music.MusicManager", return_value=mock_manager):
+            result = await executor._handle_music(node, state)
+
+        assert "music_path" in result
+        assert result["duration"] == 5.0
+        assert "music" in state.assets
 
 
 # ---------------------------------------------------------------------------

@@ -610,6 +610,7 @@ class DAGExecutor:
         # Extract character colors from metadata
         character_colors: dict[str, str] | None = state.metadata.get("character_colors")
         title = state.metadata.get("series_id", "Untitled")
+        language = state.metadata.get("language", "zh")
 
         sub_gen = SubtitleGenerator()
 
@@ -622,6 +623,7 @@ class DAGExecutor:
                 audio_manifest=audio_manifest,
                 character_colors=character_colors,
                 title=title,
+                language=language,
             )
         except Exception:
             logger.warning("[subtitle_gen] ASS generation failed, falling back to SRT")
@@ -630,6 +632,7 @@ class DAGExecutor:
                 scenes,
                 subtitle_path,
                 audio_manifest=audio_manifest,
+                language=language,
             )
 
         state.assets["subtitles"] = str(subtitle_path)
@@ -637,10 +640,39 @@ class DAGExecutor:
         return {"subtitle_path": str(subtitle_path), "segments_used": len(all_segments)}
 
     async def _handle_music(self, node: TaskNode, state: ProjectState) -> Any:
-        """Background music generation (placeholder — no music API integrated yet)."""
-        logger.info("[music] No music API configured, skipping BGM generation")
-        state.assets["music"] = ""
-        return {"status": "skipped", "reason": "no_music_api"}
+        """Generate background music track for the episode."""
+        from pathlib import Path
+
+        from videoclaw.generation.audio.music import MusicManager
+
+        project_dir = Path(self._config.projects_dir) / state.project_id
+        music_dir = project_dir / "audio"
+        music_dir.mkdir(parents=True, exist_ok=True)
+
+        # Extract music params from node or defaults
+        mood = node.params.get("mood", "neutral")
+        style = node.params.get("style", "orchestral")
+
+        # Calculate total duration from storyboard
+        duration = sum(s.duration_seconds for s in state.storyboard) if state.storyboard else 60.0
+
+        output_path = music_dir / "bgm.aac"
+        manager = MusicManager()
+
+        try:
+            path = await manager.generate_bgm(
+                mood=mood,
+                style=style,
+                duration_seconds=duration,
+                output_path=output_path,
+            )
+            state.assets["music"] = str(path)
+            logger.info("[music] Generated BGM -> %s", path)
+            return {"music_path": str(path), "duration": duration}
+        except Exception as exc:
+            logger.warning("[music] BGM generation failed: %s, skipping", exc)
+            state.assets["music"] = ""
+            return {"status": "skipped", "reason": str(exc)}
 
     async def _handle_compose(self, node: TaskNode, state: ProjectState) -> Any:
         """Compose video clips + audio + subtitles into a single timeline.
@@ -722,6 +754,15 @@ class DAGExecutor:
                             type=AudioType.VOICE,
                             volume=0.9,
                         ))
+
+        # Add music track if available
+        music_path_str = state.assets.get("music", "")
+        if music_path_str and Path(music_path_str).exists():
+            audio_tracks.append(AudioTrack(
+                path=Path(music_path_str),
+                type=AudioType.MUSIC,
+                volume=0.3,  # BGM lower than dialogue
+            ))
 
         # 5. Final render: audio mix + subtitle burn
         output_path = project_dir / "composed_final.mp4"

@@ -497,15 +497,27 @@ def recommend_voice_style(genre: DramaGenre | str, archetype: str = "default") -
     return mapping.get(archetype, mapping.get("default", "warm"))
 
 
-def assign_voice_profile(character: Character) -> Character:
+def assign_voice_profile(character: Character, language: str = "zh") -> Character:
     """Auto-assign a VoiceProfile based on character.voice_style.
 
     Skips characters that already have a voice_profile set.
     Falls back to 'warm' profile if voice_style is unknown.
+
+    When *language* is not ``"zh"``, voice profiles are looked up from the
+    corresponding locale registry instead of the module-level VOICE_PROFILES
+    dict.
     """
     if character.voice_profile is not None:
         return character
-    template = VOICE_PROFILES.get(character.voice_style, VOICE_PROFILES["warm"])
+
+    if language != "zh":
+        from videoclaw.drama.locale import get_locale  # local import to avoid circular
+        locale = get_locale(language)
+        profiles = locale.voice_profiles if locale.voice_profiles else VOICE_PROFILES
+    else:
+        profiles = VOICE_PROFILES
+
+    template = profiles.get(character.voice_style, profiles.get("warm", VOICE_PROFILES["warm"]))
     character.voice_profile = VoiceProfile(
         voice_id=template.voice_id,
         speed=template.speed,

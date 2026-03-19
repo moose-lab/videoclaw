@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 CHARACTER_IMAGE_PROMPT = """\
 {appearance}
 
-Style: {style} Chinese drama character portrait, modern Asian aesthetics
+Style: {style_line}
 Framing: upper body portrait, facing slightly left, neutral gray background
 Expression: neutral, calm
 Lighting: soft studio lighting, even illumination
@@ -71,9 +71,14 @@ class CharacterDesigner:
 
         Skips characters that already have a reference_image unless *force* is True.
         """
+        from videoclaw.drama.locale import get_locale
+
         gen = self._ensure_generator()
         char_dir = self._char_dir(series.series_id)
         style = series.style or "cinematic"
+
+        locale = get_locale(series.language)
+        style_line = locale.character_image_style.format(style=style)
 
         for character in series.characters:
             if character.reference_image and not force:
@@ -83,7 +88,7 @@ class CharacterDesigner:
             appearance = clean_visual_prompt(character.visual_prompt)
             prompt = CHARACTER_IMAGE_PROMPT.format(
                 appearance=appearance,
-                style=style,
+                style_line=style_line,
             )
 
             safe_name = re.sub(r"[^\w\-]", "_", character.name).strip("_")

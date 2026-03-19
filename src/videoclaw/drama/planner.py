@@ -244,9 +244,12 @@ class DramaPlanner:
             f"Language: {series.language}\n"
         )
 
+        from videoclaw.drama.locale import get_locale
+        locale = get_locale(series.language)
+        prompt = locale.series_outline_prompt or SERIES_OUTLINE_PROMPT
         raw = await llm.chat(
             messages=[
-                {"role": "system", "content": SERIES_OUTLINE_PROMPT},
+                {"role": "system", "content": prompt},
                 {"role": "user", "content": user_message},
             ],
         )
@@ -319,9 +322,12 @@ class DramaPlanner:
             f"Target duration: {episode.duration_seconds} seconds\n"
         )
 
+        from videoclaw.drama.locale import get_locale
+        locale = get_locale(series.language)
+        prompt = locale.episode_script_prompt or EPISODE_SCRIPT_PROMPT
         raw = await llm.chat(
             messages=[
-                {"role": "system", "content": EPISODE_SCRIPT_PROMPT},
+                {"role": "system", "content": prompt},
                 {"role": "user", "content": user_message},
             ],
         )

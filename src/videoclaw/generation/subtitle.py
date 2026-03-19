@@ -13,6 +13,9 @@ logger = logging.getLogger(__name__)
 # Chinese punctuation marks suitable for line-break points
 _ZH_PUNCTUATION = re.compile(r"([，。！？、；])")
 
+# English punctuation marks suitable for line-break points
+_EN_PUNCTUATION = re.compile(r"([,\.!?;:\-\u2014])")
+
 
 def _format_srt_time(seconds: float) -> str:
     """Convert seconds to SRT timestamp format (HH:MM:SS,mmm)."""
@@ -80,6 +83,7 @@ class SubtitleGenerator:
         *,
         include_narration: bool = False,
         audio_manifest: dict[str, Any] | None = None,
+        language: str = "zh",
     ) -> Path:
         """Generate SRT subtitles.
 
@@ -90,6 +94,15 @@ class SubtitleGenerator:
         entries: list[str] = []
         current_time = 0.0
         index = 1
+
+        # Resolve locale-specific settings for non-Chinese languages
+        split_strategy = "char"
+        max_chars = 20
+        if language != "zh":
+            from videoclaw.drama.locale import get_locale
+            locale = get_locale(language)
+            split_strategy = locale.subtitle_config.line_break_strategy
+            max_chars = locale.subtitle_config.max_chars_per_line
 
         for scene in scenes:
             dialogue = scene.get("dialogue", "").strip()
@@ -109,9 +122,12 @@ class SubtitleGenerator:
                 start = current_time
                 end = current_time + duration
 
-                display_text = f"{character}\uff1a{text}" if character else text
+                colon = "\uff1a" if language == "zh" else ": "
+                display_text = f"{character}{colon}{text}" if character else text
                 # Apply line splitting for SRT (use \n)
-                display_text = self.split_long_text(display_text, line_break="\n")
+                display_text = self.split_long_text(
+                    display_text, max_chars=max_chars, line_break="\n", strategy=split_strategy
+                )
 
                 entries.append(
                     f"{index}\n"
@@ -144,6 +160,7 @@ class SubtitleGenerator:
         font_name: str = "Microsoft YaHei",
         font_size: int = 20,
         title: str = "Untitled",
+        language: str = "zh",
     ) -> Path:
         """Generate ASS (Advanced SubStation Alpha) subtitles.
 
@@ -155,6 +172,17 @@ class SubtitleGenerator:
         """
         output_path = Path(output_path)
         character_colors = character_colors or {}
+
+        # Resolve locale-specific settings for non-Chinese languages
+        split_strategy = "char"
+        max_chars = 20
+        if language != "zh":
+            from videoclaw.drama.locale import get_locale
+            locale = get_locale(language)
+            font_name = locale.subtitle_config.font_name
+            font_size = locale.subtitle_config.font_size
+            split_strategy = locale.subtitle_config.line_break_strategy
+            max_chars = locale.subtitle_config.max_chars_per_line
 
         # Build dynamic per-character styles
         char_styles: dict[str, str] = {}
@@ -218,14 +246,14 @@ class SubtitleGenerator:
             # Dialogue line
             if dialogue:
                 style = char_styles.get(character, "Default")
-                text = self.split_long_text(dialogue, line_break="\\N")
+                text = self.split_long_text(dialogue, max_chars=max_chars, line_break="\\N", strategy=split_strategy)
                 events.append(
                     f"Dialogue: 0,{start_ts},{end_ts},{style},{character},0,0,0,,{text}"
                 )
 
             # Narration line (only if include_narration, or if no dialogue)
             if narration and (include_narration or not dialogue):
-                text = self.split_long_text(narration, line_break="\\N")
+                text = self.split_long_text(narration, max_chars=max_chars, line_break="\\N", strategy=split_strategy)
                 events.append(
                     f"Dialogue: 0,{start_ts},{end_ts},Narration,,0,0,0,,{text}"
                 )
@@ -244,16 +272,28 @@ class SubtitleGenerator:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def split_long_text(text: str, max_chars: int = 20, *, line_break: str = "\\N") -> str:
+    def split_long_text(
+        text: str,
+        max_chars: int = 20,
+        *,
+        line_break: str = "\\N",
+        strategy: str = "char",  # "char" for Chinese, "word" for English
+    ) -> str:
         """Split long text into multiple lines at natural break points.
 
-        For Chinese text, split at punctuation marks or at *max_chars*
-        boundary.  Returns text with the given *line_break* separator
+        For Chinese text (strategy="char"), split at punctuation marks or at
+        *max_chars* boundary.  For English text (strategy="word"), split at
+        word boundaries and English punctuation, never breaking mid-word.
+        Returns text with the given *line_break* separator
         (``\\N`` for ASS, ``\\n`` for SRT).
         """
         if len(text) <= max_chars:
             return text
 
+        if strategy == "word":
+            return SubtitleGenerator._split_word_strategy(text, max_chars, line_break)
+
+        # --- char strategy (Chinese, default) ---
         # Try splitting at Chinese punctuation first
         parts = _ZH_PUNCTUATION.split(text)
         # Re-attach punctuation to the preceding segment
@@ -298,6 +338,71 @@ class SubtitleGenerator:
 
         return line_break.join(final_lines)
 
+    @staticmethod
+    def _split_word_strategy(text: str, max_chars: int, line_break: str) -> str:
+        """Word-based splitting for English text.
+
+        1. Split at English punctuation first, keeping punctuation with preceding text.
+        2. Merge segments into lines respecting max_chars.
+        3. If a segment is still too long, split at word boundaries (spaces).
+        4. Never break mid-word.
+        """
+        # Step 1: split at English punctuation, re-attaching punctuation to preceding text
+        parts = _EN_PUNCTUATION.split(text)
+        segments: list[str] = []
+        i = 0
+        while i < len(parts):
+            seg = parts[i]
+            if i + 1 < len(parts) and _EN_PUNCTUATION.fullmatch(parts[i + 1]):
+                seg += parts[i + 1]
+                i += 2
+            else:
+                i += 1
+            seg = seg.strip()
+            if seg:
+                segments.append(seg)
+
+        if not segments:
+            segments = [text]
+
+        # Step 2: merge segments into lines respecting max_chars
+        lines: list[str] = []
+        current_line = ""
+        for seg in segments:
+            if not current_line:
+                current_line = seg
+            elif len(current_line) + 1 + len(seg) <= max_chars:
+                current_line += " " + seg
+            else:
+                lines.append(current_line)
+                current_line = seg
+
+        if current_line:
+            lines.append(current_line)
+
+        # Step 3: if any line is still too long, split at word boundaries
+        final_lines: list[str] = []
+        for line in lines:
+            if len(line) <= max_chars:
+                final_lines.append(line)
+            else:
+                # Split at word boundaries
+                words = line.split(" ")
+                current = ""
+                for word in words:
+                    if not current:
+                        current = word
+                    elif len(current) + 1 + len(word) <= max_chars:
+                        current += " " + word
+                    else:
+                        if current:
+                            final_lines.append(current)
+                        current = word
+                if current:
+                    final_lines.append(current)
+
+        return line_break.join(final_lines) if final_lines else text
+
 
 # ------------------------------------------------------------------
 # Backward-compatible free function
@@ -309,6 +414,7 @@ def generate_srt(
     *,
     include_narration: bool = False,
     audio_manifest: dict[str, Any] | None = None,
+    language: str = "zh",
 ) -> Path:
     """Generate an SRT subtitle file from drama scene data.
 
@@ -328,6 +434,9 @@ def generate_srt(
         there is no dialogue for a scene.
     audio_manifest:
         Optional EpisodeAudioManifest dict for accurate timing.
+    language:
+        Language code (e.g. ``"zh"`` or ``"en"``).  Controls colon
+        character, font, and line-breaking strategy.
 
     Returns
     -------
@@ -339,4 +448,5 @@ def generate_srt(
         output_path,
         include_narration=include_narration,
         audio_manifest=audio_manifest,
+        language=language,
     )

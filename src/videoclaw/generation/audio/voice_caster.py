@@ -136,18 +136,27 @@ class VoiceCaster:
     # Public API
     # ------------------------------------------------------------------
 
-    async def analyze_genre(self, script_text: str) -> DramaGenre:
+    async def analyze_genre(self, script_text: str, language: str = "zh") -> DramaGenre:
         """Classify the drama genre from script text using LLM.
 
         Returns a :class:`DramaGenre` enum value. Falls back to
         ``DramaGenre.OTHER`` if the LLM returns an unrecognised genre.
+
+        *language* selects the locale (and thus the system prompt language).
         """
         llm = self._ensure_llm()
+        from videoclaw.drama.locale import get_locale
+        locale = get_locale(language)
+
+        if language == "zh":
+            user_message = f"剧本文本:\n{script_text}"
+        else:
+            user_message = f"Script text:\n{script_text}"
 
         raw = await llm.chat(
             messages=[
-                {"role": "system", "content": GENRE_ANALYSIS_PROMPT},
-                {"role": "user", "content": f"剧本文本:\n{script_text}"},
+                {"role": "system", "content": locale.genre_analysis_prompt or GENRE_ANALYSIS_PROMPT},
+                {"role": "user", "content": user_message},
             ],
         )
 
@@ -164,27 +173,38 @@ class VoiceCaster:
         self,
         series: DramaSeries,
         genre: DramaGenre,
+        language: str = "zh",
     ) -> dict[str, VoiceProfile]:
         """Assign a VoiceProfile to each character using LLM analysis.
 
-        Adds a narrator voice from :data:`NARRATOR_PRESETS` keyed by *genre*.
+        Adds a narrator voice from locale narrator_presets keyed by *genre*.
         Returns a dict mapping role name to :class:`VoiceProfile`.
+
+        *language* selects the locale (and thus the system prompt language).
         """
         llm = self._ensure_llm()
+        from videoclaw.drama.locale import get_locale
+        locale = get_locale(language)
 
         characters_text = "\n".join(
             f"- {c.name}: {c.description} (voice_style: {c.voice_style})"
             for c in series.characters
         )
 
-        user_message = (
-            f"剧情类型: {genre.value}\n"
-            f"角色列表:\n{characters_text}\n"
-        )
+        if language == "zh":
+            user_message = (
+                f"剧情类型: {genre.value}\n"
+                f"角色列表:\n{characters_text}\n"
+            )
+        else:
+            user_message = (
+                f"Genre: {genre.value}\n"
+                f"Characters:\n{characters_text}\n"
+            )
 
         raw = await llm.chat(
             messages=[
-                {"role": "system", "content": VOICE_CASTING_PROMPT},
+                {"role": "system", "content": locale.voice_casting_prompt or VOICE_CASTING_PROMPT},
                 {"role": "user", "content": user_message},
             ],
         )
@@ -209,8 +229,11 @@ class VoiceCaster:
                 description=char_data.get("description", ""),
             )
 
-        # Add narrator from genre presets
-        narrator_profile = NARRATOR_PRESETS.get(genre, NARRATOR_PRESETS[DramaGenre.OTHER])
+        # Add narrator from locale genre presets, falling back to module-level dict
+        narrator_presets = locale.narrator_presets if locale.narrator_presets else NARRATOR_PRESETS
+        narrator_profile = narrator_presets.get(genre, narrator_presets.get(DramaGenre.OTHER))
+        if narrator_profile is None:
+            narrator_profile = NARRATOR_PRESETS.get(genre, NARRATOR_PRESETS[DramaGenre.OTHER])
         voice_map["narrator"] = narrator_profile
 
         logger.info(
@@ -224,6 +247,7 @@ class VoiceCaster:
         self,
         episode: Episode,
         voice_map: dict[str, VoiceProfile],
+        language: str = "zh",
     ) -> list[DialogueLine]:
         """Extract typed dialogue lines from an episode's scenes.
 
@@ -231,8 +255,12 @@ class VoiceCaster:
         scene's text as narration, dialogue, or inner monologue. Skips empty
         scenes (no dialogue and no narration). Returns a list of
         :class:`DialogueLine` with ``scene_id`` for timeline alignment.
+
+        *language* selects the locale (and thus the system prompt language).
         """
         llm = self._ensure_llm()
+        from videoclaw.drama.locale import get_locale
+        locale = get_locale(language)
         all_lines: list[DialogueLine] = []
 
         for scene in episode.scenes:
@@ -241,19 +269,29 @@ class VoiceCaster:
                 continue
 
             scene_text_parts: list[str] = []
-            if scene.dialogue:
-                scene_text_parts.append(f"对白: {scene.dialogue}")
-            if scene.narration:
-                scene_text_parts.append(f"旁白: {scene.narration}")
-            if scene.speaking_character:
-                scene_text_parts.append(f"说话角色: {scene.speaking_character}")
+            if language == "zh":
+                if scene.dialogue:
+                    scene_text_parts.append(f"对白: {scene.dialogue}")
+                if scene.narration:
+                    scene_text_parts.append(f"旁白: {scene.narration}")
+                if scene.speaking_character:
+                    scene_text_parts.append(f"说话角色: {scene.speaking_character}")
+                user_prefix = f"场景 {scene.scene_id}:"
+            else:
+                if scene.dialogue:
+                    scene_text_parts.append(f"Dialogue: {scene.dialogue}")
+                if scene.narration:
+                    scene_text_parts.append(f"Narration: {scene.narration}")
+                if scene.speaking_character:
+                    scene_text_parts.append(f"Speaking character: {scene.speaking_character}")
+                user_prefix = f"Scene {scene.scene_id}:"
 
             scene_text = "\n".join(scene_text_parts)
 
             raw = await llm.chat(
                 messages=[
-                    {"role": "system", "content": DIALOGUE_EXTRACTION_PROMPT},
-                    {"role": "user", "content": f"场景 {scene.scene_id}:\n{scene_text}"},
+                    {"role": "system", "content": locale.dialogue_extraction_prompt or DIALOGUE_EXTRACTION_PROMPT},
+                    {"role": "user", "content": f"{user_prefix}\n{scene_text}"},
                 ],
             )
 
