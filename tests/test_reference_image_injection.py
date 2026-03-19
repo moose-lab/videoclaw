@@ -15,7 +15,7 @@ import pytest
 
 from videoclaw.core.planner import TaskNode, TaskType
 from videoclaw.core.state import ProjectState, Shot, ShotStatus
-from videoclaw.drama.models import Character, DramaEpisode, DramaScene, DramaSeries
+from videoclaw.drama.models import Character, Episode, DramaScene, DramaSeries
 from videoclaw.drama.runner import build_episode_dag
 from videoclaw.generation.video import VideoGenerator
 from videoclaw.models.protocol import GenerationRequest, GenerationResult
@@ -70,7 +70,7 @@ class TestShotReferenceImages:
 
 
 class TestBuildEpisodeDag:
-    def _make_series_and_episode(self) -> tuple[DramaSeries, DramaEpisode]:
+    def _make_series_and_episode(self) -> tuple[DramaSeries, Episode]:
         series = DramaSeries(
             series_id="drama001",
             title="测试剧",
@@ -81,27 +81,27 @@ class TestBuildEpisodeDag:
                 Character(name="路人甲", description="路人", reference_image=""),  # no ref
             ],
         )
-        episode = DramaEpisode(
+        episode = Episode(
             episode_id="ep01",
             title="第一集",
             scenes=[
                 DramaScene(
                     scene_id="sc01",
-                    prompt="林薇走进咖啡厅",
+                    visual_prompt="林薇走进咖啡厅",
                     duration_seconds=5.0,
                     characters_present=["林薇", "张明"],
                     speaking_character="林薇",
                 ),
                 DramaScene(
                     scene_id="sc02",
-                    prompt="张明独白",
+                    visual_prompt="张明独白",
                     duration_seconds=3.0,
                     characters_present=["张明"],
                     speaking_character="张明",
                 ),
                 DramaScene(
                     scene_id="sc03",
-                    prompt="空镜头",
+                    visual_prompt="空镜头",
                     duration_seconds=2.0,
                     characters_present=[],
                     speaking_character="",
@@ -115,7 +115,7 @@ class TestBuildEpisodeDag:
         series, episode = self._make_series_and_episode()
         state = ProjectState()
 
-        dag = build_episode_dag(series, episode, state)
+        dag, state = build_episode_dag(episode, series)
 
         # Storyboard populated
         assert len(state.storyboard) == 3
@@ -150,14 +150,13 @@ class TestBuildEpisodeDag:
         episode.scenes.append(
             DramaScene(
                 scene_id="sc04",
-                prompt="路人甲出现",
+                visual_prompt="路人甲出现",
                 duration_seconds=2.0,
                 characters_present=["路人甲", "林薇"],
                 speaking_character="路人甲",
             )
         )
-        state = ProjectState()
-        build_episode_dag(series, episode, state)
+        _, state = build_episode_dag(episode, series)
 
         shot4 = state.storyboard[3]
         # 路人甲 has no ref, only 林薇
@@ -170,7 +169,7 @@ class TestBuildEpisodeDag:
         episode.scenes[0].characters_present.append("不存在的角色")
 
         state = ProjectState()
-        dag = build_episode_dag(series, episode, state)
+        dag, state = build_episode_dag(episode, series)
 
         shot1 = state.storyboard[0]
         assert "不存在的角色" not in shot1.reference_images
@@ -179,23 +178,27 @@ class TestBuildEpisodeDag:
         """DAG has expected node types and dependencies."""
         series, episode = self._make_series_and_episode()
         state = ProjectState()
-        dag = build_episode_dag(series, episode, state)
+        dag, state = build_episode_dag(episode, series)
 
         assert "storyboard" in dag.nodes
-        assert "tts" in dag.nodes
         assert "music" in dag.nodes
         assert "compose" in dag.nodes
         assert "render" in dag.nodes
+        assert "subtitle_gen" in dag.nodes
 
         # 3 video nodes
         vid_nodes = [n for n in dag.nodes.values() if n.task_type == TaskType.VIDEO_GEN]
         assert len(vid_nodes) == 3
 
+        # 3 per-scene TTS nodes
+        tts_nodes = [n for n in dag.nodes.values() if n.task_type == TaskType.PER_SCENE_TTS]
+        assert len(tts_nodes) == 3
+
         # All video nodes depend on storyboard
         for vn in vid_nodes:
             assert "storyboard" in vn.depends_on
 
-        # Compose depends on all videos + tts + music
+        # Compose depends on all videos + subtitle_gen + music
         compose = dag.nodes["compose"]
         for vn in vid_nodes:
             assert vn.node_id in compose.depends_on
@@ -204,7 +207,7 @@ class TestBuildEpisodeDag:
         """aspect_ratio from series is passed into TaskNode params."""
         series, episode = self._make_series_and_episode()
         state = ProjectState()
-        dag = build_episode_dag(series, episode, state)
+        dag, state = build_episode_dag(episode, series)
 
         vid_node = dag.nodes["video_sc01"]
         assert vid_node.params["aspect_ratio"] == "9:16"

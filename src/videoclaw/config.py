@@ -31,6 +31,9 @@ class VideoClawConfig(BaseSettings):
     default_llm: str = "gpt-4o"
     default_video_model: str = "minimax-hailuo-2.3"
 
+    # --- Language ---
+    default_language: str = "zh"
+
     # --- Logging ---
     log_level: str = "info"
 

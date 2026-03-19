@@ -64,12 +64,20 @@ class LineType(StrEnum):
 
 
 class DramaGenre(StrEnum):
+    # Chinese-market genres
     SWEET_ROMANCE = "sweet_romance"
     MALE_POWER_FANTASY = "male_power_fantasy"
     SUSPENSE_THRILLER = "suspense_thriller"
     ANCIENT_XIANXIA = "ancient_xianxia"
     COMEDY = "comedy"
     FAMILY_DRAMA = "family_drama"
+    # Western-market genres
+    ROMANCE = "romance"
+    ACTION_THRILLER = "action_thriller"
+    MYSTERY = "mystery"
+    SUPERNATURAL = "supernatural"
+    DRAMA = "drama"
+    SCI_FI = "sci_fi"
     OTHER = "other"
 
 
@@ -351,6 +359,37 @@ NARRATOR_PRESETS: dict[DramaGenre, VoiceProfile] = {
         role_name="narrator", line_type=LineType.NARRATION,
         age_feel="young_adult", energy="medium", description="default",
     ),
+    # Western genre narrator presets (placeholders — overridden by English locale)
+    DramaGenre.ROMANCE: VoiceProfile(
+        voice_id="Friendly_Person", speed=1.0, pitch=1, emotion="happy",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="young_adult", energy="medium", description="warm romantic",
+    ),
+    DramaGenre.ACTION_THRILLER: VoiceProfile(
+        voice_id="Determined_Man", speed=0.95, pitch=-2, emotion="neutral",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="middle_aged", energy="high", description="intense action",
+    ),
+    DramaGenre.MYSTERY: VoiceProfile(
+        voice_id="Calm_Woman", speed=0.9, pitch=-1, emotion="neutral",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="middle_aged", energy="low", description="mysterious calm",
+    ),
+    DramaGenre.SUPERNATURAL: VoiceProfile(
+        voice_id="Calm_Woman", speed=0.9, pitch=2, emotion="fearful",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="young_adult", energy="low", description="eerie ethereal",
+    ),
+    DramaGenre.DRAMA: VoiceProfile(
+        voice_id="Friendly_Person", speed=0.95, pitch=0, emotion="neutral",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="middle_aged", energy="medium", description="neutral dramatic",
+    ),
+    DramaGenre.SCI_FI: VoiceProfile(
+        voice_id="Determined_Man", speed=0.95, pitch=-1, emotion="neutral",
+        role_name="narrator", line_type=LineType.NARRATION,
+        age_feel="young_adult", energy="medium", description="futuristic",
+    ),
 }
 
 
@@ -398,6 +437,42 @@ GENRE_VOICE_RECOMMENDATIONS: dict[DramaGenre, dict[str, str]] = {
         "hero": "warm",
         "villain": "dramatic",
         "default": "warm",
+    },
+    # Western genre voice recommendations (placeholders — overridden by English locale)
+    DramaGenre.ROMANCE: {
+        "hero": "warm",
+        "villain": "dramatic",
+        "love_interest": "playful",
+        "default": "warm",
+    },
+    DramaGenre.ACTION_THRILLER: {
+        "hero": "commanding",
+        "villain": "scheming",
+        "sidekick": "playful",
+        "default": "authoritative",
+    },
+    DramaGenre.MYSTERY: {
+        "hero": "calm",
+        "villain": "scheming",
+        "detective": "authoritative",
+        "default": "calm",
+    },
+    DramaGenre.SUPERNATURAL: {
+        "hero": "calm",
+        "villain": "scheming",
+        "medium": "weathered",
+        "default": "dramatic",
+    },
+    DramaGenre.DRAMA: {
+        "hero": "warm",
+        "villain": "commanding",
+        "default": "warm",
+    },
+    DramaGenre.SCI_FI: {
+        "hero": "calm",
+        "villain": "commanding",
+        "scientist": "authoritative",
+        "default": "authoritative",
     },
 }
 
