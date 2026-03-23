@@ -1096,6 +1096,68 @@ async def _design_characters_async(series, mgr, force: bool) -> None:
     console.print(f"\n[bold green]Character designs complete for {series.series_id}[/bold green]")
 
 
+@drama_app.command("design-scenes")
+def drama_design_scenes(
+    series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Regenerate existing images.")] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Generate reference images for unique scene locations in a drama series."""
+    _configure_logging(verbose)
+
+    from videoclaw.drama.models import DramaManager
+
+    mgr = DramaManager()
+    try:
+        series = mgr.load(series_id)
+    except FileNotFoundError:
+        console.print(f"[red]Series {series_id!r} not found.[/red]")
+        raise typer.Exit(code=1)
+
+    if not series.episodes or not any(ep.scenes for ep in series.episodes):
+        console.print("[yellow]No scenes found. Run `claw drama script` first.[/yellow]")
+        raise typer.Exit(code=1)
+
+    console.print(
+        Panel(
+            f"[bold]Series:[/bold]   {series.title}\n"
+            f"[bold]Episodes:[/bold] {len(series.episodes)}\n"
+            f"[bold]Force:[/bold]    {force}",
+            title="[bold cyan]Scene Design[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+
+    asyncio.run(_design_scenes_async(series, mgr, force))
+
+
+async def _design_scenes_async(series, mgr, force: bool) -> None:
+    from videoclaw.drama.scene_designer import SceneDesigner
+
+    designer = SceneDesigner(drama_manager=mgr)
+
+    with console.status("[cyan]Generating scene reference images...", spinner="dots"):
+        locations = await designer.design_scenes(series, force=force)
+
+    if not locations:
+        console.print("[yellow]No unique locations extracted from scenes.[/yellow]")
+        return
+
+    table = Table(title="Scene Reference Images", show_header=True, header_style="bold magenta")
+    table.add_column("Location", style="cyan")
+    table.add_column("Description", style="white")
+    table.add_column("Reference Image", style="green")
+    for loc in locations:
+        table.add_row(
+            loc.name,
+            (loc.description[:50] + "...") if len(loc.description) > 50 else loc.description,
+            loc.reference_image or "[dim]none[/dim]",
+        )
+    console.print(table)
+
+    console.print(f"\n[bold green]Scene designs complete: {len(locations)} locations[/bold green]")
+
+
 @drama_app.command("run")
 def drama_run(
     series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
@@ -1137,15 +1199,20 @@ def drama_run(
         )
     )
 
-    asyncio.run(_drama_run_async(series, mgr, start, end))
+    asyncio.run(_drama_run_async(series, mgr, start, end, budget))
 
 
-async def _drama_run_async(series, mgr, start: int, end: int | None) -> None:
+async def _drama_run_async(
+    series, mgr, start: int, end: int | None, budget_usd: float | None = None,
+) -> None:
     from videoclaw.drama.planner import DramaPlanner
     from videoclaw.drama.runner import DramaRunner
 
+    from videoclaw.config import get_config
+
     planner = DramaPlanner()
     runner = DramaRunner(drama_manager=mgr)
+    effective_budget = budget_usd or get_config().budget_default_usd
 
     episodes_to_run = [
         ep for ep in series.episodes
@@ -1195,6 +1262,14 @@ async def _drama_run_async(series, mgr, start: int, end: int | None) -> None:
 
         status_style = "green" if ep.status == "completed" else "red"
         console.print(f"  Status: [{status_style}]{ep.status}[/{status_style}]  Cost: ${ep.cost:.4f}")
+
+        # Budget guard: check cumulative cost against limit
+        if series.cost_total >= effective_budget:
+            console.print(
+                f"[bold red]Budget limit reached: ${series.cost_total:.2f} >= "
+                f"${effective_budget:.2f}. Stopping.[/bold red]"
+            )
+            break
 
     console.print(
         Panel(
