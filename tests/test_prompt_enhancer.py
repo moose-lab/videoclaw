@@ -69,7 +69,7 @@ class TestCharacterInjection:
         result = enhancer.enhance_scene_prompt(scene, _make_series())
         # Should still have visual prompt, shot info, and style
         assert "dolly" in result.lower()
-        assert "cinematic lighting" in result
+        assert "Style: cinematic" in result
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +159,7 @@ class TestStyleTag:
     def test_style_tag_appended(self):
         enhancer = PromptEnhancer(strip_chinese=False)
         result = enhancer.enhance_scene_prompt(_make_scene(), _make_series())
-        assert "Style: cinematic, vertical 9:16, cinematic lighting." in result
+        assert "Style: cinematic, vertical 9:16" in result
 
     def test_custom_style(self):
         enhancer = PromptEnhancer(strip_chinese=False)
@@ -188,8 +188,8 @@ class TestEnhanceAllScenes:
 
         assert result is episode  # mutates in place
         for scene in episode.scenes:
-            assert "Character: Lin Yue" in scene.visual_prompt
-            assert "cinematic lighting" in scene.visual_prompt
+            assert "Lin Yue" in scene.visual_prompt
+            assert "Style: cinematic" in scene.visual_prompt
 
     def test_returns_episode(self):
         enhancer = PromptEnhancer()

@@ -441,12 +441,19 @@ TikTok / YouTube Shorts / Instagram Reels (9:16 vertical video, 30-90 seconds).
 - Rendered as VO with light reverb to signal "brain voice" — distinct from dialogue AND narrator.
 - Typical markers in script notes: "(VO)", "(INTERNAL)", "(THINKS)" — include these in dialogue text.
 
-# visual_prompt Writing Standards
-- ENGLISH ONLY — optimised for AI video generation models.
-- Structure: [setting / environment] + [character full appearance] + [action / expression] + [lighting / mood]
-- Include lighting: soft lighting, dramatic shadows, golden hour, neon glow, cold blue moonlight
-- Include atmosphere: cinematic, atmospheric, moody, gritty, sun-drenched, dreamy
-- Be concrete and visual — never use abstract or emotional adjectives alone.
+# visual_prompt Writing Standards (Seedance 2.0 Optimised)
+- ENGLISH ONLY — optimised for Seedance 2.0 / AI video generation models.
+- Follow the director-style 5-part anatomy: Subject + Action + Camera + Style + Constraints
+- Subject: ONE character or focal point per prompt — include age, clothing, hair, distinctive marks.
+  REPEAT the SAME character appearance keywords in EVERY scene for cross-shot consistency.
+- Action: Use PRESENT TENSE verbs ("walks", "turns", "stares") — activates the motion engine.
+  Include physics-aware detail: "fabric catching air", "weight shifting", "fingers trembling".
+- Camera: Already handled by shot_scale + camera_movement fields — do NOT duplicate in visual_prompt.
+- Style: ONE strong visual anchor (e.g. "Fincher-style overcast palette" or "golden hour backlight")
+  plus lighting description (soft key, dramatic shadows, cold blue moonlight, neon glow).
+- Keep visual_prompt to 60-120 words (Seedance sweet spot). Never exceed 200 words.
+- Include sound cue words when relevant ("metallic clink", "muffled reverb") — triggers native audio.
+- Be concrete and sensory — never use abstract or emotional adjectives alone.
 
 # Output Rules
 - visual_prompt: ENGLISH ONLY
