@@ -69,6 +69,9 @@ MODEL_PROFILES: dict[str, dict[str, float]] = {
     # ZhipuAI models (智谱清影/CogVideoX) - free tier available
     "cogvideox-flash": {"quality": 0.70, "speed": 0.85, "cost": 0.95},
     "cogvideox": {"quality": 0.75, "speed": 0.60, "cost": 0.95},
+    # ByteDance Seedance (豆包) via Volcengine Ark
+    "seedance-2.0": {"quality": 0.92, "speed": 0.65, "cost": 0.80},
+    "seedance-1.0": {"quality": 0.85, "speed": 0.70, "cost": 0.85},
     "mock": {"quality": 0.10, "speed": 1.0, "cost": 1.0},
 }
 

@@ -47,6 +47,8 @@ class VideoClawConfig(BaseSettings):
     minimax_api_key: str | None = Field(default=None)  # MiniMax (海螺AI) API Key
     zhipu_api_key: str | None = Field(default=None)  # ZhipuAI (智谱清影) API Key
     wavespeed_api_key: str | None = Field(default=None)  # WaveSpeed (MiniMax speech-02-hd)
+    ark_api_key: str | None = Field(default=None)  # Volcengine Ark (火山方舟) — Seedance
+    seedance_base_url: str = Field(default="https://sd2.vectorspace.cn")  # Seedance API proxy
 
     # --- LLM API Base URLs ---
     moonshot_api_base: str = Field(default="https://api.moonshot.cn/v1")
