@@ -194,9 +194,9 @@ class TestBuildEpisodeDag:
         tts_nodes = [n for n in dag.nodes.values() if n.task_type == TaskType.PER_SCENE_TTS]
         assert len(tts_nodes) == 3
 
-        # All video nodes depend on storyboard
+        # All video nodes depend on scene_validate (scene-first pattern)
         for vn in vid_nodes:
-            assert "storyboard" in vn.depends_on
+            assert "scene_validate" in vn.depends_on
 
         # Compose depends on all videos + subtitle_gen + music
         compose = dag.nodes["compose"]

@@ -132,9 +132,9 @@ class TestEnrichedDAG:
         assert tts_s01.params["scene"]["voice"] == "Calm_Woman"
         assert tts_s02.params["scene"]["dialogue"] == "再见"
 
-        # Both depend on storyboard
-        assert "storyboard" in tts_s01.depends_on
-        assert "storyboard" in tts_s02.depends_on
+        # Both depend on scene_validate (scenes validated before generation)
+        assert "scene_validate" in tts_s01.depends_on
+        assert "scene_validate" in tts_s02.depends_on
 
     def test_subtitle_gen_node_depends_on_all_tts(self):
         series = DramaSeries(title="Test", model_id="mock")

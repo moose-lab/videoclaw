@@ -17,6 +17,7 @@ from videoclaw.core.state import ProjectState, ShotStatus
 class TaskType(StrEnum):
     SCRIPT_GEN = "script_gen"
     STORYBOARD = "storyboard"
+    SCENE_VALIDATE = "scene_validate"
     VIDEO_GEN = "video_gen"
     TTS = "tts"
     PER_SCENE_TTS = "per_scene_tts"

@@ -52,6 +52,7 @@ class DAGExecutor:
         self._handlers: dict[TaskType, NodeHandler] = {
             TaskType.SCRIPT_GEN: self._handle_script_gen,
             TaskType.STORYBOARD: self._handle_storyboard,
+            TaskType.SCENE_VALIDATE: self._handle_scene_validate,
             TaskType.VIDEO_GEN: self._handle_video_gen,
             TaskType.TTS: self._handle_tts,
             TaskType.PER_SCENE_TTS: self._handle_per_scene_tts,
@@ -251,6 +252,60 @@ class DAGExecutor:
         state.storyboard = shots
         logger.info("[storyboard] Generated %d shots", len(shots))
         return {"shot_count": len(shots)}
+
+    async def _handle_scene_validate(self, node: TaskNode, state: ProjectState) -> Any:
+        """Validate scene data before committing to expensive generation.
+
+        Runs locale-aware quality checks on scene-level data: shot scale
+        distribution, dialogue density, emotion vocabulary, character
+        consistency, and V.O. ratio.  Logs violations as warnings but does
+        not block the pipeline (lenient mode).
+        """
+        scenes = node.params.get("scenes", [])
+        language = node.params.get("language", state.metadata.get("language", "zh"))
+
+        if not scenes:
+            logger.info("[scene_validate] No scenes to validate, skipping")
+            return {"status": "skipped", "violations": []}
+
+        # Per-scene quick checks
+        violations: list[str] = []
+        total_close = 0
+        total_scenes = len(scenes)
+
+        for scene in scenes:
+            scene_id = scene.get("scene_id", "?")
+            # Emotion field required
+            if not scene.get("emotion"):
+                violations.append(f"Scene {scene_id}: missing emotion field")
+            # speaking_character consistency
+            speaker = scene.get("speaking_character", "")
+            present = scene.get("characters_present", [])
+            if speaker and present and speaker not in present:
+                violations.append(
+                    f"Scene {scene_id}: speaker '{speaker}' not in characters_present"
+                )
+            # Track shot scale distribution
+            if scene.get("shot_scale") in ("close_up", "medium_close"):
+                total_close += 1
+
+        # Vertical framing ratio (close_up + medium_close >= 50%)
+        if total_scenes > 0:
+            ratio = total_close / total_scenes
+            if ratio < 0.5:
+                violations.append(
+                    f"Vertical framing: {ratio:.0%} close shots < 50% minimum"
+                )
+
+        if violations:
+            logger.warning(
+                "[scene_validate] %d violations found: %s",
+                len(violations), violations,
+            )
+        else:
+            logger.info("[scene_validate] All %d scenes passed validation", total_scenes)
+
+        return {"status": "ok", "violations": violations, "scene_count": total_scenes}
 
     async def _handle_video_gen(self, node: TaskNode, state: ProjectState) -> Any:
         """Generate video for a single shot using VideoGenerator."""
@@ -539,12 +594,30 @@ class DAGExecutor:
             lines, voice_map, audio_dir, language=language,
         )
 
+        # --- Audio post-processing (inner_monologue echo, narration EQ, etc.) ---
+        try:
+            from videoclaw.generation.audio.audio_post import AudioPostProcessor
+
+            post = AudioPostProcessor()
+            for seg in segments:
+                if seg.audio_path and Path(seg.audio_path).exists():
+                    processed_path = audio_dir / f"{seg.segment_id}_post.mp3"
+                    await post.process(
+                        Path(seg.audio_path), processed_path, seg.line_type,
+                    )
+                    seg.audio_path = str(processed_path)
+        except Exception as exc:
+            logger.warning(
+                "[per_scene_tts] Audio post-processing failed for scene %s: %s",
+                scene_id, exc,
+            )
+
         # Store per-scene result for downstream aggregation
         seg_dicts = [s.to_dict() for s in segments]
         state.assets[f"tts_scene_{scene_id}"] = _json.dumps(seg_dicts)
 
         logger.info(
-            "[per_scene_tts] scene %s: synthesized %d segments",
+            "[per_scene_tts] scene %s: synthesized %d segments (post-processed)",
             scene_id,
             len(segments),
         )

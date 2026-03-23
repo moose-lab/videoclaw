@@ -29,11 +29,16 @@ def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, Proje
     with richer node params so handlers can access scene dialogue,
     character voices, and subtitle data.
     """
-    # Build character reference image lookup table
+    # Build character reference image lookup tables (single + multi-angle)
     char_ref_map: dict[str, str] = {
         c.name: c.reference_image
         for c in series.characters
         if c.reference_image
+    }
+    char_multi_ref_map: dict[str, list[str]] = {
+        c.name: c.reference_images
+        for c in series.characters
+        if c.reference_images
     }
 
     # Enhance visual prompts before building shots
@@ -43,10 +48,17 @@ def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, Proje
     # Build shots from typed DramaScene objects with reference images injected
     shots: list[Shot] = []
     for idx, scene in enumerate(episode.scenes):
+        # Primary reference image per character (front view or single)
         ref_images = {
             name: char_ref_map[name]
             for name in scene.characters_present
             if name in char_ref_map
+        }
+        # Multi-angle references for Seedance Universal Reference
+        multi_refs = {
+            name: char_multi_ref_map[name]
+            for name in scene.characters_present
+            if name in char_multi_ref_map
         }
         shots.append(Shot(
             shot_id=scene.scene_id or f"ep{episode.number:02d}_s{idx+1:02d}",
@@ -78,6 +90,25 @@ def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, Proje
         },
     )
     episode.project_id = state.project_id
+
+    # ---- Quality gate: validate before committing to expensive generation ----
+    from videoclaw.drama.quality import DramaQualityValidator
+
+    validator = DramaQualityValidator()
+    episode_scripts = {
+        episode.number: {
+            "scenes": [s.to_dict() for s in episode.scenes],
+            "cliffhanger": episode.synopsis,  # best-effort cliffhanger field
+        },
+    }
+    violations = validator.validate(series, episode_scripts)
+    if violations:
+        logger.warning(
+            "Quality validation found %d violations for episode %d: %s",
+            len(violations), episode.number, violations,
+        )
+        # Log but don't block — violations are warnings for now
+        # TODO: make configurable (strict mode raises, lenient mode warns)
 
     # Build drama-specific DAG with enriched params
     dag = _build_drama_dag(state, episode, series)
@@ -128,14 +159,27 @@ def _build_drama_dag(
     )
     dag.add_node(storyboard_node)
 
-    # -- 3. Parallel video generation per shot --
+    # -- 2b. Scene validation gate (场景先行 — validate before generation) --
+    scenes_for_validate = [s.to_dict() for s in episode.scenes] if episode.scenes else []
+    validate_node = TaskNode(
+        node_id="scene_validate",
+        task_type=TaskType.SCENE_VALIDATE,
+        depends_on=["storyboard"],
+        params={
+            "scenes": scenes_for_validate,
+            "language": series.language,
+        },
+    )
+    dag.add_node(validate_node)
+
+    # -- 3. Parallel video generation per shot (depends on scene_validate) --
     video_node_ids: list[str] = []
     for shot, scene in zip(state.storyboard, episode.scenes):
         vid_id = f"video_{shot.shot_id}"
         dag.add_node(TaskNode(
             node_id=vid_id,
             task_type=TaskType.VIDEO_GEN,
-            depends_on=["storyboard"],
+            depends_on=["scene_validate"],
             params={
                 "shot_id": shot.shot_id,
                 "prompt": shot.prompt,
@@ -178,7 +222,7 @@ def _build_drama_dag(
         dag.add_node(TaskNode(
             node_id=tts_id,
             task_type=TaskType.PER_SCENE_TTS,
-            depends_on=["storyboard"],
+            depends_on=["scene_validate"],
             params={
                 "scene": scene_dict,
                 "language": series.language,
@@ -202,7 +246,7 @@ def _build_drama_dag(
     music_node = TaskNode(
         node_id="music",
         task_type=TaskType.MUSIC,
-        depends_on=["storyboard"],
+        depends_on=["scene_validate"],
         params={},
     )
     dag.add_node(music_node)
@@ -454,6 +498,8 @@ class DramaRunner:
         Episodes are run in order because each may depend on the previous
         episode's cliffhanger for narrative continuity.
         """
+        import json as _json
+
         series.status = DramaStatus.GENERATING
         self.drama_mgr.save(series)
 
@@ -463,14 +509,47 @@ class DramaRunner:
             if start_episode <= ep.number <= end
         ]
 
+        # Retrieve cliffhanger from the episode before the first one we run
+        prev_cliffhanger: str | None = None
+        if episodes_to_run:
+            prev_num = episodes_to_run[0].number - 1
+            for ep in series.episodes:
+                if ep.number == prev_num and ep.script:
+                    try:
+                        prev_cliffhanger = _json.loads(ep.script).get("cliffhanger")
+                    except (TypeError, _json.JSONDecodeError):
+                        pass
+                    break
+
         for episode in episodes_to_run:
             if episode.status == EpisodeStatus.COMPLETED:
                 logger.info("Skipping completed episode %d", episode.number)
+                # Still extract cliffhanger for next episode
+                if episode.script:
+                    try:
+                        prev_cliffhanger = _json.loads(episode.script).get("cliffhanger")
+                    except (TypeError, _json.JSONDecodeError):
+                        pass
                 continue
+
+            # Script the episode if not already scripted (with cliffhanger threading)
+            if not episode.scenes:
+                from videoclaw.drama.planner import DramaPlanner
+
+                planner = DramaPlanner()
+                script_data = await planner.script_episode(series, episode, prev_cliffhanger)
+                prev_cliffhanger = script_data.get("cliffhanger")
+                self.drama_mgr.save(series)
 
             try:
                 await self.run_episode(series, episode)
                 logger.info("Episode %d completed (cost=$%.4f)", episode.number, episode.cost)
+                # Extract cliffhanger for next episode
+                if episode.script:
+                    try:
+                        prev_cliffhanger = _json.loads(episode.script).get("cliffhanger")
+                    except (TypeError, _json.JSONDecodeError):
+                        pass
             except Exception:
                 logger.exception("Episode %d failed", episode.number)
                 episode.status = EpisodeStatus.FAILED
