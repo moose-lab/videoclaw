@@ -6,7 +6,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from videoclaw.drama.character_designer import CharacterDesigner, CHARACTER_IMAGE_PROMPT
+from videoclaw.drama.character_designer import CharacterDesigner, CHARACTER_IMAGE_PROMPT, CHARACTER_IMAGE_PROMPT_SINGLE
 from videoclaw.drama.models import Character, DramaManager, DramaSeries
 
 
@@ -101,6 +101,7 @@ async def test_prompt_contains_appearance(mock_image_generator, mock_drama_manag
 async def test_character_image_prompt_uses_style_line_placeholder():
     """CHARACTER_IMAGE_PROMPT template uses {style_line} not {style}."""
     assert "{style_line}" in CHARACTER_IMAGE_PROMPT
+    assert "{style_line}" in CHARACTER_IMAGE_PROMPT_SINGLE
     assert "{style} Chinese drama" not in CHARACTER_IMAGE_PROMPT
 
 
@@ -113,6 +114,7 @@ async def test_skips_character_with_existing_image(mock_image_generator, mock_dr
     )
     series = _make_series("en")
     series.characters[0].reference_image = "/existing/path.png"
+    series.characters[0].reference_images = ["/existing/front.png", "/existing/3q.png", "/existing/full.png"]
 
     await designer.design_characters(series)
 

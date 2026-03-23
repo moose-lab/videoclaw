@@ -98,6 +98,7 @@ class Character:
     visual_prompt: str = ""
     voice_style: str = ""
     reference_image: str | None = None
+    reference_images: list[str] = field(default_factory=list)
     voice_profile: VoiceProfile | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -112,6 +113,9 @@ class Character:
     def from_dict(cls, data: dict[str, Any]) -> Character:
         data = dict(data)
         vp = data.pop("voice_profile", None)
+        # Filter to known fields
+        known = {f.name for f in fields(cls)}
+        data = {k: v for k, v in data.items() if k in known}
         c = cls(**data)
         if vp is not None:
             c.voice_profile = VoiceProfile.from_dict(vp)
