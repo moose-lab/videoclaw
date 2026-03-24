@@ -62,8 +62,8 @@ _RESOLUTION_TO_RATIO: dict[tuple[int, int], str] = {
 _COST_PER_SECOND_USD = 0.05
 
 # Polling configuration
-_POLL_INTERVAL_S = 5.0
-_POLL_TIMEOUT_S = 300.0  # 5 minutes max
+_POLL_INTERVAL_S = 10.0
+_POLL_TIMEOUT_S = 600.0  # 10 minutes max (typical generation: 5-7 min)
 _HTTP_TIMEOUT_S = 30.0
 
 
@@ -317,7 +317,7 @@ class SeedanceVideoAdapter:
         return payload
 
     async def _create_task(self, request: GenerationRequest) -> str:
-        """Submit a video generation task.
+        """Submit a video generation task with 429 retry.
 
         ``POST {base}/api/v1/doubao/create``
         """
@@ -330,31 +330,44 @@ class SeedanceVideoAdapter:
             payload.get("duration"),
         )
 
-        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_S) as client:
-            resp = await client.post(
-                f"{self._base_url}/api/v1/doubao/create",
-                headers=self._auth_headers(),
-                json=payload,
-            )
-
-            if resp.status_code != 200:
-                logger.error(
-                    "[seedance] Task creation failed %d: %s",
-                    resp.status_code,
-                    resp.text[:500],
-                )
-                resp.raise_for_status()
-
-            data = resp.json()
-            task_id = data.get("id") or data.get("task_id")
-
-            if not task_id:
-                raise RuntimeError(
-                    f"No task_id in Seedance response: {data}"
+        max_retries = 5
+        for attempt in range(max_retries):
+            async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_S) as client:
+                resp = await client.post(
+                    f"{self._base_url}/api/v1/doubao/create",
+                    headers=self._auth_headers(),
+                    json=payload,
                 )
 
-            logger.info("[seedance] Created task %s", task_id)
-            return task_id
+                if resp.status_code == 429:
+                    wait = min(15.0 * (attempt + 1), 60.0)
+                    logger.warning(
+                        "[seedance] Rate limited (429), waiting %.0fs before retry %d/%d",
+                        wait, attempt + 1, max_retries,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+
+                if resp.status_code != 200:
+                    logger.error(
+                        "[seedance] Task creation failed %d: %s",
+                        resp.status_code,
+                        resp.text[:500],
+                    )
+                    resp.raise_for_status()
+
+                data = resp.json()
+                task_id = data.get("id") or data.get("task_id")
+
+                if not task_id:
+                    raise RuntimeError(
+                        f"No task_id in Seedance response: {data}"
+                    )
+
+                logger.info("[seedance] Created task %s", task_id)
+                return task_id
+
+        raise RuntimeError("Seedance task creation failed: rate limited after all retries")
 
     async def _check_task(self, task_id: str) -> tuple[str, str | None]:
         """Query task status.

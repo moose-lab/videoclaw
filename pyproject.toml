@@ -58,6 +58,7 @@ kling = "videoclaw.models.adapters.kling:KlingVideoAdapter"
 minimax = "videoclaw.models.adapters.minimax:MiniMaxVideoAdapter"
 zhipu = "videoclaw.models.adapters.zhipu:ZhipuVideoAdapter"
 seedance = "videoclaw.models.adapters.seedance:SeedanceVideoAdapter"
+seedance_byteplus = "videoclaw.models.adapters.seedance_byteplus:SeedanceBytePlusAdapter"
 
 [build-system]
 requires = ["hatchling"]

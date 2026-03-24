@@ -78,6 +78,9 @@ _CLOUD_PRICE_PER_SEC: dict[str, float] = {
     "kling-1.6": 0.05,
     "pika-2.2": 0.04,
     "minimax": 0.03,
+    "seedance-2.0": 0.05,
+    "seedance-1.5-pro": 0.04,
+    "seedance-1.0": 0.03,
     "mock": 0.00,
 }
 

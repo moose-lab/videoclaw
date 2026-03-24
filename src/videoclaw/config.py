@@ -49,6 +49,10 @@ class VideoClawConfig(BaseSettings):
     wavespeed_api_key: str | None = Field(default=None)  # WaveSpeed (MiniMax speech-02-hd)
     ark_api_key: str | None = Field(default=None)  # Volcengine Ark (火山方舟) — Seedance
     seedance_base_url: str = Field(default="https://sd2.vectorspace.cn")  # Seedance API proxy
+    byteplus_api_key: str | None = Field(default=None)  # BytePlus ModelArk API Key
+    byteplus_api_base: str = Field(
+        default="https://ark.ap-southeast.bytepluses.com/api/v3"
+    )
 
     # --- LLM API Base URLs ---
     moonshot_api_base: str = Field(default="https://api.moonshot.cn/v1")
