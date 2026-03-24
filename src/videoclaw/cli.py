@@ -842,7 +842,7 @@ def drama_new(
     style: Annotated[str, typer.Option("--style", "-s", help="Visual style.")] = "cinematic",
     language: Annotated[str, typer.Option("--lang", "-l", help="Script language (zh/en).")] = "zh",
     aspect_ratio: Annotated[str, typer.Option("--aspect-ratio", "-a", help="Aspect ratio.")] = "9:16",
-    model: Annotated[str, typer.Option("--model", "-m", help="Video model id.")] = "mock",
+    model: Annotated[str, typer.Option("--model", "-m", help="Video model id.")] = "seedance-2.0",
     plan: Annotated[bool, typer.Option("--plan/--no-plan", help="Immediately plan episodes via LLM.")] = False,
     design_characters: Annotated[bool, typer.Option("--design-characters", help="Generate character reference images after planning.")] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,

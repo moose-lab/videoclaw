@@ -91,6 +91,8 @@ class ModelRegistry:
             try:
                 factory = ep.load()
                 adapter = factory()
+                if adapter.model_id in self._adapters:
+                    continue  # already registered
                 self.register(adapter)
                 logger.info("Discovered adapter %r from entry point %r", adapter.model_id, ep.name)
             except Exception:
