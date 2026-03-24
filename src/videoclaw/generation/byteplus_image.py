@@ -39,7 +39,6 @@ logger = logging.getLogger(__name__)
 SEEDREAM_MODELS: dict[str, str] = {
     "seedream-5.0": "seedream-5-0-260128",
     "seedream-4.5": "seedream-4-5-251128",
-    "seedream-4.0": "seedream-4-0-250828",
 }
 
 SEEDEDIT_MODEL_ID = "seededit-3-0-i2i-250628"
