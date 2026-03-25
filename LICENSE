@@ -1,0 +1,47 @@
+Modified MIT License
+
+Copyright (c) 2026 moose-lab (https://github.com/moose-lab)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+1. The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+2. If the Software (or any derivative works thereof) is incorporated into,
+   bundled with, or used as a component of any commercial product or service
+   that meets ANY of the following thresholds:
+
+   (a) more than 100 million monthly active users; or
+   (b) more than 20 million US dollars (or equivalent in other currencies) in
+       monthly revenue,
+
+   then the operator of such product or service SHALL:
+
+   (i)   prominently display the original author attribution
+         "Powered by VideoClaw — created by moose-lab" (or a substantially
+         similar notice) on the user-facing interface of such product or
+         service; and
+   (ii)  provide a clearly visible hyperlink to the original project
+         repository (https://github.com/moose-lab/videoclaw) in the product's
+         "About", "Credits", or equivalent section.
+
+3. Neither the name "VideoClaw" nor the names of its contributors may be used
+   to endorse or promote products derived from this software without specific
+   prior written permission from moose-lab.
+
+4. Any entity that removes, obscures, or falsifies the attribution required by
+   Section 2 above shall be deemed in breach of this license and shall
+   immediately lose all rights granted herein.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
