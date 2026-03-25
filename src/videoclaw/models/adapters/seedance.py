@@ -63,7 +63,7 @@ _COST_PER_SECOND_USD = 0.05
 
 # Polling configuration
 _POLL_INTERVAL_S = 10.0
-_POLL_TIMEOUT_S = 600.0  # 10 minutes max (typical generation: 5-7 min)
+_POLL_TIMEOUT_S = 6000.0  # 100 minutes max
 _HTTP_TIMEOUT_S = 30.0
 
 

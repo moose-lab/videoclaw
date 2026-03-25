@@ -14,7 +14,7 @@
     <a href="#contributing">Contributing</a>
   </p>
   <p>
-    <img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License" />
+    <img src="https://img.shields.io/badge/license-Modified%20MIT-blue" alt="License" />
     <img src="https://img.shields.io/badge/python-3.12+-green" alt="Python" />
     <img src="https://img.shields.io/badge/tests-37%20passing-brightgreen" alt="Tests" />
     <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Docker-lightgrey" alt="Platform" />
@@ -274,4 +274,4 @@ ruff check src/ tests/    # Lint
 
 ## License
 
-Apache 2.0 — use it for anything.
+Modified MIT — see [LICENSE](LICENSE) for details.
