@@ -63,7 +63,21 @@ model_app = typer.Typer(help="Manage model adapters.", no_args_is_help=True)
 project_app = typer.Typer(help="Manage VideoClaw projects.", no_args_is_help=True)
 template_app = typer.Typer(help="Flow templates for common video types.", no_args_is_help=True)
 flow_app = typer.Typer(help="Run and validate ClawFlow YAML pipelines.", no_args_is_help=True)
-drama_app = typer.Typer(help="AI short drama series orchestration.", no_args_is_help=True)
+drama_app = typer.Typer(
+    help=(
+        "AI short drama series orchestration.\n\n"
+        "Default video model: [bold]Seedance 2.0[/bold]\n"
+        "  - 4-15 seconds per clip (hard limit)\n"
+        "  - Video + audio + dialogue co-generation in one pass\n"
+        "  - 9:16 vertical format (720p) for TikTok\n"
+        "  - Universal Reference for cross-clip character consistency\n\n"
+        "Workflows:\n"
+        "  [cyan]claw drama new[/cyan]    Create from concept (LLM writes script)\n"
+        "  [cyan]claw drama import[/cyan] Import complete script (LOCKED, no creative changes)\n"
+    ),
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+)
 
 app.add_typer(model_app, name="model")
 app.add_typer(project_app, name="project")
@@ -847,7 +861,15 @@ def drama_new(
     design_characters: Annotated[bool, typer.Option("--design-characters", help="Generate character reference images after planning.")] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
-    """Create a new AI short drama series."""
+    """Create a new AI short drama series from a concept.
+
+    \b
+    The LLM generates the script creatively. For importing a COMPLETE,
+    pre-written script without modifications, use 'claw drama import' instead.
+
+    \b
+    Default model: Seedance 2.0 (4-15s clips, audio co-generation, 9:16 vertical).
+    """
     _configure_logging(verbose)
     _show_banner()
 
@@ -925,6 +947,194 @@ async def _drama_plan_async(series, mgr) -> None:
         console.print(ep_table)
 
     console.print(f"\n[bold green]Series planned: {series.series_id}[/bold green]")
+
+
+@drama_app.command("import")
+def drama_import(
+    script_file: Annotated[str, typer.Argument(help="Path to complete script file (.docx or .txt).")],
+    title: Annotated[Optional[str], typer.Option("--title", "-t", help="Series title.")] = None,
+    genre: Annotated[str, typer.Option("--genre", "-g", help="Genre.")] = "drama",
+    language: Annotated[str, typer.Option("--lang", "-l", help="Script language (zh/en).")] = "en",
+    style: Annotated[str, typer.Option("--style", "-s", help="Visual style.")] = "cinematic",
+    aspect_ratio: Annotated[str, typer.Option("--aspect-ratio", "-a", help="Aspect ratio.")] = "9:16",
+    model: Annotated[str, typer.Option("--model", "-m", help="Video model (default: seedance-2.0).")] = "seedance-2.0",
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Import a complete script and decompose into storyboard shots.
+
+    \b
+    Imports a FINALIZED script from a .docx or .txt file. The script is
+    treated as LOCKED — no creative modifications are allowed. The system
+    only decomposes scenes into Seedance 2.0-compatible shots (4-15s each).
+
+    \b
+    If gaps are detected (missing character descriptions, ambiguous speakers,
+    etc.), you will be prompted to review and approve before any changes
+    are applied.
+
+    \b
+    Default video model: Seedance 2.0
+      - 4-15 seconds per clip
+      - Audio + dialogue co-generation (no separate TTS needed)
+      - 9:16 vertical format (720p) for TikTok
+      - Universal Reference for character consistency
+
+    \b
+    Example:
+      claw drama import script.docx --title "Satan in a Suit" --lang en
+    """
+    _configure_logging(verbose)
+    _show_banner()
+
+    asyncio.run(_drama_import_async(
+        script_file, title, genre, language, style, aspect_ratio, model,
+    ))
+
+
+async def _drama_import_async(
+    script_file: str,
+    title: str | None,
+    genre: str,
+    language: str,
+    style: str,
+    aspect_ratio: str,
+    model: str,
+) -> None:
+    from videoclaw.drama.models import DramaManager, ScriptModification
+    from videoclaw.drama.planner import DramaPlanner
+
+    planner = DramaPlanner()
+
+    # 1. Read the script file
+    console.print(f"[cyan]Reading script:[/cyan] {script_file}")
+    try:
+        script_text = planner.read_script_file(script_file)
+    except FileNotFoundError:
+        console.print(f"[red]File not found: {script_file}[/red]")
+        raise typer.Exit(code=1)
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(code=1)
+
+    console.print(f"  Script length: {len(script_text)} characters")
+
+    # 2. Create the series
+    mgr = DramaManager()
+    series = mgr.create(
+        title=title or "",
+        synopsis="",
+        genre=genre,
+        total_episodes=1,
+        target_episode_duration=120.0,
+        style=style,
+        language=language,
+        aspect_ratio=aspect_ratio,
+        model_id=model,
+    )
+
+    # 3. Human confirmation callback for detected gaps
+    def _confirm_gaps(modifications: list[ScriptModification]) -> list[ScriptModification]:
+        """Interactive prompt for each detected gap."""
+        if not modifications:
+            return []
+
+        console.print(
+            f"\n[bold yellow]Detected {len(modifications)} gap(s) "
+            f"in the imported script:[/bold yellow]\n"
+        )
+
+        approved: list[ScriptModification] = []
+        for i, mod in enumerate(modifications, 1):
+            console.print(
+                f"  [bold]{i}.[/bold] "
+                f"[cyan]{mod.scene_id or 'global'}[/cyan] — "
+                f"[yellow]{mod.field_name}[/yellow]: {mod.reason}"
+            )
+            if mod.proposed_value:
+                console.print(f"     Proposed fix: {mod.proposed_value}")
+
+            if typer.confirm(f"     Approve this modification?", default=False):
+                mod.approved = True
+                approved.append(mod)
+            else:
+                console.print("     [dim]Skipped — original script preserved.[/dim]")
+
+        return approved
+
+    # 4. Import and decompose
+    with console.status(
+        "[cyan]Decomposing script into storyboard (script is LOCKED)...",
+        spinner="dots",
+    ):
+        series = await planner.import_complete_script(
+            series,
+            script_text,
+            confirm_callback=_confirm_gaps,
+        )
+
+    mgr.save(series)
+
+    # 5. Display results
+    console.print(
+        Panel(
+            f"[bold]Series ID:[/bold]     {series.series_id}\n"
+            f"[bold]Title:[/bold]         {series.title}\n"
+            f"[bold]Script Lock:[/bold]   [bold red]LOCKED[/bold red] (no creative modifications)\n"
+            f"[bold]Source:[/bold]        imported\n"
+            f"[bold]Episodes:[/bold]      {len(series.episodes)}\n"
+            f"[bold]Total Scenes:[/bold]  {sum(len(ep.scenes) for ep in series.episodes)}\n"
+            f"[bold]Model:[/bold]         {series.model_id}\n"
+            f"[bold]Consistency:[/bold]   {'verified' if series.consistency_manifest and series.consistency_manifest.verified else 'pending (run design-characters first)'}",
+            title="[bold green]Script Imported[/bold green]",
+            border_style="green",
+        )
+    )
+
+    if series.characters:
+        char_table = Table(title="Characters (from script)", show_header=True, header_style="bold magenta")
+        char_table.add_column("Name", style="cyan")
+        char_table.add_column("Description", style="white", max_width=50)
+        char_table.add_column("Voice", style="dim")
+        for c in series.characters:
+            char_table.add_row(c.name, c.description[:50], c.voice_style)
+        console.print(char_table)
+
+    for ep in series.episodes:
+        ep_table = Table(
+            title=f"Episode {ep.number}: {ep.title}",
+            show_header=True,
+            header_style="bold cyan",
+        )
+        ep_table.add_column("Shot", width=10, style="dim")
+        ep_table.add_column("Duration", width=8, justify="right", style="green")
+        ep_table.add_column("Scale", width=12, style="yellow")
+        ep_table.add_column("Dialogue", max_width=40, style="white")
+        ep_table.add_column("Characters", max_width=20, style="cyan")
+
+        for scene in ep.scenes:
+            ep_table.add_row(
+                scene.scene_id,
+                f"{scene.duration_seconds:.0f}s",
+                str(scene.shot_scale.value if scene.shot_scale else "-"),
+                (scene.dialogue[:37] + "...") if len(scene.dialogue) > 40 else scene.dialogue,
+                ", ".join(scene.characters_present[:3]),
+            )
+        console.print(ep_table)
+        console.print(f"  Total duration: {ep.duration_seconds:.0f}s / {len(ep.scenes)} shots")
+
+    if series.pending_modifications:
+        console.print(
+            f"\n[yellow]Note: {len(series.pending_modifications)} unapproved "
+            f"modification(s) pending. Review with 'claw drama show'.[/yellow]"
+        )
+
+    console.print(
+        f"\n[bold]Next steps:[/bold]\n"
+        f"  1. claw drama design-characters {series.series_id}\n"
+        f"  2. claw drama design-scenes {series.series_id}\n"
+        f"  3. claw drama assign-voices {series.series_id}\n"
+        f"  4. claw drama run {series.series_id}"
+    )
 
 
 @drama_app.command("list")
@@ -1167,7 +1377,18 @@ def drama_run(
     budget: Annotated[Optional[float], typer.Option("--budget", "-b", help="Max budget in USD.")] = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
-    """Run the generation pipeline for drama episodes."""
+    """Run the generation pipeline for drama episodes.
+
+    \b
+    Uses Seedance 2.0 by default (4-15s per clip). Each clip generates
+    video + audio + dialogue in a single pass. Character consistency is
+    enforced via Universal Reference and a pre-built ConsistencyManifest.
+
+    \b
+    For imported (locked) scripts, all episodes must have scenes already
+    populated via 'claw drama import'. The runner will refuse to auto-
+    generate scripts for locked series.
+    """
     _configure_logging(verbose)
     _show_banner()
 
@@ -1238,6 +1459,13 @@ async def _drama_run_async(
 
         # Script the episode if not already scripted
         if not ep.scenes:
+            if series.script_locked:
+                console.print(
+                    f"[bold red]Episode {ep.number} has no scenes but script "
+                    f"is LOCKED (imported). Cannot auto-generate.[/bold red]\n"
+                    f"[yellow]Re-run 'claw drama import' with the complete script.[/yellow]"
+                )
+                raise typer.Exit(code=1)
             with console.status(f"[cyan]Scripting episode {ep.number}...", spinner="dots"):
                 script_data = await planner.script_episode(series, ep, prev_cliffhanger)
             prev_cliffhanger = script_data.get("cliffhanger")

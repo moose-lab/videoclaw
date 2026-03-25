@@ -3,16 +3,31 @@
 The DramaPlanner converts a high-level concept (genre, synopsis, character list)
 into a structured multi-episode plan, then generates per-episode scripts that
 feed into the existing VideoClaw pipeline.
+
+For **imported** (complete) scripts, the planner operates in strict decompose-only
+mode: it converts the existing script into shot-by-shot storyboards without any
+creative modifications. Any detected gaps require explicit user approval before
+being patched.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from pathlib import Path
+from typing import Any, Callable
 
 from videoclaw.config import get_config
-from videoclaw.drama.models import Character, DramaScene, DramaSeries, DramaStatus, Episode, EpisodeStatus
+from videoclaw.drama.models import (
+    Character,
+    ConsistencyManifest,
+    DramaScene,
+    DramaSeries,
+    DramaStatus,
+    Episode,
+    EpisodeStatus,
+    ScriptModification,
+)
 from videoclaw.models.llm.litellm_wrapper import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -145,11 +160,12 @@ EPISODE_SCRIPT_PROMPT: str = """\
 - match_cut（匹配剪辑）：两个视觉相似画面之间的创意过渡
 - jump_cut（跳切）：同场景内时间压缩，制造紧迫感
 
-# 节奏控制
-- 场景数量：60秒约8-12个场景，按时长等比缩放
+# 节奏控制（Seedance 2.0 约束：单镜头时长 4～15 秒）
+- 每个场景的 duration_seconds 必须在 4～15 秒之间（视频模型硬限制）
+- 场景数量：60秒约 6-10 个场景，按时长等比缩放
 - 所有场景的 duration_seconds 之和必须等于目标集时长（±2秒）
 - 节奏模板：钩子(0-5s) → 铺垫(5-15s) → 递进(15-35s) → 高潮(35-50s) → 悬念(50-60s)
-- 高潮场景用短镜头快切（2-3秒/镜头），铺垫场景可适当拉长（5-8秒）
+- 高潮场景用短镜头快切（4-5秒/镜头），铺垫场景可适当拉长（8-12秒）
 - 第一个场景必须是视觉钩子或衔接上集悬念，最后一个场景必须制造悬念
 
 # 台词与旁白
@@ -158,6 +174,7 @@ EPISODE_SCRIPT_PROMPT: str = """\
 - 旁白用于推进叙事和内心独白，对白用于冲突和情感爆发
 - 不是每个场景都需要台词，无声的表情特写同样有力
 - speaking_character 必须与 characters_present 中的角色一致
+- 单个场景的对白/旁白字数应匹配该场景的 duration_seconds（约4字/秒）
 
 # 内心独白（内心OS）
 - 内心独白是中国短剧的标志性叙事手法：角色第一人称内心活动
@@ -187,7 +204,7 @@ Output JSON schema:
       "description": "<中文场景描述：谁在哪里做什么，情绪状态>",
       "visual_prompt": "<ENGLISH ONLY — [setting] + [character full appearance] + [action/expression] + [lighting/mood]. Be specific and visual.>",
       "camera_movement": "<static | pan_left | pan_right | dolly_in | tracking | crane_up | handheld>",
-      "duration_seconds": <float>,
+      "duration_seconds": <float, 4-15>,
       "dialogue": "<中文角色对白，短句口语化，无则留空>",
       "dialogue_line_type": "<dialogue | inner_monologue — 角色间对白为dialogue，内心独白(第一人称OS/心理活动)为inner_monologue，无对白则留空>",
       "narration": "<中文旁白，无则留空>",
@@ -215,8 +232,100 @@ Output JSON schema:
 """
 
 
+IMPORT_DECOMPOSE_PROMPT: str = """\
+You are a professional short-drama storyboard decomposer for TikTok-style vertical \
+(9:16) AI-generated short dramas. You are given a COMPLETE, FINALIZED script.
+
+# ABSOLUTE CONSTRAINTS — READ BEFORE ANYTHING ELSE
+1. This script is LOCKED AND FINAL. You must NOT add, remove, or modify ANY \
+   dialogue, action, character behavior, or plot point.
+2. Your ONLY job is to decompose the existing script into shot-by-shot visual \
+   prompts for AI video generation (Seedance 2.0).
+3. Every shot must map 1:1 to content in the original script. NO creative \
+   additions whatsoever.
+4. If a scene in the script has no explicit dialogue, leave dialogue empty — \
+   do NOT invent lines.
+5. Character names, ages, descriptions must match EXACTLY what the script provides.
+
+# Seedance 2.0 technical constraints
+- Each shot: 4–15 seconds (hard limit).
+- Seedance 2.0 co-generates video + audio + dialogue in one pass.
+- 9:16 vertical format, 720p.
+- visual_prompt must be in ENGLISH, even if the script is in another language.
+- Dialogue in the shot should be in the SCRIPT'S ORIGINAL LANGUAGE.
+
+# Decomposition rules
+For each shot:
+1. Write an ENGLISH visual_prompt describing the EXACT scene as written.
+   Structure: [setting] + [character full appearance] + [action/expression] + [lighting/mood]
+2. Assign shot_scale, shot_type, camera_movement based on the scene content.
+3. Set duration_seconds within 4–15s. Aim for: dialogue shots ≥5s, action shots 4–6s.
+4. Copy the EXACT dialogue from the script — do NOT paraphrase or summarize.
+5. Identify characters_present strictly from who the script says is in the scene.
+6. Assign emotion from: tense, anxious, angry, furious, sad, heartbroken, shock, \
+   disbelief, warm, tender, sweet, intimate, fear, panic, triumphant, defiant.
+
+# Gap detection
+If you notice any of the following gaps, report them in the "detected_gaps" array:
+- A character appears but has no physical description in the script
+- A scene location is referenced but never described
+- A dialogue line has no clear speaker
+- A transition between scenes has a logical discontinuity
+
+# Output JSON schema
+{
+  "episodes": [
+    {
+      "number": <int>,
+      "title": "<episode title from script>",
+      "scenes": [
+        {
+          "scene_id": "<ep01_s01>",
+          "description": "<scene description from script>",
+          "visual_prompt": "<ENGLISH — exact scene visualization for Seedance 2.0>",
+          "camera_movement": "<static|dolly_in|tracking|crane_up|handheld|pan_left|pan_right>",
+          "duration_seconds": <float, 4-15>,
+          "dialogue": "<EXACT dialogue from script, original language>",
+          "dialogue_line_type": "<dialogue|inner_monologue>",
+          "narration": "<narration text if any, otherwise empty>",
+          "speaking_character": "<character name from script>",
+          "shot_scale": "<close_up|medium_close|medium|wide|extreme_wide>",
+          "shot_type": "<establishing|reaction|action|detail|pov>",
+          "emotion": "<from emotion list above>",
+          "characters_present": ["<names from script>"],
+          "transition": "<cut|dissolve|fade_in|fade_out|match_cut>",
+          "sfx": "<sound effects implied by the script>"
+        }
+      ]
+    }
+  ],
+  "characters": [
+    {
+      "name": "<from script>",
+      "description": "<from script>",
+      "visual_prompt": "<ENGLISH — appearance only, from script descriptions>",
+      "voice_style": "<warm|authoritative|playful|dramatic|calm>"
+    }
+  ],
+  "detected_gaps": [
+    {
+      "scene_id": "<affected scene or empty>",
+      "field": "<which field has a gap>",
+      "description": "<what is missing or inconsistent>"
+    }
+  ]
+}
+
+Return ONLY valid JSON — no markdown fences, no commentary.
+"""
+
+
 class DramaPlanner:
-    """Plans multi-episode drama series using LLM."""
+    """Plans multi-episode drama series using LLM.
+
+    When operating on imported (locked) scripts, the planner uses
+    decompose-only mode — no creative modifications are applied.
+    """
 
     def __init__(self, llm: LLMClient | None = None) -> None:
         self._llm = llm
@@ -336,6 +445,8 @@ class DramaPlanner:
 
         # --- Duration validation ---
         scenes = script_data.get("scenes", [])
+
+        # Step 1: Proportional scaling to match target duration
         total_duration = sum(float(s.get("duration_seconds", 0)) for s in scenes)
         target = episode.duration_seconds
         if abs(total_duration - target) > 5:
@@ -348,9 +459,249 @@ class DramaPlanner:
                 for s in scenes:
                     s["duration_seconds"] = round(float(s["duration_seconds"]) * scale, 1)
 
+        # Step 2: Clamp individual scene durations to Seedance 2.0 range (4-15s)
+        for s in scenes:
+            dur = float(s.get("duration_seconds", 5.0))
+            clamped = max(4.0, min(15.0, dur))
+            if clamped != dur:
+                logger.debug(
+                    "Scene %s duration %.1fs clamped to %.1fs (Seedance 4-15s range)",
+                    s.get("scene_id", "?"), dur, clamped,
+                )
+            s["duration_seconds"] = clamped
+
         episode.script = json.dumps(script_data, ensure_ascii=False)
         episode.scenes = [DramaScene.from_dict(s) for s in scenes]
         return script_data
+
+    # ------------------------------------------------------------------
+    # Complete-script import (decompose-only, no creative modification)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def read_script_file(path: str | Path) -> str:
+        """Read a complete script from a file (.docx or .txt).
+
+        Returns the raw text content of the script.
+        """
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(f"Script file not found: {path}")
+
+        if path.suffix.lower() == ".docx":
+            try:
+                from docx import Document  # type: ignore[import-untyped]
+            except ImportError:
+                raise ImportError(
+                    "python-docx is required to read .docx files. "
+                    "Install it with: pip install python-docx"
+                )
+            doc = Document(str(path))
+            return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+        else:
+            return path.read_text(encoding="utf-8")
+
+    async def import_complete_script(
+        self,
+        series: DramaSeries,
+        script_text: str,
+        *,
+        confirm_callback: Callable[[list[ScriptModification]], list[ScriptModification]] | None = None,
+    ) -> DramaSeries:
+        """Import a complete, finalized script and decompose it into shots.
+
+        This method sets ``script_locked=True`` on the series, preventing any
+        creative modifications. The LLM is used ONLY for decomposing scenes
+        into Seedance 2.0-compatible shot descriptions.
+
+        Parameters
+        ----------
+        series:
+            The target series to populate.
+        script_text:
+            The complete script text to import.
+        confirm_callback:
+            Optional callback invoked when gaps are detected. Receives a list
+            of :class:`ScriptModification` proposals and must return the
+            approved subset. In CLI mode this prompts the user interactively.
+            If ``None``, gaps are logged but no automatic fixes are applied.
+
+        Returns
+        -------
+        DramaSeries
+            The series with script_locked=True and all episodes/scenes populated.
+        """
+        logger.info(
+            "Importing complete script for series %r (script_locked=True)",
+            series.title or series.series_id,
+        )
+
+        series.script_locked = True
+        series.script_source = "imported"
+        series.status = DramaStatus.PLANNING
+
+        llm = self._ensure_llm()
+
+        # Build the user message with the full script and character info
+        characters_text = ""
+        if series.characters:
+            characters_text = "\nKnown characters:\n" + "\n".join(
+                f"  - {c.name}: {c.visual_prompt} ({c.description})"
+                for c in series.characters
+            )
+
+        user_message = (
+            f"Series: {series.title}\n"
+            f"Genre: {series.genre or 'drama'}\n"
+            f"Language: {series.language}\n"
+            f"Target aspect ratio: {series.aspect_ratio}\n"
+            f"Video model: Seedance 2.0 (4-15s per clip, audio co-generation)\n"
+            f"{characters_text}\n\n"
+            f"=== COMPLETE SCRIPT (DO NOT MODIFY) ===\n\n"
+            f"{script_text}\n\n"
+            f"=== END OF SCRIPT ===\n\n"
+            f"Decompose this script into shot-by-shot storyboard. "
+            f"Do NOT add or change any content."
+        )
+
+        raw = await llm.chat(
+            messages=[
+                {"role": "system", "content": IMPORT_DECOMPOSE_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+        )
+
+        result = self._parse_json(raw)
+
+        # --- Extract characters ---
+        if result.get("characters"):
+            series.characters = [
+                Character.from_dict(c) for c in result["characters"]
+            ]
+
+        # --- Extract episodes and scenes ---
+        episodes_data = result.get("episodes", [])
+        series.episodes = []
+        for ep_data in episodes_data:
+            scenes = [DramaScene.from_dict(s) for s in ep_data.get("scenes", [])]
+
+            # Clamp durations to Seedance 2.0 range
+            for scene in scenes:
+                scene.duration_seconds = max(4.0, min(15.0, scene.duration_seconds))
+
+            episode = Episode(
+                number=ep_data.get("number", len(series.episodes) + 1),
+                title=ep_data.get("title", f"Episode {len(series.episodes) + 1}"),
+                scenes=scenes,
+                duration_seconds=sum(s.duration_seconds for s in scenes),
+                status=EpisodeStatus.PENDING,
+                script=json.dumps(ep_data, ensure_ascii=False),
+            )
+            series.episodes.append(episode)
+
+        series.total_episodes = len(series.episodes)
+
+        # --- Handle detected gaps ---
+        gaps = result.get("detected_gaps", [])
+        if gaps:
+            logger.warning("Detected %d gaps in imported script:", len(gaps))
+            modifications: list[ScriptModification] = []
+            for gap in gaps:
+                mod = ScriptModification(
+                    scene_id=gap.get("scene_id", ""),
+                    field_name=gap.get("field", ""),
+                    reason=gap.get("description", ""),
+                    original_value="",
+                    proposed_value="",
+                )
+                modifications.append(mod)
+                logger.warning(
+                    "  [%s] %s: %s",
+                    mod.scene_id or "global",
+                    mod.field_name,
+                    mod.reason,
+                )
+
+            if confirm_callback is not None:
+                approved = confirm_callback(modifications)
+                series.pending_modifications = [
+                    m for m in modifications if m not in approved
+                ]
+            else:
+                series.pending_modifications = modifications
+
+        # --- Build consistency manifest ---
+        series.consistency_manifest = self._build_consistency_manifest(series)
+
+        series.status = DramaStatus.DRAFT
+        logger.info(
+            "Script imported: %d episodes, %d total scenes, script_locked=True",
+            len(series.episodes),
+            sum(len(ep.scenes) for ep in series.episodes),
+        )
+        return series
+
+    @staticmethod
+    def _build_consistency_manifest(series: DramaSeries) -> ConsistencyManifest:
+        """Build a ConsistencyManifest from the current series state.
+
+        Freezes character visuals and reference image paths so they remain
+        identical across all generated clips.
+        """
+        manifest = ConsistencyManifest(
+            style_anchor=series.style,
+        )
+
+        for char in series.characters:
+            if char.visual_prompt:
+                manifest.character_visuals[char.name] = char.visual_prompt
+            if char.reference_image:
+                manifest.character_references[char.name] = char.reference_image
+            if char.reference_images:
+                manifest.character_multi_references[char.name] = list(char.reference_images)
+
+        # Extract unique scene settings from all episodes
+        for ep in series.episodes:
+            for scene in ep.scenes:
+                if scene.scene_id and scene.visual_prompt:
+                    manifest.scene_settings[scene.scene_id] = scene.visual_prompt
+
+        manifest.verify_references()
+        return manifest
+
+    def guard_script_locked(
+        self,
+        series: DramaSeries,
+        operation: str,
+        *,
+        confirm_callback: Callable[[list[ScriptModification]], list[ScriptModification]] | None = None,
+    ) -> bool:
+        """Check if a modification is allowed on a locked script.
+
+        When ``series.script_locked`` is True, this method creates a
+        :class:`ScriptModification` record and invokes the confirm callback.
+        Returns True if the operation is approved, False otherwise.
+        """
+        if not series.script_locked:
+            return True
+
+        mod = ScriptModification(
+            reason=f"Attempted operation on locked script: {operation}",
+        )
+
+        logger.warning(
+            "Script is locked (source=%s). Operation %r requires user approval.",
+            series.script_source,
+            operation,
+        )
+
+        if confirm_callback is not None:
+            approved = confirm_callback([mod])
+            return len(approved) > 0
+
+        # No callback — reject by default
+        series.pending_modifications.append(mod)
+        return False
 
     @staticmethod
     def _parse_json(raw_response: str) -> dict[str, Any]:

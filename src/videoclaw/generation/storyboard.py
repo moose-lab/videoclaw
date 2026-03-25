@@ -26,13 +26,18 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 PROMPT_OPTIMIZATION_SYSTEM: str = """\
-You are an expert at writing prompts for AI video generation models
-(Sora, Runway Gen-3, Kling, Pika, Stable Video Diffusion, etc.).
+You are an expert at writing prompts for AI video generation models,
+specialised in Seedance 2.0, Kling, Sora, Runway Gen-3, and similar.
 
 Given a script with sections, produce a shot list where each shot has a
 generation-ready prompt specifically tailored for text-to-video models.
 
-Prompt-writing rules:
+# Duration constraints (Seedance 2.0)
+- Each shot's duration_seconds MUST be between 4 and 15 seconds.
+- Never generate shots shorter than 4s or longer than 15s.
+- Fast-paced action: use 4-5s per shot. Slow establishing shots: 8-12s.
+
+# Prompt-writing rules
 - Start with the primary subject and action.
 - Describe the environment / background in detail.
 - Specify lighting conditions (golden hour, overcast, neon, studio, natural).
@@ -41,6 +46,7 @@ Prompt-writing rules:
   bird's-eye, dutch-angle, over-the-shoulder.
 - State the camera movement: static, slow pan left, dolly forward, tracking
   shot following subject, smooth crane rising, handheld shake.
+  Use ONE motion verb per shot — never stack multiple movements.
 - Mention the shot scale: extreme close-up, close-up, medium shot, full shot,
   wide shot, extreme wide shot.
 - Add temporal cues: slow motion, time-lapse, normal speed.
@@ -49,14 +55,19 @@ Prompt-writing rules:
 - Keep prompts in English regardless of the script language -- all major video
   models perform best with English prompts.
 
-Material description rules:
+# Material description rules
 - Characters must have a complete appearance description on first appearance
   (age, gender, body type, hair style/color, clothing, accessories, distinctive marks).
 - Objects should describe material, color, size, and key visual features.
 - Maintain visual consistency: the same character across shots must use
   identical visual keywords.
 
-Background audio considerations:
+# Seedance 2.0 Universal Reference (全能参考)
+- When character reference images are available, the model uses Universal
+  Reference mode for character consistency. Prompts should still contain full
+  character appearance keywords to supplement the reference images.
+
+# Background audio considerations
 - Note ambient sounds and environmental audio cues for each shot
   (wind, traffic, crowd murmur, rain, silence, etc.).
 - Sound effects should serve the narrative rhythm: sharp/sudden sounds for
@@ -70,8 +81,8 @@ Output JSON schema (array of objects):
     "prompt": "<optimised generation prompt in English>",
     "negative_prompt": "<things to exclude>",
     "description": "<brief human-readable description>",
-    "duration_seconds": <float>,
-    "suggested_model": "<kling | runway | sora | pika | svd | auto>",
+    "duration_seconds": <float, 4-15>,
+    "suggested_model": "<seedance-2.0 | kling | runway | sora | auto>",
     "visual_style": "<cinematic | photorealistic | anime | etc.>",
     "camera_movement": "<static | pan_left | dolly_in | etc.>",
     "sfx": "<sound effects for this shot, e.g. footsteps, door slam, thunder>",
@@ -250,11 +261,15 @@ class StoryboardGenerator:
             # using a structured format the video adapter can parse.
             combined_prompt = entry.get("prompt", "")
 
+            # Clamp duration to Seedance 2.0 range (4-15s)
+            raw_dur = float(entry.get("duration_seconds", 5.0))
+            clamped_dur = max(4.0, min(15.0, raw_dur))
+
             shot = Shot(
                 shot_id=entry.get("shot_id", uuid.uuid4().hex[:12]),
                 description=entry.get("description", ""),
                 prompt=combined_prompt,
-                duration_seconds=float(entry.get("duration_seconds", 5.0)),
+                duration_seconds=clamped_dur,
                 model_id=entry.get("suggested_model", "auto"),
                 status=ShotStatus.PENDING,
             )

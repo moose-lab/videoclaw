@@ -6,8 +6,9 @@ ByteDance Volcengine Ark).
 Seedance 2.0 key capabilities:
 - Text-to-video and image-to-video (first_frame / last_frame)
 - Universal Reference architecture for character consistency
-- Native 9:16 vertical video support (4-15 seconds per clip)
+- Native 9:16 vertical video support (4–15 seconds per clip)
 - Native audio co-generation (Dual-Branch Diffusion Transformer)
+- Universal Reference (全能参考) as default mode for character consistency
 
 API endpoints (vectorspace.cn):
 - Create task:  POST {base}/api/v1/doubao/create
@@ -243,17 +244,17 @@ class SeedanceVideoAdapter:
         content.append({"type": "text", "text": request.prompt})
 
         # Pre-hosted HTTPS image URLs (preferred path)
+        # Default mode: Universal Reference (全能参考) — all images use
+        # ``reference_image`` role for maximum character consistency.
+        # Callers can override per-image role via the ``role`` key.
         image_urls: list[dict[str, str]] | None = request.extra.get("image_urls")
         if image_urls:
-            has_multiple = len(image_urls) > 1
             for idx, img_info in enumerate(image_urls):
                 url = img_info.get("url", "")
                 if not url.startswith("http"):
                     continue
-                # Can't mix first_frame with reference_image
-                role = img_info.get("role") or (
-                    "reference_image" if has_multiple else "first_frame"
-                )
+                # Default to reference_image (Universal Reference mode)
+                role = img_info.get("role", "reference_image")
                 content.append({
                     "type": "image_url",
                     "image_url": {"url": url},
@@ -299,8 +300,8 @@ class SeedanceVideoAdapter:
         res_key = (request.width, request.height)
         ratio = _RESOLUTION_TO_RATIO.get(res_key, "9:16")
 
-        # Duration clamped to Seedance 2.0's 5-15s range
-        duration = max(5, min(15, int(request.duration_seconds)))
+        # Duration clamped to Seedance 2.0's 4-15s range
+        duration = max(4, min(15, int(request.duration_seconds)))
 
         payload: dict[str, Any] = {
             "model": _ARK_MODEL_ID,

@@ -20,6 +20,32 @@ from videoclaw.drama.prompt_enhancer import PromptEnhancer
 logger = logging.getLogger(__name__)
 
 
+def _ensure_consistency_manifest(series: DramaSeries) -> None:
+    """Build or verify the ConsistencyManifest before generation.
+
+    When a manifest already exists, verifies that all reference images still
+    exist on disk. When missing, builds one from the current series state.
+    Logs warnings for any missing reference images.
+    """
+    from videoclaw.drama.planner import DramaPlanner
+
+    if series.consistency_manifest is None:
+        series.consistency_manifest = DramaPlanner._build_consistency_manifest(series)
+        logger.info("Built consistency manifest: %d characters, %d scenes",
+                     len(series.consistency_manifest.character_visuals),
+                     len(series.consistency_manifest.scene_settings))
+
+    missing = series.consistency_manifest.verify_references()
+    if missing:
+        logger.warning(
+            "Consistency manifest: %d reference images missing — "
+            "character consistency may degrade: %s",
+            len(missing), missing,
+        )
+    else:
+        logger.info("Consistency manifest verified: all reference images present")
+
+
 def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, ProjectState]:
     """Convert an episode's scene prompts into a DAG + ProjectState.
 
@@ -28,20 +54,37 @@ def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, Proje
     Unlike the generic ``build_dag()``, this builds a drama-specific DAG
     with richer node params so handlers can access scene dialogue,
     character voices, and subtitle data.
+
+    When ``series.script_locked`` is True, the enhancer is limited to
+    visual prompt optimization — no scene content is modified.
     """
+    # --- Pre-generation consistency enforcement ---
+    _ensure_consistency_manifest(series)
+
     # Build character reference image lookup tables (single + multi-angle)
-    char_ref_map: dict[str, str] = {
-        c.name: c.reference_image
-        for c in series.characters
-        if c.reference_image
-    }
-    char_multi_ref_map: dict[str, list[str]] = {
-        c.name: c.reference_images
-        for c in series.characters
-        if c.reference_images
-    }
+    # Prefer consistency manifest (frozen) over live character data
+    manifest = series.consistency_manifest
+    char_ref_map: dict[str, str] = {}
+    char_multi_ref_map: dict[str, list[str]] = {}
+
+    if manifest and manifest.verified:
+        char_ref_map = dict(manifest.character_references)
+        char_multi_ref_map = {k: list(v) for k, v in manifest.character_multi_references.items()}
+    else:
+        char_ref_map = {
+            c.name: c.reference_image
+            for c in series.characters
+            if c.reference_image
+        }
+        char_multi_ref_map = {
+            c.name: c.reference_images
+            for c in series.characters
+            if c.reference_images
+        }
 
     # Enhance visual prompts before building shots
+    # For locked scripts: enhancer only optimizes visual_prompt for Seedance,
+    # does NOT modify dialogue, narration, or scene structure.
     enhancer = PromptEnhancer()
     enhancer.enhance_all_scenes(episode, series)
 
@@ -54,7 +97,7 @@ def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, Proje
             for name in scene.characters_present
             if name in char_ref_map
         }
-        # Multi-angle references for Seedance Universal Reference
+        # Multi-angle references for Seedance Universal Reference (全能参考)
         multi_refs = {
             name: char_multi_ref_map[name]
             for name in scene.characters_present
@@ -68,26 +111,33 @@ def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, Proje
             model_id=series.model_id,
             status=ShotStatus.PENDING,
             reference_images=ref_images,
+            multi_reference_images=multi_refs,
         ))
 
     # Create project state for this episode
+    meta: dict[str, Any] = {
+        "series_id": series.series_id,
+        "episode_id": episode.episode_id,
+        "episode_number": episode.number,
+        "style": series.style,
+        "aspect_ratio": series.aspect_ratio,
+        "language": series.language,
+        "script_locked": series.script_locked,
+        "script_source": series.script_source,
+        "voice_map": {
+            c.name: c.voice_profile.to_dict()
+            for c in series.characters
+            if c.voice_profile
+        },
+    }
+    if manifest and manifest.verified:
+        meta["consistency_manifest"] = manifest.to_dict()
+
     state = ProjectState(
         prompt=f"[{series.title}] Episode {episode.number}: {episode.title}",
         script=episode.script,
         storyboard=shots,
-        metadata={
-            "series_id": series.series_id,
-            "episode_id": episode.episode_id,
-            "episode_number": episode.number,
-            "style": series.style,
-            "aspect_ratio": series.aspect_ratio,
-            "language": series.language,
-            "voice_map": {
-                c.name: c.voice_profile.to_dict()
-                for c in series.characters
-                if c.voice_profile
-            },
-        },
+        metadata=meta,
     )
     episode.project_id = state.project_id
 
@@ -187,6 +237,7 @@ def _build_drama_dag(
                 "model_id": shot.model_id,
                 "aspect_ratio": series.aspect_ratio,
                 "reference_images": shot.reference_images,
+                "multi_reference_images": shot.multi_reference_images,
                 "speaking_character": scene.speaking_character,
             },
         ))
@@ -313,11 +364,16 @@ def build_scene_regen_dag(
             f"(available: {[s.scene_id for s in episode.scenes]})"
         )
 
-    # Build character reference image lookup
+    # Build character reference image lookup (single + multi-angle)
     char_ref_map: dict[str, str] = {
         c.name: c.reference_image
         for c in series.characters
         if c.reference_image
+    }
+    char_multi_ref_map: dict[str, list[str]] = {
+        c.name: c.reference_images
+        for c in series.characters
+        if c.reference_images
     }
 
     # Build character voice lookup
@@ -344,6 +400,12 @@ def build_scene_regen_dag(
     # Also include speaking character's reference
     if target_scene.speaking_character and target_scene.speaking_character in char_ref_map:
         ref_images[target_scene.speaking_character] = char_ref_map[target_scene.speaking_character]
+    # Multi-angle references for Universal Reference (全能参考)
+    multi_refs = {
+        name: char_multi_ref_map[name]
+        for name in target_scene.characters_present
+        if name in char_multi_ref_map
+    }
 
     vid_id = f"video_{scene_id}"
     dag.add_node(TaskNode(
@@ -357,6 +419,7 @@ def build_scene_regen_dag(
             "model_id": shot.model_id if shot else series.model_id,
             "aspect_ratio": series.aspect_ratio,
             "reference_images": ref_images,
+            "multi_reference_images": multi_refs,
             "speaking_character": target_scene.speaking_character,
         },
     ))
@@ -534,6 +597,19 @@ class DramaRunner:
 
             # Script the episode if not already scripted (with cliffhanger threading)
             if not episode.scenes:
+                if series.script_locked:
+                    logger.error(
+                        "Episode %d has no scenes but script is locked "
+                        "(source=%s). Cannot auto-generate script for "
+                        "locked series — import the complete script first.",
+                        episode.number, series.script_source,
+                    )
+                    raise RuntimeError(
+                        f"Episode {episode.number} has no scenes and "
+                        f"script_locked=True. Use 'claw drama import' to "
+                        f"provide the complete script."
+                    )
+
                 from videoclaw.drama.planner import DramaPlanner
 
                 planner = DramaPlanner()

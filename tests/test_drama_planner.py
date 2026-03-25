@@ -97,7 +97,12 @@ async def test_script_episode_parses_mock_llm_response():
 
 @pytest.mark.asyncio
 async def test_script_episode_adjusts_duration_proportionally():
-    """When scene durations deviate >5s from target, planner should scale them."""
+    """When scene durations deviate >5s from target, planner should scale them.
+
+    Seedance 2.0 constrains individual scenes to 4-15s, so test values are
+    chosen so that both scaled durations remain within that range.
+    """
+    # 8+12=20s, target=14s → scale ~0.7 → 5.6+8.4 (both within 4-15s)
     mock_llm_response = json.dumps({
         "episode_title": "时长测试",
         "scenes": [
@@ -106,7 +111,7 @@ async def test_script_episode_adjusts_duration_proportionally():
                 "description": "场景1",
                 "visual_prompt": "scene one",
                 "camera_movement": "static",
-                "duration_seconds": 20.0,
+                "duration_seconds": 8.0,
                 "dialogue": "",
                 "narration": "",
                 "speaking_character": "",
@@ -121,7 +126,7 @@ async def test_script_episode_adjusts_duration_proportionally():
                 "description": "场景2",
                 "visual_prompt": "scene two",
                 "camera_movement": "static",
-                "duration_seconds": 40.0,
+                "duration_seconds": 12.0,
                 "dialogue": "",
                 "narration": "",
                 "speaking_character": "",
@@ -142,35 +147,55 @@ async def test_script_episode_adjusts_duration_proportionally():
 
     planner = DramaPlanner(llm=mock_llm)
     series = DramaSeries(title="测试剧")
-    episode = Episode(number=1, title="时长测试", synopsis="测试", duration_seconds=30.0)
+    episode = Episode(number=1, title="时长测试", synopsis="测试", duration_seconds=14.0)
 
     await planner.script_episode(series, episode)
 
-    # Original: 20+40=60s, target=30s → scale by 0.5
+    # Original: 8+12=20s, target=14s → scale by 0.7 → 5.6+8.4
     total = sum(s.duration_seconds for s in episode.scenes)
-    assert abs(total - 30.0) <= 2.0, f"Expected ~30s, got {total}s"
-    # Ratio should be preserved: scene1 should be ~half of scene2
+    assert abs(total - 14.0) <= 2.0, f"Expected ~14s, got {total}s"
+    # Ratio should be preserved: scene1 should be less than scene2
     assert episode.scenes[0].duration_seconds < episode.scenes[1].duration_seconds
 
 
 @pytest.mark.asyncio
 async def test_script_episode_no_adjustment_within_tolerance():
-    """When scene durations are within ±5s of target, no adjustment should occur."""
+    """When scene durations are within ±5s of target, no adjustment should occur.
+
+    Individual scenes are still clamped to Seedance 2.0's 4-15s range.
+    """
+    # Two scenes: 7+8=15s, target=18s → within 5s tolerance, no scaling
+    # Both durations already within 4-15s range → no clamping either
     mock_llm_response = json.dumps({
         "episode_title": "精准时长",
         "scenes": [
             {
                 "scene_id": "ep01_s01",
-                "description": "场景",
-                "visual_prompt": "scene",
+                "description": "场景1",
+                "visual_prompt": "scene one",
                 "camera_movement": "static",
-                "duration_seconds": 28.0,
+                "duration_seconds": 7.0,
                 "dialogue": "",
                 "narration": "",
                 "speaking_character": "",
                 "shot_scale": "medium",
                 "shot_type": "action",
                 "emotion": "tense",
+                "characters_present": [],
+                "transition": "cut",
+            },
+            {
+                "scene_id": "ep01_s02",
+                "description": "场景2",
+                "visual_prompt": "scene two",
+                "camera_movement": "static",
+                "duration_seconds": 8.0,
+                "dialogue": "",
+                "narration": "",
+                "speaking_character": "",
+                "shot_scale": "wide",
+                "shot_type": "establishing",
+                "emotion": "warm",
                 "characters_present": [],
                 "transition": "cut",
             },
@@ -185,12 +210,13 @@ async def test_script_episode_no_adjustment_within_tolerance():
 
     planner = DramaPlanner(llm=mock_llm)
     series = DramaSeries(title="测试剧")
-    episode = Episode(number=1, title="精准", synopsis="测试", duration_seconds=30.0)
+    episode = Episode(number=1, title="精准", synopsis="测试", duration_seconds=18.0)
 
     await planner.script_episode(series, episode)
 
-    # 28s is within 5s of 30s target — no scaling
-    assert episode.scenes[0].duration_seconds == 28.0
+    # 15s is within 5s of 18s target — no scaling; durations within 4-15s — no clamping
+    assert episode.scenes[0].duration_seconds == 7.0
+    assert episode.scenes[1].duration_seconds == 8.0
 
 
 @pytest.mark.asyncio

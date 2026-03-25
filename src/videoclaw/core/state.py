@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, fields, asdict
 from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
@@ -56,8 +56,11 @@ class Shot:
     cost: float = 0.0
     retries: int = 0
     reference_images: dict[str, str] = field(default_factory=dict)
-    # Mapping: character_name → file_path
-    # e.g. {"林薇": "/path/to/dramas/xxx/characters/林薇.png"}
+    # Mapping: character_name → file_path (primary / front view)
+    # e.g. {"林薇": "/path/to/dramas/xxx/characters/林薇_front.png"}
+    multi_reference_images: dict[str, list[str]] = field(default_factory=dict)
+    # Mapping: character_name → [front, three_quarter, full_body]
+    # For Seedance 2.0 Universal Reference (全能参考) multi-angle consistency
 
     # -- Serialisation helpers -------------------------------------------------
 
@@ -70,6 +73,9 @@ class Shot:
     def from_dict(cls, data: dict[str, Any]) -> Shot:
         data = dict(data)  # shallow copy so we don't mutate the caller's dict
         data["status"] = ShotStatus(data.get("status", "pending"))
+        # Filter to known fields for backward compatibility
+        known = {f.name for f in fields(cls)}
+        data = {k: v for k, v in data.items() if k in known}
         return cls(**data)
 
 

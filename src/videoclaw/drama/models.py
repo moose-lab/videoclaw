@@ -563,6 +563,79 @@ class Episode:
 
 
 @dataclass
+class ScriptModification:
+    """A proposed modification to a locked script that requires user approval.
+
+    When ``script_locked`` is ``True`` on a series, any detected gap or
+    inconsistency is wrapped in a ScriptModification and presented to the
+    user for explicit confirmation before being applied.
+    """
+
+    modification_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
+    scene_id: str = ""
+    field_name: str = ""
+    reason: str = ""
+    original_value: str = ""
+    proposed_value: str = ""
+    approved: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ScriptModification:
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in known})
+
+
+@dataclass
+class ConsistencyManifest:
+    """Pre-generation consistency constraints for multi-clip coherence.
+
+    Built once before video generation starts and injected into every
+    Seedance 2.0 generation call to prevent character/scene "崩坏".
+    """
+
+    character_visuals: dict[str, str] = field(default_factory=dict)
+    """name → frozen visual_prompt (identical across all clips)."""
+    character_references: dict[str, str] = field(default_factory=dict)
+    """name → primary reference image path (verified to exist)."""
+    character_multi_references: dict[str, list[str]] = field(default_factory=dict)
+    """name → [front, three_quarter, full_body] reference image paths."""
+    scene_settings: dict[str, str] = field(default_factory=dict)
+    """scene_id → frozen setting description for location continuity."""
+    style_anchor: str = ""
+    """Frozen style prompt appended to all generations."""
+    verified: bool = False
+    """True after all reference paths are validated to exist on disk."""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ConsistencyManifest:
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in known})
+
+    def verify_references(self) -> list[str]:
+        """Check that all reference image paths exist on disk.
+
+        Returns a list of missing paths. Sets ``verified = True`` when
+        all paths are valid.
+        """
+        missing: list[str] = []
+        for name, path in self.character_references.items():
+            if not Path(path).exists():
+                missing.append(f"{name}: {path}")
+        for name, paths in self.character_multi_references.items():
+            for p in paths:
+                if not Path(p).exists():
+                    missing.append(f"{name}: {p}")
+        self.verified = len(missing) == 0
+        return missing
+
+
+@dataclass
 class DramaSeries:
     """A complete short drama series with episodes and characters."""
 
@@ -580,8 +653,17 @@ class DramaSeries:
     episodes: list[Episode] = field(default_factory=list)
     created_at: str = field(default_factory=_now_iso)
     updated_at: str = field(default_factory=_now_iso)
-    model_id: str = "mock"
+    model_id: str = "seedance-2.0"
     metadata: dict[str, Any] = field(default_factory=dict)
+    # --- Script lock & import fields ---
+    script_locked: bool = False
+    """When True, the script content is frozen — no creative modifications allowed."""
+    script_source: str = "generated"
+    """Origin of the script: 'generated' (LLM-created) or 'imported' (user-provided complete script)."""
+    consistency_manifest: ConsistencyManifest | None = None
+    """Pre-built consistency constraints for multi-clip coherence."""
+    pending_modifications: list[ScriptModification] = field(default_factory=list)
+    """Proposed modifications awaiting user approval (only used when script_locked=True)."""
 
     def touch(self) -> None:
         self.updated_at = _now_iso()
@@ -591,7 +673,7 @@ class DramaSeries:
         return sum(ep.cost for ep in self.episodes)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d = {
             "series_id": self.series_id,
             "title": self.title,
             "genre": self.genre,
@@ -608,7 +690,14 @@ class DramaSeries:
             "updated_at": self.updated_at,
             "model_id": self.model_id,
             "metadata": self.metadata,
+            "script_locked": self.script_locked,
+            "script_source": self.script_source,
         }
+        if self.consistency_manifest is not None:
+            d["consistency_manifest"] = self.consistency_manifest.to_dict()
+        if self.pending_modifications:
+            d["pending_modifications"] = [m.to_dict() for m in self.pending_modifications]
+        return d
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> DramaSeries:
@@ -616,7 +705,17 @@ class DramaSeries:
         data["status"] = DramaStatus(data.get("status", "draft"))
         data["characters"] = [Character.from_dict(c) for c in data.get("characters", [])]
         data["episodes"] = [Episode.from_dict(e) for e in data.get("episodes", [])]
-        return cls(**data)
+        cm = data.pop("consistency_manifest", None)
+        pm = data.pop("pending_modifications", None)
+        # Filter to known fields
+        known = {f.name for f in fields(cls)}
+        data = {k: v for k, v in data.items() if k in known}
+        series = cls(**data)
+        if cm is not None:
+            series.consistency_manifest = ConsistencyManifest.from_dict(cm)
+        if pm is not None:
+            series.pending_modifications = [ScriptModification.from_dict(m) for m in pm]
+        return series
 
 
 # ---------------------------------------------------------------------------
