@@ -177,6 +177,35 @@ def test_build_episode_dag_scenes_have_dialogue_line_type():
     assert dag.nodes["tts_s03"].params["scene"]["dialogue_line_type"] == "dialogue"  # default
 
 
+def test_build_episode_dag_propagates_narration_type():
+    """Title-card narration metadata should flow into TTS/subtitle/compose scene data."""
+    series = DramaSeries(title="NarrationType Test", model_id="mock")
+    ep = Episode(
+        number=1,
+        scenes=[
+            DramaScene(
+                scene_id="s01",
+                narration="一个月前",
+                narration_type="title_card",
+                duration_seconds=5.0,
+            ),
+            DramaScene(
+                scene_id="s02",
+                narration="旁白",
+                narration_type="voiceover",
+                duration_seconds=5.0,
+            ),
+        ],
+    )
+
+    dag, _ = build_episode_dag(ep, series)
+
+    assert dag.nodes["tts_s01"].params["scene"]["narration_type"] == "title_card"
+    assert dag.nodes["tts_s02"].params["scene"]["narration_type"] == "voiceover"
+    assert dag.nodes["subtitle_gen"].params["scenes"][0]["narration_type"] == "title_card"
+    assert dag.nodes["compose"].params["scenes"][0]["narration_type"] == "title_card"
+
+
 # ---------------------------------------------------------------------------
 # Scene regeneration DAG (Task 3.4)
 # ---------------------------------------------------------------------------
@@ -265,3 +294,14 @@ def test_build_scene_regen_dag_preserves_reference_images():
 
     video_node = dag.nodes["video_ep01_s01"]
     assert video_node.params["reference_images"] == {"林薇": "/path/to/linwei.png"}
+
+
+def test_build_scene_regen_dag_propagates_narration_type():
+    """Regen DAG should preserve narration_type for downstream TTS handling."""
+    series, ep = _make_regen_fixtures()
+    ep.scenes[2].narration_type = "title_card"
+    _, state = build_episode_dag(ep, series)
+
+    dag = build_scene_regen_dag(ep, series, "ep01_s03", state)
+
+    assert dag.nodes["tts_ep01_s03"].params["scene"]["narration_type"] == "title_card"

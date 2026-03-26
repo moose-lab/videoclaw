@@ -246,3 +246,10 @@ def test_episode_script_has_inner_monologue():
     assert "inner_monologue" in EPISODE_SCRIPT_PROMPT
     assert "dialogue_line_type" in EPISODE_SCRIPT_PROMPT
     assert "内心独白" in EPISODE_SCRIPT_PROMPT
+
+
+def test_planner_prompts_match_seedance_five_to_fifteen_second_range():
+    from videoclaw.drama.planner import EPISODE_SCRIPT_PROMPT, IMPORT_DECOMPOSE_PROMPT
+
+    assert "5～15 秒" in EPISODE_SCRIPT_PROMPT
+    assert "5-15s" in IMPORT_DECOMPOSE_PROMPT

@@ -63,6 +63,19 @@ class LineType(StrEnum):
     INNER_MONOLOGUE = "inner_monologue"
 
 
+class NarrationType(StrEnum):
+    """Distinguishes spoken narration from visual-only title cards.
+
+    - ``VOICEOVER``: spoken by a narrator voice — sent to TTS, shown as
+      bottom subtitle.
+    - ``TITLE_CARD``: visual text overlay only (e.g. "One Month Earlier")
+      — **not** sent to TTS, rendered as centered large text.
+    """
+
+    VOICEOVER = "voiceover"
+    TITLE_CARD = "title_card"
+
+
 class DramaGenre(StrEnum):
     # Chinese-market genres
     SWEET_ROMANCE = "sweet_romance"
@@ -134,6 +147,7 @@ class DramaScene:
     dialogue: str = ""
     dialogue_line_type: str = "dialogue"  # "dialogue" | "inner_monologue"
     narration: str = ""
+    narration_type: str = "voiceover"  # "voiceover" | "title_card"
     shot_scale: ShotScale | None = None
     shot_type: ShotType | None = None
     speaking_character: str = ""

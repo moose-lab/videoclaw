@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 from typing import Any, Callable, Coroutine
 
 from videoclaw.config import get_config
@@ -309,8 +310,6 @@ class DAGExecutor:
 
     async def _handle_video_gen(self, node: TaskNode, state: ProjectState) -> Any:
         """Generate video for a single shot using VideoGenerator."""
-        from pathlib import Path
-
         from videoclaw.generation.video import VideoGenerator
         from videoclaw.models.registry import get_registry
         from videoclaw.models.router import ModelRouter, RoutingStrategy
@@ -322,33 +321,17 @@ class DAGExecutor:
         if not shot:
             raise ValueError(f"Shot {shot_id} not found in storyboard")
 
-        # Load character reference images from params
+        # Drama scenes already carry character appearance in the enhanced prompt.
+        # Do not forward character reference images to the video model at runtime.
         reference_images: dict[str, str] = node.params.get("reference_images", {})
-        speaking_character: str = node.params.get("speaking_character", "")
-
-        primary_ref_bytes: bytes | None = None
-        extra_refs: dict[str, bytes] = {}
-
-        if reference_images:
-            # Determine primary character: speaking_character first, else first available
-            primary_name = speaking_character if speaking_character in reference_images else None
-            if primary_name is None:
-                primary_name = next(iter(reference_images))
-
-            for char_name, img_path in reference_images.items():
-                img_file = Path(img_path)
-                if not img_file.exists():
-                    logger.warning(
-                        "[video_gen] Reference image not found for %s: %s",
-                        char_name,
-                        img_path,
-                    )
-                    continue
-                img_bytes = img_file.read_bytes()
-                if char_name == primary_name:
-                    primary_ref_bytes = img_bytes
-                else:
-                    extra_refs[char_name] = img_bytes
+        multi_reference_images: dict[str, list[str]] = node.params.get("multi_reference_images", {})
+        if reference_images or multi_reference_images:
+            total_ref_sets = len(reference_images) + len(multi_reference_images)
+            logger.info(
+                "[video_gen] Text-only character flow for shot %s: ignoring %d reference image sets",
+                shot_id,
+                total_ref_sets,
+            )
 
         registry = get_registry()
         registry.discover()
@@ -360,8 +343,6 @@ class DAGExecutor:
             shot,
             strategy=RoutingStrategy.AUTO,
             aspect_ratio=node.params.get("aspect_ratio", state.metadata.get("aspect_ratio")),
-            reference_image=primary_ref_bytes,
-            extra_references=extra_refs if extra_refs else None,
         )
 
         # Update shot status
@@ -459,7 +440,8 @@ class DAGExecutor:
                         emotion_hint=emotion or None,
                     ))
 
-                if narration:
+                narration_type = scene_data.get("narration_type", "voiceover")
+                if narration and narration_type != "title_card":
                     lines.append(DialogueLine(
                         text=narration,
                         speaker="narrator",
@@ -580,7 +562,8 @@ class DAGExecutor:
                 emotion_hint=emotion or None,
             ))
 
-        if narration:
+        narration_type = scene_data.get("narration_type", "voiceover")
+        if narration and narration_type != "title_card":
             lines.append(DialogueLine(
                 text=narration,
                 speaker="narrator",

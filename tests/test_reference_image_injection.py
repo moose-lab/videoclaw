@@ -260,8 +260,8 @@ class TestPrimaryCharacterSelection:
 
 class TestHandleVideoGen:
     @pytest.mark.asyncio
-    async def test_handle_video_gen_reads_ref_file(self):
-        """_handle_video_gen reads PNG files and passes bytes to generator."""
+    async def test_handle_video_gen_uses_text_only_flow(self):
+        """_handle_video_gen should not forward character reference images to the generator."""
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a fake reference image
             img_path = Path(tmpdir) / "linwei.png"
@@ -319,14 +319,15 @@ class TestHandleVideoGen:
 
                 await executor._handle_video_gen(node, state)
 
-                # Verify generate_shot was called with reference_image bytes
+                # Verify text-only flow: no reference images are forwarded
                 call_kwargs = mock_gen_instance.generate_shot.call_args
-                assert call_kwargs.kwargs["reference_image"] == img_data
-                assert call_kwargs.kwargs["extra_references"] is None
+                assert "reference_image" not in call_kwargs.kwargs
+                assert "extra_references" not in call_kwargs.kwargs
+                assert "extra" not in call_kwargs.kwargs
 
     @pytest.mark.asyncio
     async def test_handle_video_gen_missing_file_degrades(self):
-        """Missing reference image file → degrades to TEXT_TO_VIDEO (no ref bytes)."""
+        """Missing reference image file remains harmless in text-only flow."""
         shot = Shot(
             shot_id="s001",
             prompt="test prompt",
@@ -375,9 +376,77 @@ class TestHandleVideoGen:
 
             await executor._handle_video_gen(node, state)
 
-            # reference_image should be None (file not found)
+            # text-only flow never forwards runtime character refs
             call_kwargs = mock_gen_instance.generate_shot.call_args
-            assert call_kwargs.kwargs["reference_image"] is None
+            assert "reference_image" not in call_kwargs.kwargs
+
+    @pytest.mark.asyncio
+    async def test_handle_video_gen_does_not_attach_reference_mapping_text(self):
+        """Reference images should not be converted into extra prompt text at runtime."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            a_front = Path(tmpdir) / "a_front.png"
+            b_front = Path(tmpdir) / "b_front.png"
+            a_front.write_bytes(b"\x89PNG_a")
+            b_front.write_bytes(b"\x89PNG_b")
+
+            shot = Shot(
+                shot_id="s001",
+                prompt="test prompt",
+                model_id="mock",
+                multi_reference_images={
+                    "林薇": [str(a_front)],
+                    "张明": [str(b_front)],
+                },
+            )
+            state = ProjectState()
+            state.storyboard = [shot]
+
+            node = TaskNode(
+                node_id="video_s001",
+                task_type=TaskType.VIDEO_GEN,
+                params={
+                    "shot_id": "s001",
+                    "prompt": "test prompt",
+                    "reference_images": {},
+                    "multi_reference_images": {
+                        "林薇": [str(a_front)],
+                        "张明": [str(b_front)],
+                    },
+                    "speaking_character": "张明",
+                },
+            )
+
+            mock_result = GenerationResult(
+                video_data=b"fake_video",
+                duration_seconds=5.0,
+                cost_usd=0.0,
+                model_id="mock",
+            )
+
+            with (
+                patch("videoclaw.models.registry.get_registry") as mock_get_reg,
+                patch("videoclaw.generation.video.VideoGenerator") as MockVG,
+                patch("videoclaw.models.router.ModelRouter"),
+            ):
+                mock_registry = MagicMock()
+                mock_registry.list_models.return_value = [{"model_id": "mock"}]
+                mock_get_reg.return_value = mock_registry
+
+                mock_gen_instance = AsyncMock()
+                mock_gen_instance.generate_shot.return_value = mock_result
+                MockVG.return_value = mock_gen_instance
+
+                from videoclaw.core.executor import DAGExecutor
+                from videoclaw.core.planner import DAG
+
+                dag = DAG()
+                dag.add_node(node)
+                executor = DAGExecutor(dag=dag, state=state)
+
+                await executor._handle_video_gen(node, state)
+
+                shot_arg = mock_gen_instance.generate_shot.call_args.args[0]
+                assert shot_arg.prompt == "test prompt"
 
 
 # ---------------------------------------------------------------------------

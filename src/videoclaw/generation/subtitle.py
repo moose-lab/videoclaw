@@ -212,6 +212,8 @@ class SubtitleGenerator:
             f"0,0,0,0,100,100,0,0,1,2,1,2,10,10,30,1\n"
             f"Style: Narration,{font_name},{font_size - 2},&H00CCCCCC,&H000000FF,&H00000000,&H80000000,"
             f"0,1,0,0,100,100,0,0,1,2,1,8,10,10,30,1\n"
+            f"Style: TitleCard,{font_name},{font_size + 12},&H00FFFFFF,&H000000FF,&H00000000,&HA0000000,"
+            f"1,0,0,0,100,100,2,0,1,3,2,5,10,10,10,1\n"
         )
 
         if char_style_lines:
@@ -251,12 +253,22 @@ class SubtitleGenerator:
                     f"Dialogue: 0,{start_ts},{end_ts},{style},{character},0,0,0,,{text}"
                 )
 
-            # Narration line (only if include_narration, or if no dialogue)
-            if narration and (include_narration or not dialogue):
-                text = self.split_long_text(narration, max_chars=max_chars, line_break="\\N", strategy=split_strategy)
-                events.append(
-                    f"Dialogue: 0,{start_ts},{end_ts},Narration,,0,0,0,,{text}"
-                )
+            # Narration line
+            # title_card: always shown as centered large text (visual overlay, no TTS)
+            # voiceover: shown as top narration subtitle (with TTS audio)
+            if narration:
+                narration_type = scene.get("narration_type", "voiceover")
+                if narration_type == "title_card":
+                    # Title card: always render — centered, large, bold
+                    text = self.split_long_text(narration, max_chars=max_chars, line_break="\\N", strategy=split_strategy)
+                    events.append(
+                        f"Dialogue: 0,{start_ts},{end_ts},TitleCard,,0,0,0,,{text}"
+                    )
+                elif include_narration or not dialogue:
+                    text = self.split_long_text(narration, max_chars=max_chars, line_break="\\N", strategy=split_strategy)
+                    events.append(
+                        f"Dialogue: 0,{start_ts},{end_ts},Narration,,0,0,0,,{text}"
+                    )
 
             current_time += duration
 

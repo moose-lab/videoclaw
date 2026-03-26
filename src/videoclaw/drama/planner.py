@@ -160,12 +160,12 @@ EPISODE_SCRIPT_PROMPT: str = """\
 - match_cut（匹配剪辑）：两个视觉相似画面之间的创意过渡
 - jump_cut（跳切）：同场景内时间压缩，制造紧迫感
 
-# 节奏控制（Seedance 2.0 约束：单镜头时长 4～15 秒）
-- 每个场景的 duration_seconds 必须在 4～15 秒之间（视频模型硬限制）
+# 节奏控制（Seedance 2.0 约束：单镜头时长 5～15 秒）
+- 每个场景的 duration_seconds 必须在 5～15 秒之间（视频模型硬限制）
 - 场景数量：60秒约 6-10 个场景，按时长等比缩放
 - 所有场景的 duration_seconds 之和必须等于目标集时长（±2秒）
 - 节奏模板：钩子(0-5s) → 铺垫(5-15s) → 递进(15-35s) → 高潮(35-50s) → 悬念(50-60s)
-- 高潮场景用短镜头快切（4-5秒/镜头），铺垫场景可适当拉长（8-12秒）
+- 高潮场景用短镜头快切（5-6秒/镜头），铺垫场景可适当拉长（8-12秒）
 - 第一个场景必须是视觉钩子或衔接上集悬念，最后一个场景必须制造悬念
 
 # 台词与旁白
@@ -175,6 +175,13 @@ EPISODE_SCRIPT_PROMPT: str = """\
 - 不是每个场景都需要台词，无声的表情特写同样有力
 - speaking_character 必须与 characters_present 中的角色一致
 - 单个场景的对白/旁白字数应匹配该场景的 duration_seconds（约4字/秒）
+
+# 旁白类型区分（narration_type）
+- voiceover: 语音旁白 — 由旁白演员朗读，经过TTS合成，显示为底部字幕
+- title_card: 视觉文字卡 — 仅作为画面上的文字叠加，**不**合成语音
+  - 典型场景："一个月前"、"三年后"、"第二天清晨"、地点字幕、章节标题
+  - title_card 在视频中央大字显示，不走TTS流程
+- 默认为 voiceover，只有时间跳转、地点标注等纯视觉文字才用 title_card
 
 # 内心独白（内心OS）
 - 内心独白是中国短剧的标志性叙事手法：角色第一人称内心活动
@@ -204,10 +211,11 @@ Output JSON schema:
       "description": "<中文场景描述：谁在哪里做什么，情绪状态>",
       "visual_prompt": "<ENGLISH ONLY — [setting] + [character full appearance] + [action/expression] + [lighting/mood]. Be specific and visual.>",
       "camera_movement": "<static | pan_left | pan_right | dolly_in | tracking | crane_up | handheld>",
-      "duration_seconds": <float, 4-15>,
+      "duration_seconds": <float, 5-15>,
       "dialogue": "<中文角色对白，短句口语化，无则留空>",
       "dialogue_line_type": "<dialogue | inner_monologue — 角色间对白为dialogue，内心独白(第一人称OS/心理活动)为inner_monologue，无对白则留空>",
       "narration": "<中文旁白，无则留空>",
+      "narration_type": "<voiceover | title_card — 语音旁白为voiceover，纯视觉文字(时间跳转/地点标注)为title_card，默认voiceover>",
       "speaking_character": "<说话角色名，必须在 characters_present 中，无则留空>",
       "shot_scale": "<close_up | medium_close | medium | wide | extreme_wide>",
       "shot_type": "<establishing | reaction | action | detail | pov>",
@@ -248,7 +256,7 @@ You are a professional short-drama storyboard decomposer for TikTok-style vertic
 5. Character names, ages, descriptions must match EXACTLY what the script provides.
 
 # Seedance 2.0 technical constraints
-- Each shot: 4–15 seconds (hard limit).
+- Each shot: 5-15s (hard limit).
 - Seedance 2.0 co-generates video + audio + dialogue in one pass.
 - 9:16 vertical format, 720p.
 - visual_prompt must be in ENGLISH, even if the script is in another language.
@@ -259,7 +267,7 @@ For each shot:
 1. Write an ENGLISH visual_prompt describing the EXACT scene as written.
    Structure: [setting] + [character full appearance] + [action/expression] + [lighting/mood]
 2. Assign shot_scale, shot_type, camera_movement based on the scene content.
-3. Set duration_seconds within 4–15s. Aim for: dialogue shots ≥5s, action shots 4–6s.
+3. Set duration_seconds within 5-15s. Aim for: dialogue shots ≥5s, action shots 5-6s.
 4. Copy the EXACT dialogue from the script — do NOT paraphrase or summarize.
 5. Identify characters_present strictly from who the script says is in the scene.
 6. Assign emotion from: tense, anxious, angry, furious, sad, heartbroken, shock, \
@@ -284,10 +292,11 @@ If you notice any of the following gaps, report them in the "detected_gaps" arra
           "description": "<scene description from script>",
           "visual_prompt": "<ENGLISH — exact scene visualization for Seedance 2.0>",
           "camera_movement": "<static|dolly_in|tracking|crane_up|handheld|pan_left|pan_right>",
-          "duration_seconds": <float, 4-15>,
+          "duration_seconds": <float, 5-15>,
           "dialogue": "<EXACT dialogue from script, original language>",
           "dialogue_line_type": "<dialogue|inner_monologue>",
           "narration": "<narration text if any, otherwise empty>",
+          "narration_type": "<voiceover|title_card — spoken narration is voiceover, visual-only text (time jumps, location cards) is title_card, default voiceover>",
           "speaking_character": "<character name from script>",
           "shot_scale": "<close_up|medium_close|medium|wide|extreme_wide>",
           "shot_type": "<establishing|reaction|action|detail|pov>",
@@ -459,13 +468,13 @@ class DramaPlanner:
                 for s in scenes:
                     s["duration_seconds"] = round(float(s["duration_seconds"]) * scale, 1)
 
-        # Step 2: Clamp individual scene durations to Seedance 2.0 range (4-15s)
+        # Step 2: Clamp individual scene durations to Seedance 2.0 range (5-15s)
         for s in scenes:
             dur = float(s.get("duration_seconds", 5.0))
-            clamped = max(4.0, min(15.0, dur))
+            clamped = max(5.0, min(15.0, dur))
             if clamped != dur:
                 logger.debug(
-                    "Scene %s duration %.1fs clamped to %.1fs (Seedance 4-15s range)",
+                    "Scene %s duration %.1fs clamped to %.1fs (Seedance 5-15s range)",
                     s.get("scene_id", "?"), dur, clamped,
                 )
             s["duration_seconds"] = clamped
@@ -555,7 +564,7 @@ class DramaPlanner:
             f"Genre: {series.genre or 'drama'}\n"
             f"Language: {series.language}\n"
             f"Target aspect ratio: {series.aspect_ratio}\n"
-            f"Video model: Seedance 2.0 (4-15s per clip, audio co-generation)\n"
+            f"Video model: Seedance 2.0 (5-15s per clip, audio co-generation)\n"
             f"{characters_text}\n\n"
             f"=== COMPLETE SCRIPT (DO NOT MODIFY) ===\n\n"
             f"{script_text}\n\n"
@@ -564,14 +573,24 @@ class DramaPlanner:
             f"Do NOT add or change any content."
         )
 
-        raw = await llm.chat(
-            messages=[
-                {"role": "system", "content": IMPORT_DECOMPOSE_PROMPT},
-                {"role": "user", "content": user_message},
-            ],
-        )
-
-        result = self._parse_json(raw)
+        # Retry up to 3 times for JSON parse failures
+        last_error: Exception | None = None
+        for attempt in range(3):
+            raw = await llm.chat(
+                messages=[
+                    {"role": "system", "content": IMPORT_DECOMPOSE_PROMPT},
+                    {"role": "user", "content": user_message},
+                ],
+                max_tokens=16384,
+            )
+            try:
+                result = self._parse_json(raw)
+                break
+            except ValueError as e:
+                last_error = e
+                logger.warning("JSON parse attempt %d/3 failed: %s", attempt + 1, e)
+        else:
+            raise last_error  # type: ignore[misc]
 
         # --- Extract characters ---
         if result.get("characters"):
@@ -587,7 +606,7 @@ class DramaPlanner:
 
             # Clamp durations to Seedance 2.0 range
             for scene in scenes:
-                scene.duration_seconds = max(4.0, min(15.0, scene.duration_seconds))
+                scene.duration_seconds = max(5.0, min(15.0, scene.duration_seconds))
 
             episode = Episode(
                 number=ep_data.get("number", len(series.episodes) + 1),
@@ -706,14 +725,76 @@ class DramaPlanner:
     @staticmethod
     def _parse_json(raw_response: str) -> dict[str, Any]:
         text = raw_response.strip()
+
+        # Strip markdown code fences
         if text.startswith("```"):
             first_nl = text.index("\n")
             text = text[first_nl + 1:]
         if text.endswith("```"):
             text = text[:-3]
         text = text.strip()
+
+        # Direct parse
         try:
             return json.loads(text)
-        except json.JSONDecodeError as exc:
-            logger.error("Failed to parse LLM response as JSON: %s", exc)
-            raise ValueError("LLM returned invalid JSON — retry the request.") from exc
+        except json.JSONDecodeError:
+            pass
+
+        # Try fixing common LLM JSON issues: unescaped quotes in strings
+        # e.g., "dialogue": "He said "hello" to her" -> needs escaping
+        import re
+        fixed = text
+        # Fix unescaped newlines in strings
+        fixed = re.sub(r'(?<=": ")([^"]*?)\n([^"]*?)(?=")', r'\1\\n\2', fixed)
+        try:
+            return json.loads(fixed)
+        except json.JSONDecodeError:
+            pass
+
+        # Find the outermost JSON object { ... }
+        brace_start = text.find("{")
+        if brace_start >= 0:
+            # Scan for the last balanced closing brace
+            depth = 0
+            last_brace = -1
+            in_string = False
+            escape = False
+            for i in range(brace_start, len(text)):
+                ch = text[i]
+                if escape:
+                    escape = False
+                    continue
+                if ch == "\\":
+                    escape = True
+                    continue
+                if ch == '"':
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        last_brace = i
+            if last_brace > brace_start:
+                try:
+                    return json.loads(text[brace_start : last_brace + 1])
+                except json.JSONDecodeError:
+                    pass
+
+            # Truncated JSON — try closing progressively from the end
+            candidate = text[brace_start:]
+            for i in range(len(candidate) - 1, max(len(candidate) - 500, 0), -1):
+                if candidate[i] in ("}", "]"):
+                    try:
+                        return json.loads(candidate[: i + 1])
+                    except json.JSONDecodeError:
+                        continue
+
+        logger.error(
+            "Failed to parse LLM JSON (%d chars). First 300: %s",
+            len(text), text[:300],
+        )
+        raise ValueError("LLM returned invalid JSON — retry the request.")
