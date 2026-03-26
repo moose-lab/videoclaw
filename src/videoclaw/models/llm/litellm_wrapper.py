@@ -64,12 +64,12 @@ class LLMClient:
     # Moonshot (Kimi v1) model prefix detection
     MOONSHOT_PREFIXES = ("openai/moonshot", "moonshot")
 
-    # Evolink unified gateway — all models routed via OpenAI-compatible API
+    # Evolink unified gateway — routes through OpenAI-compatible or Anthropic API
     EVOLINK_PREFIXES = (
         # Kimi K2
         "kimi-k2", "openai/kimi-k2",
         "kimi-2.5", "openai/kimi-2.5",
-        # Claude (via Evolink)
+        # Claude (via Evolink — uses Anthropic Messages API /v1/messages)
         "claude-sonnet-4-6", "claude-opus-4-6",
         "claude-sonnet-4-5", "claude-opus-4-5",
         "claude-opus-4-1", "claude-sonnet-4-",
@@ -88,6 +88,15 @@ class LLMClient:
         "evolink/auto",
     )
 
+    # Claude models on Evolink use the Anthropic Messages API (/v1/messages),
+    # not the OpenAI chat/completions format.
+    EVOLINK_CLAUDE_PREFIXES = (
+        "claude-sonnet-4-6", "claude-opus-4-6",
+        "claude-sonnet-4-5", "claude-opus-4-5",
+        "claude-opus-4-1", "claude-sonnet-4-",
+        "claude-haiku-4-5",
+    )
+
     def __init__(self, default_model: str = "gpt-4o") -> None:
         self._default_model = default_model
         self.usage = TokenUsage()
@@ -99,8 +108,17 @@ class LLMClient:
 
     def _is_evolink_model(self, model: str) -> bool:
         """Check if the model is routable through Evolink gateway."""
-        bare = model.removeprefix("openai/")
+        bare = model.removeprefix("openai/").removeprefix("anthropic/")
         return any(bare.startswith(prefix) for prefix in self.EVOLINK_PREFIXES)
+
+    def _is_evolink_claude(self, model: str) -> bool:
+        """Check if the model is a Claude model routed via Evolink.
+
+        Claude models on Evolink use the Anthropic Messages API format
+        (``POST /v1/messages``), not the OpenAI chat/completions format.
+        """
+        bare = model.removeprefix("openai/").removeprefix("anthropic/")
+        return any(bare.startswith(prefix) for prefix in self.EVOLINK_CLAUDE_PREFIXES)
 
     def _get_model_config(self, model: str) -> dict[str, Any]:
         """Get provider-specific configuration for the model."""
@@ -117,14 +135,26 @@ class LLMClient:
                 config["model"] = model  # LiteLLM handles this
 
         elif self._is_evolink_model(model):
-            # Evolink uses OpenAI-compatible API (Kimi K2)
             if self._config.evolink_api_key:
                 config["api_key"] = self._config.evolink_api_key
-            config["api_base"] = self._config.evolink_api_base
 
-            # Ensure openai/ prefix for LiteLLM provider routing
-            if not model.startswith("openai/"):
-                config["model"] = f"openai/{model}"
+            if self._is_evolink_claude(model):
+                # Claude on Evolink uses Anthropic Messages API format.
+                # LiteLLM: anthropic/ prefix → calls POST /v1/messages
+                # api_base should be without /v1 — LiteLLM appends /v1/messages
+                base = self._config.evolink_api_base.rstrip("/")
+                if base.endswith("/v1"):
+                    base = base[:-3]
+                config["api_base"] = base
+
+                bare = model.removeprefix("openai/").removeprefix("anthropic/")
+                config["model"] = f"anthropic/{bare}"
+            else:
+                # Non-Claude Evolink models use OpenAI-compatible API
+                config["api_base"] = self._config.evolink_api_base
+
+                if not model.startswith("openai/"):
+                    config["model"] = f"openai/{model}"
 
         return config
 
@@ -260,8 +290,9 @@ class LLMClient:
         # Apply provider-specific config (e.g., Moonshot API base)
         kwargs.update(self._get_model_config(resolved_model))
 
-        # Use streaming for thinking models to avoid proxy timeouts
-        use_stream = "thinking" in resolved_model
+        # Use streaming for thinking models AND Evolink-proxied models
+        # to avoid Cloudflare 524 timeout on long generations.
+        use_stream = "thinking" in resolved_model or self._is_evolink_model(resolved_model)
 
         logger.debug("[llm] chat call to %s (%d messages, stream=%s)", resolved_model, len(messages), use_stream)
 

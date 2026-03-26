@@ -81,7 +81,7 @@ Output JSON schema (array of objects):
     "prompt": "<optimised generation prompt in English>",
     "negative_prompt": "<things to exclude>",
     "description": "<brief human-readable description>",
-    "duration_seconds": <float, 4-15>,
+    "duration_seconds": <float, 5-15>,
     "suggested_model": "<seedance-2.0 | kling | runway | sora | auto>",
     "visual_style": "<cinematic | photorealistic | anime | etc.>",
     "camera_movement": "<static | pan_left | dolly_in | etc.>",
@@ -261,9 +261,9 @@ class StoryboardGenerator:
             # using a structured format the video adapter can parse.
             combined_prompt = entry.get("prompt", "")
 
-            # Clamp duration to Seedance 2.0 range (4-15s)
+            # Clamp duration to Seedance 2.0 range (5-15s)
             raw_dur = float(entry.get("duration_seconds", 5.0))
-            clamped_dur = max(4.0, min(15.0, raw_dur))
+            clamped_dur = max(5.0, min(15.0, raw_dur))
 
             shot = Shot(
                 shot_id=entry.get("shot_id", uuid.uuid4().hex[:12]),

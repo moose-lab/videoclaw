@@ -55,6 +55,7 @@ class VideoGenerator:
         aspect_ratio: str | None = None,
         reference_image: bytes | None = None,
         extra_references: dict[str, bytes] | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> GenerationResult:
         """Generate video for a single shot.
 
@@ -71,6 +72,10 @@ class VideoGenerator:
             Primary character reference image bytes for IMAGE_TO_VIDEO.
         extra_references:
             Additional character reference images keyed by character name.
+        extra:
+            Additional parameters passed through to the GenerationRequest.
+            Used by Seedance adapter for ``image_paths`` (local file paths
+            for Universal Reference) and ``reference_videos``/``reference_audios``.
 
         Returns
         -------
@@ -93,9 +98,9 @@ class VideoGenerator:
         )
 
         # Build generation request from shot data
-        extra: dict[str, Any] = {}
-        if extra_references:
-            extra["additional_references"] = extra_references
+        req_extra: dict[str, Any] = dict(extra) if extra else {}
+        if extra_references and "additional_references" not in req_extra:
+            req_extra["additional_references"] = extra_references
 
         request = GenerationRequest(
             prompt=shot.prompt,
@@ -103,7 +108,7 @@ class VideoGenerator:
             width=width,
             height=height,
             reference_image=reference_image,
-            extra=extra,
+            extra=req_extra,
         )
 
         # Select the adapter via the router
