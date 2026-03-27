@@ -61,6 +61,9 @@ class Shot:
     multi_reference_images: dict[str, list[str]] = field(default_factory=dict)
     # Mapping: character_name → [front, three_quarter, full_body]
     # For Seedance 2.0 Universal Reference (全能参考) multi-angle consistency
+    reference_image_urls: dict[str, str] = field(default_factory=dict)
+    # Mapping: character_name → HTTPS URL (turnaround sheet)
+    # For Seedance API via vectorspace.cn proxy which rejects base64 data URIs
 
     # -- Serialisation helpers -------------------------------------------------
 

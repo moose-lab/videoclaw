@@ -81,6 +81,12 @@ def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, Proje
             for c in series.characters
             if c.reference_images
         }
+    # Build character HTTPS URL map (for Seedance API — avoids base64 rejection)
+    char_url_map: dict[str, str] = {
+        c.name: c.reference_image_url
+        for c in series.characters
+        if getattr(c, "reference_image_url", None)
+    }
 
     # Enhance visual prompts before building shots
     # For locked scripts: enhancer only optimizes visual_prompt for Seedance,
@@ -103,6 +109,12 @@ def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, Proje
             for name in scene.characters_present
             if name in char_multi_ref_map
         }
+        # HTTPS URLs for Seedance API (vectorspace.cn rejects base64)
+        ref_urls = {
+            name: char_url_map[name]
+            for name in scene.characters_present
+            if name in char_url_map
+        }
         shots.append(Shot(
             shot_id=scene.scene_id or f"ep{episode.number:02d}_s{idx+1:02d}",
             description=scene.description,
@@ -112,6 +124,7 @@ def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, Proje
             status=ShotStatus.PENDING,
             reference_images=ref_images,
             multi_reference_images=multi_refs,
+            reference_image_urls=ref_urls,
         ))
 
     # Create project state for this episode
@@ -238,6 +251,7 @@ def _build_drama_dag(
                 "aspect_ratio": series.aspect_ratio,
                 "reference_images": shot.reference_images,
                 "multi_reference_images": shot.multi_reference_images,
+                "reference_image_urls": shot.reference_image_urls,
                 "speaking_character": scene.speaking_character,
             },
         ))
@@ -365,7 +379,7 @@ def build_scene_regen_dag(
             f"(available: {[s.scene_id for s in episode.scenes]})"
         )
 
-    # Build character reference image lookup (single + multi-angle)
+    # Build character reference image lookup (single + multi-angle + HTTPS URLs)
     char_ref_map: dict[str, str] = {
         c.name: c.reference_image
         for c in series.characters
@@ -375,6 +389,11 @@ def build_scene_regen_dag(
         c.name: c.reference_images
         for c in series.characters
         if c.reference_images
+    }
+    char_url_map: dict[str, str] = {
+        c.name: c.reference_image_url
+        for c in series.characters
+        if getattr(c, "reference_image_url", None)
     }
 
     # Build character voice lookup
@@ -407,6 +426,12 @@ def build_scene_regen_dag(
         for name in target_scene.characters_present
         if name in char_multi_ref_map
     }
+    # HTTPS URLs for Seedance API (vectorspace.cn rejects base64)
+    ref_urls = {
+        name: char_url_map[name]
+        for name in target_scene.characters_present
+        if name in char_url_map
+    }
 
     vid_id = f"video_{scene_id}"
     dag.add_node(TaskNode(
@@ -421,6 +446,7 @@ def build_scene_regen_dag(
             "aspect_ratio": series.aspect_ratio,
             "reference_images": ref_images,
             "multi_reference_images": multi_refs,
+            "reference_image_urls": ref_urls,
             "speaking_character": target_scene.speaking_character,
         },
     ))

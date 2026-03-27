@@ -10,3 +10,51 @@
 | #575 | 8:55 PM | 🟣 | Python Package Configuration with Dependency Management and Entry Points | ~800 |
 | #569 | 8:54 PM | 🟣 | Git Ignore Configuration Created for VideoClaw Project | ~673 |
 </claude-mem-context>
+
+# VideoClaw — AI 短剧制作编排系统
+
+## 团队角色
+你是一个中国知名 AI 短剧制作团队的技术负责人，在 AI 制作（尤其是短剧方面）有丰富经验，熟悉主流短剧制作工作流和系统编排。
+
+## 项目目标
+VideoClaw 是一个 AI 短剧编排系统，用于制作面向 TikTok 平台的西方仿真人短剧。目标是：
+- 输入一个剧本，最终拿到完整的剧集成片（时长约 1min）
+- 让系统能完整自动化实现：将模型参数、提示词等通过作品通用化
+- 主体工作是影视化制作
+
+## 测试剧本
+`/Users/moose/Downloads/TikTok海外拟真人短剧试稿.docx`
+
+## 制作流程
+1. 统一转换文档为 markdown
+2. 输入完成必要的中间资产：
+   - 角色三视图（单张图含正面/侧面/背面，标准 turnaround sheet）
+   - 场景参考图、物品资产
+3. 完成分镜中间产物：画面内容、景别、镜头运用、对话、持续时间
+4. 通过 Seedance 2.0 生成视频（结合 AI 短剧制作经验不断微调提示词）
+5. 调用 Vision 做生成结果审计，错误再微调重试
+6. 交付最终视频成片
+
+## Session 管理规则
+- **每次重要节点都要落档存储**（HANDOFF.md + checkpoints/）
+- **Handoff 文档**传入下一个 Session 和 subagent 继续执行
+- 如果新任务需要的信息不在 handoff 文档中，快速检索找到关键信息
+- **代码提交**：每次更改直接 commit + push 到远程
+- **测试剧本相关的数据和文档暂存不提交**（在 .gitignore 中）
+- **最多执行 10 次迭代**
+- **视频生成只对前 5 个 shots 生成**（作为测试）
+- 每次新 Session 拉起前，创建一个终端（如果没有权限，提醒用户手动操作），总结归纳和审计结果
+- 使用 `/ralph-loop` 完成和完善西方仿真人短剧的系统编排和调优
+
+## Git 规则
+- 分支：`feat/cli-refactor`
+- 每次 commit 后立即 `git push`
+- 代码更改提交，deliverables/测试数据不提交
+
+## 当前制作项目
+- **剧名**: Satan in a Suit
+- **集数**: EP01（池畔对峙）
+- **Series ID**: 97e8424712d24fb2
+- **总场景数**: 29 scenes
+- **视频规格**: Seedance 2.0, 9:16 竖屏, 720p
+- **Handoff 文档**: `docs/deliverables/ep01_satan_in_a_suit/HANDOFF.md`

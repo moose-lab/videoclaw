@@ -1,13 +1,13 @@
 """Character reference image generation for drama series.
 
-Uses EvolinkImageGenerator to produce consistent character portraits
+Uses EvolinkImageGenerator to produce consistent character turnaround sheets
 that serve as visual anchors for downstream video generation.
 
 Seedance 2.0 Universal Reference best practices:
-- 1-4 reference images per character for maximum consistency
-- Single subject, neutral pose, plain background, clear lighting
-- Three views recommended: front, three-quarter, full-body
-- Character should occupy 60-80% of the frame
+- A single turnaround sheet (front / side / back in one image) per character
+- Clean white background, consistent lighting, same outfit across all views
+- Character sheet format enables maximum cross-shot consistency
+- Pass via image_urls (HTTPS) to avoid vectorspace.cn base64 rejection
 """
 
 from __future__ import annotations
@@ -37,7 +37,26 @@ class ImageGenerator(Protocol):
     ) -> Path: ...
 
 # ---------------------------------------------------------------------------
-# Multi-angle reference poses (Seedance 2.0 Universal Reference)
+# Turnaround sheet prompt (single image with front / side / back views)
+# ---------------------------------------------------------------------------
+
+TURNAROUND_SHEET_PROMPT = """\
+character turnaround sheet, three views of the same person side by side, \
+front view on the left, three-quarter side view in the center, back view on the right, \
+same person, same outfit, same hairstyle, consistent appearance across all three views.
+
+{appearance}
+
+Style: {style_line}
+Composition: three full-body views arranged horizontally in one image, \
+evenly spaced, clean white background, no overlap
+Expression: neutral, calm (front and side views)
+Lighting: soft studio lighting, even illumination, no dramatic shadows
+Quality: highly detailed, photorealistic, 8K, character reference sheet\
+"""
+
+# ---------------------------------------------------------------------------
+# Legacy multi-angle reference poses (deprecated — use turnaround sheet)
 # ---------------------------------------------------------------------------
 
 REFERENCE_POSES: list[dict[str, str]] = [
@@ -55,7 +74,7 @@ REFERENCE_POSES: list[dict[str, str]] = [
     },
 ]
 
-# Prompt template for character reference images
+# Legacy prompt template for separate per-angle images (deprecated)
 CHARACTER_IMAGE_PROMPT = """\
 {appearance}
 
@@ -99,9 +118,12 @@ def clean_visual_prompt(visual_prompt: str) -> str:
 class CharacterDesigner:
     """Generates reference images for all characters in a drama series.
 
-    When ``multi_angle=True`` (default), generates 3 reference images per
-    character (front, three-quarter, full-body) following Seedance 2.0's
-    Universal Reference best practices.
+    Default mode (``turnaround=True``): generates a single turnaround sheet
+    per character (front / side / back in one image) — the standard for
+    Seedance 2.0 Universal Reference.
+
+    Legacy mode (``multi_angle=True, turnaround=False``): generates 3
+    separate images per character.  Deprecated.
     """
 
     def __init__(
@@ -109,10 +131,12 @@ class CharacterDesigner:
         image_generator: ImageGenerator | None = None,
         drama_manager: DramaManager | None = None,
         multi_angle: bool = True,
+        turnaround: bool = True,
     ) -> None:
         self._img_gen = image_generator
         self._drama_mgr = drama_manager or DramaManager()
         self._multi_angle = multi_angle
+        self._turnaround = turnaround
 
     def _ensure_generator(self) -> ImageGenerator:
         if self._img_gen is None:
@@ -128,9 +152,9 @@ class CharacterDesigner:
     ) -> DramaSeries:
         """Generate reference images for each character in the series.
 
-        When ``multi_angle`` is enabled, produces 3 images per character
-        (front / three-quarter / full-body) and populates both
-        ``reference_images`` (list) and ``reference_image`` (primary front).
+        Default: generates a single turnaround sheet per character and
+        populates ``reference_image`` (local path) and
+        ``reference_image_url`` (HTTPS URL for Seedance API).
 
         Skips characters that already have reference images unless *force*.
         """
@@ -146,18 +170,26 @@ class CharacterDesigner:
         for character in series.characters:
             # Skip if already has images (unless force)
             if not force:
-                if self._multi_angle and character.reference_images:
+                if self._turnaround and character.reference_image:
+                    logger.info("Skipping %s (already has turnaround sheet)",
+                                character.name)
+                    continue
+                if not self._turnaround and self._multi_angle and character.reference_images:
                     logger.info("Skipping %s (already has %d reference images)",
                                 character.name, len(character.reference_images))
                     continue
-                if not self._multi_angle and character.reference_image:
+                if not self._turnaround and not self._multi_angle and character.reference_image:
                     logger.info("Skipping %s (already has reference image)", character.name)
                     continue
 
             appearance = clean_visual_prompt(character.visual_prompt)
             safe_name = re.sub(r"[^\w\-]", "_", character.name).strip("_")
 
-            if self._multi_angle:
+            if self._turnaround:
+                await self._generate_turnaround(
+                    gen, character, appearance, style_line, safe_name, char_dir,
+                )
+            elif self._multi_angle:
                 await self._generate_multi_angle(
                     gen, character, appearance, style_line, safe_name, char_dir,
                 )
@@ -170,6 +202,43 @@ class CharacterDesigner:
         logger.info("Character designs saved for series %s", series.series_id)
         return series
 
+    async def _generate_turnaround(
+        self,
+        gen: ImageGenerator,
+        character,
+        appearance: str,
+        style_line: str,
+        safe_name: str,
+        char_dir: Path,
+    ) -> None:
+        """Generate a single turnaround sheet (front / side / back in one image).
+
+        Uses wide aspect ratio (16:9) to fit three full-body views side by side.
+        Stores the HTTPS URL from the image API for downstream Seedance usage
+        (vectorspace.cn proxy rejects base64 data URIs).
+        """
+        prompt = TURNAROUND_SHEET_PROMPT.format(
+            appearance=appearance,
+            style_line=style_line,
+        )
+        filename = f"{safe_name}_turnaround.png"
+
+        logger.info("Generating turnaround sheet for %s", character.name)
+        path = await gen.generate(
+            prompt,
+            output_dir=char_dir,
+            filename=filename,
+            size="16:9",
+        )
+        character.reference_image = str(path)
+        character.reference_images = [str(path)]
+
+        # Store the HTTPS URL if the generator captured it
+        if hasattr(gen, "last_image_url") and gen.last_image_url:
+            character.reference_image_url = gen.last_image_url
+            logger.info("Stored HTTPS URL for %s turnaround: %s",
+                        character.name, gen.last_image_url[:80])
+
     async def _generate_multi_angle(
         self,
         gen: ImageGenerator,
@@ -179,7 +248,7 @@ class CharacterDesigner:
         safe_name: str,
         char_dir: Path,
     ) -> None:
-        """Generate 3 reference images (front, three-quarter, full-body)."""
+        """Generate 3 reference images (front, three-quarter, full-body). Deprecated."""
         paths: list[str] = []
         for pose in REFERENCE_POSES:
             prompt = CHARACTER_IMAGE_PROMPT.format(

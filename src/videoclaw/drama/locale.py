@@ -441,6 +441,17 @@ TikTok / YouTube Shorts / Instagram Reels (9:16 vertical video, 30-90 seconds).
 - Rendered as VO with light reverb to signal "brain voice" — distinct from dialogue AND narrator.
 - Typical markers in script notes: "(VO)", "(INTERNAL)", "(THINKS)" — include these in dialogue text.
 
+# TikTok Platform Audience Constraints (LOWER priority than script fidelity)
+- Priority order: script requirements > platform aesthetics. If the script explicitly
+  describes an older character or specific age, HONOUR the script exactly.
+- Target audience: 18-30 year olds. When the script does NOT specify age or appearance
+  for secondary/background characters, default to youthful and attractive.
+- Guest/extra characters without explicit description: age 20-35, fashionable, contemporary.
+- Visual energy: high attractiveness, stylish wardrobe, contemporary fashion where the
+  script allows creative freedom.
+- If the script mentions "guests at a party", "crowd", or "bystanders" without detail,
+  default to young, fashionable, diverse group (20s-30s).
+
 # visual_prompt Writing Standards (Seedance 2.0 Optimised)
 - ENGLISH ONLY — optimised for Seedance 2.0 / AI video generation models.
 - Follow the director-style 5-part anatomy: Subject + Action + Camera + Style + Constraints

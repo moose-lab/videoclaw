@@ -321,17 +321,40 @@ class DAGExecutor:
         if not shot:
             raise ValueError(f"Shot {shot_id} not found in storyboard")
 
-        # Drama scenes already carry character appearance in the enhanced prompt.
-        # Do not forward character reference images to the video model at runtime.
+        # Build image_urls list for Seedance Universal Reference (全能参考).
+        # Priority: HTTPS URLs (vectorspace.cn proxy rejects base64 data URIs).
+        # Fallback: local file paths (converted to base64 by the adapter).
+        reference_image_urls: dict[str, str] = node.params.get("reference_image_urls", {})
         reference_images: dict[str, str] = node.params.get("reference_images", {})
-        multi_reference_images: dict[str, list[str]] = node.params.get("multi_reference_images", {})
-        if reference_images or multi_reference_images:
-            total_ref_sets = len(reference_images) + len(multi_reference_images)
+
+        extra: dict[str, Any] = {}
+        image_urls: list[dict[str, str]] = []
+
+        if reference_image_urls:
+            # Preferred: HTTPS URLs for character turnaround sheets
+            for char_name, url in reference_image_urls.items():
+                if url and url.startswith("http"):
+                    image_urls.append({"url": url, "role": "reference_image"})
             logger.info(
-                "[video_gen] Text-only character flow for shot %s: ignoring %d reference image sets",
-                shot_id,
-                total_ref_sets,
+                "[video_gen] Passing %d character HTTPS URLs as reference for shot %s",
+                len(image_urls), shot_id,
             )
+        elif reference_images:
+            # Fallback: local file paths (will be base64-encoded by adapter)
+            image_paths = [
+                {"path": path, "role": "reference_image"}
+                for path in reference_images.values()
+                if path
+            ]
+            if image_paths:
+                extra["image_paths"] = image_paths
+                logger.info(
+                    "[video_gen] Passing %d local image paths as reference for shot %s",
+                    len(image_paths), shot_id,
+                )
+
+        if image_urls:
+            extra["image_urls"] = image_urls
 
         registry = get_registry()
         registry.discover()
@@ -343,6 +366,7 @@ class DAGExecutor:
             shot,
             strategy=RoutingStrategy.AUTO,
             aspect_ratio=node.params.get("aspect_ratio", state.metadata.get("aspect_ratio")),
+            extra=extra if extra else None,
         )
 
         # Update shot status

@@ -112,6 +112,7 @@ class Character:
     voice_style: str = ""
     reference_image: str | None = None
     reference_images: list[str] = field(default_factory=list)
+    reference_image_url: str | None = None  # HTTPS URL for Seedance API
     voice_profile: VoiceProfile | None = None
 
     def to_dict(self) -> dict[str, Any]:

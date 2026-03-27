@@ -37,6 +37,10 @@ class EvolinkImageGenerator:
             raise ValueError(
                 "Evolink API key required. Set VIDEOCLAW_EVOLINK_API_KEY or pass api_key."
             )
+        # Stores the HTTPS URL of the last generated image (before download).
+        # Used by CharacterDesigner to pass URLs to Seedance API which rejects
+        # base64 data URIs via the vectorspace.cn proxy.
+        self.last_image_url: str | None = None
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -106,6 +110,9 @@ class EvolinkImageGenerator:
                 if not task_id:
                     raise RuntimeError(f"No task_id in response: {task_data}")
                 image_url = await self._poll_task(client, task_id)
+
+            # Store the HTTPS URL before download (for Seedance API passthrough)
+            self.last_image_url = image_url
 
             # Download the image
             img_resp = await client.get(image_url, timeout=60.0)

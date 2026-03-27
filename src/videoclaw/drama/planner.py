@@ -190,6 +190,12 @@ EPISODE_SCRIPT_PROMPT: str = """\
 - 内心独白用与该角色对白相同的声音，但后期加混响处理，制造"脑内回响"效果
 - 内心独白既不是对白（说给其他角色听），也不是旁白（第三人称叙述者视角）
 
+# TikTok 平台受众约束（优先级低于剧本忠实度）
+- 优先级顺序：剧本要求 > 平台审美。如果剧本明确描述了角色年龄或外貌，必须忠实于剧本
+- 目标受众：18-30 岁。当剧本未指定次要/背景角色的年龄和外貌时，默认为年轻有吸引力
+- 宾客/配角/群演（无明确描述时）：20-35 岁，时尚穿搭，当代审美
+- 如果剧本提到"宾客"、"人群"、"路人"且无具体描述，默认为年轻时尚群体（20-30 岁）
+
 # visual_prompt 写作规范
 - 必须用英文，针对AI视频生成模型优化
 - 结构：[环境/场景] + [角色完整外貌] + [动作/表情] + [光影/氛围]
@@ -273,12 +279,22 @@ For each shot:
 6. Assign emotion from: tense, anxious, angry, furious, sad, heartbroken, shock, \
    disbelief, warm, tender, sweet, intimate, fear, panic, triumphant, defiant.
 
+# TikTok Platform Audience Constraints (LOWER priority than script fidelity)
+- Priority: script requirements > platform aesthetics. If the script explicitly
+  describes a character's age or appearance, HONOUR the script exactly.
+- Target audience: 18-30 year olds. When the script does NOT specify age/appearance
+  for secondary/background characters, default to youthful and attractive.
+- Guest/extra characters without explicit description: age 20-35, fashionable, contemporary.
+- If the script mentions "guests", "crowd", "partygoers" without detail,
+  describe as young (20s-30s), stylish, and diverse in the visual_prompt.
+
 # Gap detection
 If you notice any of the following gaps, report them in the "detected_gaps" array:
 - A character appears but has no physical description in the script
 - A scene location is referenced but never described
 - A dialogue line has no clear speaker
 - A transition between scenes has a logical discontinuity
+- Guest/extra characters that appear older than 35 in the original script (flag for review)
 
 # Output JSON schema
 {
