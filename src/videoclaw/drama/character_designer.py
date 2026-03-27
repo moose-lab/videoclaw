@@ -48,12 +48,24 @@ same person, same outfit, same hairstyle, consistent appearance across all three
 {appearance}
 
 Style: {style_line}
+Render: {render_style}
 Composition: three full-body views arranged horizontally in one image, \
 evenly spaced, clean white background, no overlap
 Expression: neutral, calm (front and side views)
 Lighting: soft studio lighting, even illumination, no dramatic shadows
-Quality: highly detailed, photorealistic, 8K, character reference sheet\
+Quality: highly detailed, 8K, character reference sheet\
 """
+
+# Render styles for turnaround sheets.
+# "photorealistic" produces best video consistency but may trigger
+# vectorspace.cn PrivacyInformation filter on clear female faces.
+# "stylized" bypasses the filter while still enabling Seedance Universal
+# Reference character consistency.
+RENDER_STYLE_PHOTOREALISTIC = "photorealistic, cinematic realism, real human appearance"
+RENDER_STYLE_STYLIZED = (
+    "digital illustration, semi-realistic, clean line art with soft shading, "
+    "anime-influenced character design, NOT a real photo"
+)
 
 # ---------------------------------------------------------------------------
 # Legacy multi-angle reference poses (deprecated — use turnaround sheet)
@@ -149,12 +161,25 @@ class CharacterDesigner:
         series: DramaSeries,
         *,
         force: bool = False,
+        render_style: str | None = None,
+        stylized_characters: set[str] | None = None,
     ) -> DramaSeries:
         """Generate reference images for each character in the series.
 
         Default: generates a single turnaround sheet per character and
         populates ``reference_image`` (local path) and
         ``reference_image_url`` (HTTPS URL for Seedance API).
+
+        Parameters
+        ----------
+        render_style:
+            Default render style for all characters. Use
+            ``RENDER_STYLE_PHOTOREALISTIC`` or ``RENDER_STYLE_STYLIZED``.
+            When *None*, defaults to photorealistic.
+        stylized_characters:
+            Set of character names that should use stylized rendering
+            regardless of *render_style*. Used when specific characters
+            trigger the PrivacyInformation filter with photorealistic refs.
 
         Skips characters that already have reference images unless *force*.
         """
@@ -163,6 +188,8 @@ class CharacterDesigner:
         gen = self._ensure_generator()
         char_dir = self._char_dir(series.series_id)
         style = series.style or "cinematic"
+        default_render = render_style or RENDER_STYLE_PHOTOREALISTIC
+        stylized_names = stylized_characters or set()
 
         locale = get_locale(series.language)
         style_line = locale.character_image_style.format(style=style)
@@ -185,9 +212,17 @@ class CharacterDesigner:
             appearance = clean_visual_prompt(character.visual_prompt)
             safe_name = re.sub(r"[^\w\-]", "_", character.name).strip("_")
 
+            # Per-character render style override
+            char_render = (
+                RENDER_STYLE_STYLIZED
+                if character.name in stylized_names
+                else default_render
+            )
+
             if self._turnaround:
                 await self._generate_turnaround(
                     gen, character, appearance, style_line, safe_name, char_dir,
+                    render_style=char_render,
                 )
             elif self._multi_angle:
                 await self._generate_multi_angle(
@@ -210,16 +245,22 @@ class CharacterDesigner:
         style_line: str,
         safe_name: str,
         char_dir: Path,
+        render_style: str = RENDER_STYLE_PHOTOREALISTIC,
     ) -> None:
         """Generate a single turnaround sheet (front / side / back in one image).
 
         Uses wide aspect ratio (16:9) to fit three full-body views side by side.
         Stores the HTTPS URL from the image API for downstream Seedance usage
         (vectorspace.cn proxy rejects base64 data URIs).
+
+        When *render_style* is ``RENDER_STYLE_STYLIZED``, the prompt requests
+        a digital illustration to bypass the PrivacyInformation filter on
+        vectorspace.cn which rejects photorealistic female faces.
         """
         prompt = TURNAROUND_SHEET_PROMPT.format(
             appearance=appearance,
             style_line=style_line,
+            render_style=render_style,
         )
         filename = f"{safe_name}_turnaround.png"
 

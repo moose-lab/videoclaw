@@ -82,11 +82,15 @@ def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, Proje
             if c.reference_images
         }
     # Build character HTTPS URL map (for Seedance API — avoids base64 rejection)
-    char_url_map: dict[str, str] = {
-        c.name: c.reference_image_url
-        for c in series.characters
-        if getattr(c, "reference_image_url", None)
-    }
+    # Map both full name ("Ivy Angel") and first name ("Ivy") for flexible matching
+    char_url_map: dict[str, str] = {}
+    for c in series.characters:
+        url = getattr(c, "reference_image_url", None)
+        if url:
+            char_url_map[c.name] = url
+            first_name = c.name.split()[0]
+            if first_name != c.name:
+                char_url_map[first_name] = url
 
     # Enhance visual prompts before building shots
     # For locked scripts: enhancer only optimizes visual_prompt for Seedance,
@@ -390,11 +394,14 @@ def build_scene_regen_dag(
         for c in series.characters
         if c.reference_images
     }
-    char_url_map: dict[str, str] = {
-        c.name: c.reference_image_url
-        for c in series.characters
-        if getattr(c, "reference_image_url", None)
-    }
+    char_url_map: dict[str, str] = {}
+    for c in series.characters:
+        url = getattr(c, "reference_image_url", None)
+        if url:
+            char_url_map[c.name] = url
+            first_name = c.name.split()[0]
+            if first_name != c.name:
+                char_url_map[first_name] = url
 
     # Build character voice lookup
     character_voices: dict[str, dict] = {}
