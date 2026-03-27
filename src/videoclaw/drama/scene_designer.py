@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any
 
 from videoclaw.drama.models import DramaManager, DramaSeries, Episode
-from videoclaw.generation.image import EvolinkImageGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -114,14 +113,15 @@ class SceneDesigner:
 
     def __init__(
         self,
-        image_generator: EvolinkImageGenerator | None = None,
+        image_generator: Any | None = None,
         drama_manager: DramaManager | None = None,
     ) -> None:
         self._img_gen = image_generator
         self._drama_mgr = drama_manager or DramaManager()
 
-    def _ensure_generator(self) -> EvolinkImageGenerator:
+    def _ensure_generator(self) -> Any:
         if self._img_gen is None:
+            from videoclaw.generation.image import EvolinkImageGenerator
             self._img_gen = EvolinkImageGenerator()
         return self._img_gen
 

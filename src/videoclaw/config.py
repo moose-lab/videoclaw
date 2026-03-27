@@ -53,6 +53,7 @@ class VideoClawConfig(BaseSettings):
     byteplus_api_base: str = Field(
         default="https://ark.ap-southeast.bytepluses.com/api/v3"
     )
+    google_api_key: str | None = Field(default=None)  # Google Gemini (Nano Banana 2)
 
     # --- LLM API Base URLs ---
     moonshot_api_base: str = Field(default="https://api.moonshot.cn/v1")

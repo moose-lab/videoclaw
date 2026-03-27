@@ -16,10 +16,25 @@ import logging
 import re
 from pathlib import Path
 
+from typing import Any, Protocol, runtime_checkable
+
 from videoclaw.drama.models import DramaManager, DramaSeries
-from videoclaw.generation.image import EvolinkImageGenerator
 
 logger = logging.getLogger(__name__)
+
+
+@runtime_checkable
+class ImageGenerator(Protocol):
+    """Minimal interface for image generators (Evolink, BytePlus, Gemini)."""
+
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        output_dir: Path,
+        filename: str,
+        **kwargs: Any,
+    ) -> Path: ...
 
 # ---------------------------------------------------------------------------
 # Multi-angle reference poses (Seedance 2.0 Universal Reference)
@@ -91,7 +106,7 @@ class CharacterDesigner:
 
     def __init__(
         self,
-        image_generator: EvolinkImageGenerator | None = None,
+        image_generator: ImageGenerator | None = None,
         drama_manager: DramaManager | None = None,
         multi_angle: bool = True,
     ) -> None:
@@ -99,8 +114,9 @@ class CharacterDesigner:
         self._drama_mgr = drama_manager or DramaManager()
         self._multi_angle = multi_angle
 
-    def _ensure_generator(self) -> EvolinkImageGenerator:
+    def _ensure_generator(self) -> ImageGenerator:
         if self._img_gen is None:
+            from videoclaw.generation.image import EvolinkImageGenerator
             self._img_gen = EvolinkImageGenerator()
         return self._img_gen
 
@@ -156,7 +172,7 @@ class CharacterDesigner:
 
     async def _generate_multi_angle(
         self,
-        gen: EvolinkImageGenerator,
+        gen: ImageGenerator,
         character,
         appearance: str,
         style_line: str,
@@ -188,7 +204,7 @@ class CharacterDesigner:
 
     async def _generate_single(
         self,
-        gen: EvolinkImageGenerator,
+        gen: ImageGenerator,
         character,
         appearance: str,
         style_line: str,
