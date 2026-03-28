@@ -380,7 +380,10 @@ class DAGExecutor:
             video_hash = hashlib.md5(result.video_data).hexdigest()[:8]
             output_dir = Path(self._config.projects_dir) / state.project_id / "shots"
             output_dir.mkdir(parents=True, exist_ok=True)
-            output_path = output_dir / f"{shot_id}_{video_hash}.mp4"
+            # Session prefix for traceability across iterations
+            session_tag = state.metadata.get("session", "")
+            prefix = f"session{session_tag}_" if session_tag else ""
+            output_path = output_dir / f"{prefix}{shot_id}_{video_hash}.mp4"
             output_path.write_bytes(result.video_data)
             shot.asset_path = str(output_path)
             logger.info("[video_gen] Saved video to %s", output_path)
