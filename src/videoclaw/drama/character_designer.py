@@ -40,32 +40,34 @@ class ImageGenerator(Protocol):
 # Turnaround sheet prompt (single image with front / side / back views)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Character turnaround sheet prompt — 角色三视图标准公式
+# ---------------------------------------------------------------------------
+# 必须要素:
+#   ① 布局声明 (layout declaration)
+#   ② 视角枚举 (view enumeration — must list each one)
+#   ③ 背景约束 (background constraint — prevents scene interference)
+#   ④ 一致性声明 (consistency — prevents face changes between views)
+#   ⑤ 姿态约束 (pose constraint)
+# ---------------------------------------------------------------------------
+
 TURNAROUND_SHEET_PROMPT = """\
-character turnaround sheet, three views of the same person side by side, \
-front view on the left, three-quarter side view in the center, back view on the right, \
-same person, same outfit, same hairstyle, consistent appearance across all three views.
+character turnaround sheet, character reference sheet, \
+角色设计三视图,
 
 {appearance}
 
-Style: {style_line}
-Render: {render_style}
-Composition: three full-body views arranged horizontally in one image, \
-evenly spaced, clean white background, no overlap
-Expression: neutral, calm (front and side views)
-Lighting: soft studio lighting, even illumination, no dramatic shadows
-Quality: highly detailed, 8K, character reference sheet\
-"""
+① Layout: three full-body views arranged side by side in a single image, evenly spaced, no overlap.
+② Views: front view (left), side view (center), back view (right).
+③ Background: pure white background, no shadows, no environment, no props, no ground plane.
+④ Consistency: same person, same face, same facial features, same outfit, same hairstyle, \
+identical appearance across all three views — zero variation between views.
+⑤ Pose: standard standing pose, arms naturally at sides, feet together, \
+neutral expression, looking straight ahead (front and side views).
 
-# Render styles for turnaround sheets.
-# "photorealistic" produces best video consistency but may trigger
-# vectorspace.cn PrivacyInformation filter on clear female faces.
-# "stylized" bypasses the filter while still enabling Seedance Universal
-# Reference character consistency.
-RENDER_STYLE_PHOTOREALISTIC = "photorealistic, cinematic realism, real human appearance"
-RENDER_STYLE_STYLIZED = (
-    "digital illustration, semi-realistic, clean line art with soft shading, "
-    "anime-influenced character design, NOT a real photo"
-)
+Style: {style_line}
+Quality: highly detailed, 8K, professional character design reference sheet\
+"""
 
 # ---------------------------------------------------------------------------
 # Legacy multi-angle reference poses (deprecated — use turnaround sheet)
@@ -166,25 +168,13 @@ class CharacterDesigner:
         series: DramaSeries,
         *,
         force: bool = False,
-        render_style: str | None = None,
-        stylized_characters: set[str] | None = None,
     ) -> DramaSeries:
         """Generate reference images for each character in the series.
 
-        Default: generates a single turnaround sheet per character and
-        populates ``reference_image`` (local path) and
-        ``reference_image_url`` (HTTPS URL for Seedance API).
-
-        Parameters
-        ----------
-        render_style:
-            Default render style for all characters. Use
-            ``RENDER_STYLE_PHOTOREALISTIC`` or ``RENDER_STYLE_STYLIZED``.
-            When *None*, defaults to photorealistic.
-        stylized_characters:
-            Set of character names that should use stylized rendering
-            regardless of *render_style*. Used when specific characters
-            trigger the PrivacyInformation filter with photorealistic refs.
+        Default: generates a single turnaround sheet (角色三视图) per character
+        using the standard prompt formula (layout + views + background +
+        consistency + pose). Populates ``reference_image`` (local path)
+        and ``reference_image_url`` (HTTPS URL for Seedance API).
 
         Skips characters that already have reference images unless *force*.
         """
@@ -193,8 +183,6 @@ class CharacterDesigner:
         gen = self._ensure_generator()
         char_dir = self._char_dir(series.series_id)
         style = series.style or "cinematic"
-        default_render = render_style or RENDER_STYLE_PHOTOREALISTIC
-        stylized_names = stylized_characters or set()
 
         locale = get_locale(series.language)
         style_line = locale.character_image_style.format(style=style)
@@ -217,17 +205,9 @@ class CharacterDesigner:
             appearance = clean_visual_prompt(character.visual_prompt)
             safe_name = re.sub(r"[^\w\-]", "_", character.name).strip("_")
 
-            # Per-character render style override
-            char_render = (
-                RENDER_STYLE_STYLIZED
-                if character.name in stylized_names
-                else default_render
-            )
-
             if self._turnaround:
                 await self._generate_turnaround(
                     gen, character, appearance, style_line, safe_name, char_dir,
-                    render_style=char_render,
                 )
             elif self._multi_angle:
                 await self._generate_multi_angle(
@@ -250,22 +230,19 @@ class CharacterDesigner:
         style_line: str,
         safe_name: str,
         char_dir: Path,
-        render_style: str = RENDER_STYLE_PHOTOREALISTIC,
     ) -> None:
-        """Generate a single turnaround sheet (front / side / back in one image).
+        """Generate a single turnaround sheet (角色三视图).
 
-        Uses wide aspect ratio (16:9) to fit three full-body views side by side.
-        Stores the HTTPS URL from the image API for downstream Seedance usage
-        (vectorspace.cn proxy rejects base64 data URIs).
+        Uses the standard turnaround prompt formula:
+        ① Layout declaration ② View enumeration ③ Background constraint
+        ④ Consistency declaration ⑤ Pose constraint
 
-        When *render_style* is ``RENDER_STYLE_STYLIZED``, the prompt requests
-        a digital illustration to bypass the PrivacyInformation filter on
-        vectorspace.cn which rejects photorealistic female faces.
+        Wide aspect ratio (16:9) to fit three full-body views side by side.
+        Stores the HTTPS URL from the image API for downstream Seedance usage.
         """
         prompt = TURNAROUND_SHEET_PROMPT.format(
             appearance=appearance,
             style_line=style_line,
-            render_style=render_style,
         )
         filename = f"{safe_name}_turnaround.png"
 
