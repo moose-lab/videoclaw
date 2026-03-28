@@ -78,6 +78,9 @@ class BytePlusImageGenerator:
         )
         self._api_base = (api_base or config.byteplus_api_base).rstrip("/")
         self._model_id = SEEDREAM_MODELS.get(model, SEEDREAM_MODELS["seedream-5.0"])
+        # Stores the HTTPS URL of the last generated image (before download).
+        # Used by CharacterDesigner to pass URLs to Seedance API.
+        self.last_image_url: str | None = None
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -140,6 +143,9 @@ class BytePlusImageGenerator:
             image_url = self._extract_image_url(data)
             if not image_url:
                 raise RuntimeError(f"No image URL in response: {data}")
+
+            # Store HTTPS URL before download (for Seedance API passthrough)
+            self.last_image_url = image_url
 
             # Download the image
             img_resp = await client.get(image_url, timeout=60.0)

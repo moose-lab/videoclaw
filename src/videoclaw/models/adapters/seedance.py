@@ -116,6 +116,10 @@ _MAX_IMAGE_SIZE_BYTES = 30 * 1024 * 1024  # 30MB per image
 _MAX_REQUEST_SIZE_BYTES = 64 * 1024 * 1024  # 64MB total
 _IMAGE_MIN_PX = 300
 _IMAGE_MAX_PX = 6000
+# Optimal max dimension for reference images — keeps file size small and
+# reduces vectorspace.cn proxy download time.  Seedance accepts up to 6000px
+# but reference images don't benefit from extreme resolution.
+_REF_IMAGE_OPTIMAL_MAX_PX = 1280
 
 # Text constraints
 _MAX_TEXT_EN_WORDS = 1000
@@ -177,6 +181,221 @@ def _image_to_data_uri(path_or_bytes: str | bytes) -> str | None:
     mime = _detect_mime_from_bytes(raw)
     b64 = base64.b64encode(raw).decode()
     return f"data:{mime};base64,{b64}"
+
+
+# ---------------------------------------------------------------------------
+# Input pre-check and pre-processing (Seedance 2.0 constraints)
+# ---------------------------------------------------------------------------
+# All inputs must be validated BEFORE calling the API.  If a constraint is
+# violated, the input is either corrected (resized / trimmed) or rejected
+# with a clear log message.  This avoids wasting API credits on invalid
+# requests and prevents silent hangs from oversized payloads.
+# ---------------------------------------------------------------------------
+
+# --- Image pre-processing ---
+
+_IMAGE_FORMATS = {"jpeg", "png", "webp", "bmp", "tiff", "gif"}
+_IMAGE_AR_MIN = 0.4
+_IMAGE_AR_MAX = 2.5
+
+# --- Video constraints ---
+_VIDEO_MAX_SIZE_BYTES = 50 * 1024 * 1024  # 50MB per clip
+_VIDEO_MIN_DURATION_S = 2
+_VIDEO_MAX_DURATION_S = 15
+_VIDEO_MAX_CLIPS = 3
+_VIDEO_FPS_MIN = 24
+_VIDEO_FPS_MAX = 60
+
+# --- Audio constraints ---
+_AUDIO_MAX_SIZE_BYTES = 15 * 1024 * 1024  # 15MB per segment
+_AUDIO_MIN_DURATION_S = 2
+_AUDIO_MAX_DURATION_S = 15
+_AUDIO_MAX_SEGMENTS = 3
+
+
+def _ffprobe_dimensions(path: str) -> tuple[int, int] | None:
+    """Probe image/video dimensions. Returns (width, height) or None."""
+    import subprocess
+    try:
+        probe = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=width,height",
+                "-of", "csv=p=0:s=x",
+                path,
+            ],
+            capture_output=True, text=True, timeout=10,
+        )
+        w, h = (int(x) for x in probe.stdout.strip().split("x"))
+        return w, h
+    except Exception:
+        return None
+
+
+def _ffprobe_duration(path: str) -> float | None:
+    """Probe media duration in seconds. Returns float or None."""
+    import subprocess
+    try:
+        probe = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                path,
+            ],
+            capture_output=True, text=True, timeout=10,
+        )
+        return float(probe.stdout.strip())
+    except Exception:
+        return None
+
+
+def _ffmpeg_resize_image(src: str, dst: str, max_px: int) -> bool:
+    """Resize image to fit within max_px longest side, convert to JPEG."""
+    import subprocess
+    dims = _ffprobe_dimensions(src)
+    if not dims:
+        return False
+    w, h = dims
+    longest = max(w, h)
+    if longest <= max_px:
+        return False  # no resize needed
+
+    scale = max_px / longest
+    new_w = int(w * scale) & ~1
+    new_h = int(h * scale) & ~1
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", src, "-vf", f"scale={new_w}:{new_h}",
+             "-q:v", "2", dst],
+            capture_output=True, timeout=30,
+        )
+        return Path(dst).exists() and Path(dst).stat().st_size > 0
+    except Exception:
+        return False
+
+
+def prepare_reference_image(path: str) -> str | None:
+    """Validate and optimize a local reference image for Seedance 2.0.
+
+    Pre-check:
+    - Exists and non-empty
+    - Dimensions 300–6000px, aspect ratio 0.4–2.5
+    - File size < 30MB
+
+    Pre-process (if needed):
+    - Scale to ≤{_REF_IMAGE_OPTIMAL_MAX_PX}px longest side
+    - Convert to JPEG for smaller payload
+
+    Returns optimized path, or None if image is invalid.
+    """
+    src = Path(path)
+    if not src.exists() or src.stat().st_size == 0:
+        logger.warning("[seedance-prep] File not found or empty: %s", path)
+        return None
+    if src.stat().st_size > _MAX_IMAGE_SIZE_BYTES:
+        logger.warning("[seedance-prep] Image too large: %.1fMB > 30MB: %s",
+                       src.stat().st_size / 1024 / 1024, path)
+        return None
+
+    dims = _ffprobe_dimensions(path)
+    if dims:
+        w, h = dims
+        ar = w / h if h else 1.0
+        if min(w, h) < _IMAGE_MIN_PX:
+            logger.warning("[seedance-prep] Image too small: %dx%d", w, h)
+            return None
+        if max(w, h) > _IMAGE_MAX_PX:
+            logger.warning("[seedance-prep] Image exceeds 6000px: %dx%d, will resize", w, h)
+        if ar < _IMAGE_AR_MIN or ar > _IMAGE_AR_MAX:
+            logger.warning("[seedance-prep] Aspect ratio %.2f out of [0.4, 2.5]", ar)
+            return None
+
+        # Resize if exceeds optimal max
+        if max(w, h) > _REF_IMAGE_OPTIMAL_MAX_PX:
+            out_path = str(src.with_name(src.stem + "_ref.jpg"))
+            if _ffmpeg_resize_image(path, out_path, _REF_IMAGE_OPTIMAL_MAX_PX):
+                new_dims = _ffprobe_dimensions(out_path)
+                logger.info(
+                    "[seedance-prep] Resized %s: %dx%d → %s (%.1fKB → %.1fKB)",
+                    src.name, w, h,
+                    f"{new_dims[0]}x{new_dims[1]}" if new_dims else "?",
+                    src.stat().st_size / 1024,
+                    Path(out_path).stat().st_size / 1024,
+                )
+                return out_path
+
+    return path
+
+
+def validate_text_input(text: str) -> str:
+    """Validate and truncate text prompt to Seedance 2.0 limits.
+
+    Returns the (possibly truncated) text.
+    """
+    words = text.split()
+    if len(words) > _MAX_TEXT_EN_WORDS:
+        logger.warning("[seedance-prep] Text truncated: %d → %d words",
+                       len(words), _MAX_TEXT_EN_WORDS)
+        return " ".join(words[:_MAX_TEXT_EN_WORDS])
+    return text
+
+
+def validate_reference_video(path: str) -> str | None:
+    """Validate a reference video for Seedance 2.0.
+
+    Pre-check:
+    - File exists, size ≤ 50MB
+    - Duration 2–15s
+    - Format: mp4, mov
+
+    Returns path if valid, None otherwise.
+    """
+    src = Path(path)
+    if not src.exists():
+        logger.warning("[seedance-prep] Video not found: %s", path)
+        return None
+    if src.stat().st_size > _VIDEO_MAX_SIZE_BYTES:
+        logger.warning("[seedance-prep] Video too large: %.1fMB > 50MB",
+                       src.stat().st_size / 1024 / 1024)
+        return None
+    if src.suffix.lower() not in (".mp4", ".mov"):
+        logger.warning("[seedance-prep] Unsupported video format: %s", src.suffix)
+        return None
+    dur = _ffprobe_duration(path)
+    if dur and (dur < _VIDEO_MIN_DURATION_S or dur > _VIDEO_MAX_DURATION_S):
+        logger.warning("[seedance-prep] Video duration %.1fs out of [2, 15]s", dur)
+        return None
+    return path
+
+
+def validate_reference_audio(path: str) -> str | None:
+    """Validate a reference audio for Seedance 2.0.
+
+    Pre-check:
+    - File exists, size ≤ 15MB
+    - Duration 2–15s
+    - Format: wav, mp3
+
+    Returns path if valid, None otherwise.
+    """
+    src = Path(path)
+    if not src.exists():
+        logger.warning("[seedance-prep] Audio not found: %s", path)
+        return None
+    if src.stat().st_size > _AUDIO_MAX_SIZE_BYTES:
+        logger.warning("[seedance-prep] Audio too large: %.1fMB > 15MB",
+                       src.stat().st_size / 1024 / 1024)
+        return None
+    if src.suffix.lower() not in (".wav", ".mp3"):
+        logger.warning("[seedance-prep] Unsupported audio format: %s", src.suffix)
+        return None
+    dur = _ffprobe_duration(path)
+    if dur and (dur < _AUDIO_MIN_DURATION_S or dur > _AUDIO_MAX_DURATION_S):
+        logger.warning("[seedance-prep] Audio duration %.1fs out of [2, 15]s", dur)
+        return None
+    return path
 
 
 class SeedanceVideoAdapter:
@@ -370,7 +589,9 @@ class SeedanceVideoAdapter:
 
         # --- 2a. Image paths (local files → base64 data URIs) ---
         # This is the PRIMARY path for character reference images from
-        # the drama pipeline (CharacterDesigner → Shot.reference_images)
+        # the drama pipeline (CharacterDesigner → Shot.reference_images).
+        # Images are validated and resized to comply with Seedance limits
+        # before encoding.
         image_paths: list[dict[str, str]] | None = request.extra.get("image_paths")
         if image_paths:
             for img_info in image_paths:
@@ -388,7 +609,13 @@ class SeedanceVideoAdapter:
                         continue
                     ref_image_count += 1
 
-                data_uri = _image_to_data_uri(path)
+                # Validate and resize to optimal dimensions
+                prepared = prepare_reference_image(path)
+                if not prepared:
+                    ref_image_count = max(0, ref_image_count - 1)
+                    continue
+
+                data_uri = _image_to_data_uri(prepared)
                 if data_uri:
                     content.append({
                         "type": "image_url",
@@ -397,7 +624,7 @@ class SeedanceVideoAdapter:
                     })
                     logger.debug(
                         "[seedance] Added image %s (role=%s) from %s",
-                        ref_image_count, role, Path(path).name,
+                        ref_image_count, role, Path(prepared).name,
                     )
 
         # --- 2b. Image URLs (HTTPS — passed through directly) ---

@@ -152,8 +152,13 @@ class CharacterDesigner:
 
     def _ensure_generator(self) -> ImageGenerator:
         if self._img_gen is None:
-            from videoclaw.generation.image import EvolinkImageGenerator
-            self._img_gen = EvolinkImageGenerator()
+            # Default to BytePlus Seedream for character turnaround generation
+            try:
+                from videoclaw.generation.byteplus_image import BytePlusImageGenerator
+                self._img_gen = BytePlusImageGenerator()
+            except Exception:
+                from videoclaw.generation.image import EvolinkImageGenerator
+                self._img_gen = EvolinkImageGenerator()
         return self._img_gen
 
     async def design_characters(
