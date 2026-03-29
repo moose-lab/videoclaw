@@ -144,7 +144,8 @@ def _register_zh_locale() -> None:
         voice_casting_prompt=ZH_VOICE_CASTING_PROMPT,
         dialogue_extraction_prompt=ZH_DIALOGUE_EXTRACTION_PROMPT,
         character_image_style=(
-            "{style} Chinese drama character portrait, modern Asian aesthetics"
+            "photorealistic cinematic drama actor, fictional character design asset, "
+            "professional studio photography, {style} presence, Chinese drama production"
         ),
         voice_profiles=dict(VOICE_PROFILES),
         narrator_presets=dict(NARRATOR_PRESETS),
@@ -625,7 +626,8 @@ def _register_en_locale() -> None:
         voice_casting_prompt=EN_VOICE_CASTING_PROMPT,
         dialogue_extraction_prompt=EN_DIALOGUE_EXTRACTION_PROMPT,
         character_image_style=(
-            "{style} Western drama character portrait, Hollywood cinematography aesthetics"
+            "photorealistic cinematic drama actor, fictional character design asset, "
+            "professional studio photography, {style} presence, Western drama production"
         ),
         voice_profiles=dict(EN_VOICE_PROFILES),
         narrator_presets=dict(EN_NARRATOR_PRESETS),

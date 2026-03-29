@@ -43,30 +43,43 @@ class ImageGenerator(Protocol):
 # ---------------------------------------------------------------------------
 # Character turnaround sheet prompt — 角色三视图标准公式
 # ---------------------------------------------------------------------------
-# 必须要素:
-#   ① 布局声明 (layout declaration)
-#   ② 视角枚举 (view enumeration — must list each one)
-#   ③ 背景约束 (background constraint — prevents scene interference)
-#   ④ 一致性声明 (consistency — prevents face changes between views)
-#   ⑤ 姿态约束 (pose constraint)
+# 设计原则（参考 AI短剧行业标准三视图规范）:
+#   ① 布局声明：单宽图三视图，正面（左）/ 45°侧面（中）/ 背面（右）
+#   ② 背景：纯白无缝摄影棚，无地面阴影
+#   ③ 帧幅：全身，头顶到脚底，人物高度占 75-80%
+#   ④ 光效：柔和均匀正面上方 key light，无强投影（影棚标准光）
+#   ⑤ 风格：写实电影感（photorealistic cinema），非插画/anime
+#   ⑥ 一致性：三视图同一面孔/发型/服装，零偏差
+#   ⑦ 姿态：自然站姿，手臂自然或轻叠前方，中性表情
+#
+# ⚠️ 注意：此模版生成写实风格图，用于 Seedance 角色参考图输入。
+#    如遇 PrivacyInformation 过滤，说明人脸过于逼真，调整 style_line 降低真实度。
 # ---------------------------------------------------------------------------
 
 TURNAROUND_SHEET_PROMPT = """\
-character turnaround sheet, character reference sheet, \
-角色设计三视图,
+character reference sheet for film drama production, 角色三视图参考图,
+fictional character design asset, AI-generated character,
 
 {appearance}
 
-① Layout: three full-body views arranged side by side in a single image, evenly spaced, no overlap.
-② Views: front view (left), side view (center), back view (right).
-③ Background: pure white background, no shadows, no environment, no props, no ground plane.
-④ Consistency: same person, same face, same facial features, same outfit, same hairstyle, \
-identical appearance across all three views — zero variation between views.
-⑤ Pose: standard standing pose, arms naturally at sides, feet together, \
-neutral expression, looking straight ahead (front and side views).
+① Layout: single wide image containing three full-body views side by side, \
+evenly spaced, no overlap.
+  — Left panel: front view, character faces camera directly
+  — Center panel: 45-degree three-quarter side view, character faces slightly left
+  — Right panel: back view, character faces completely away from camera
+② Framing: head-to-toe full body in each panel, character fills 75–80% of panel height, \
+centered, no cropping of feet or head.
+③ Background: pure seamless white studio background, no ground shadow, \
+no floor texture, no props, no environment.
+④ Lighting: soft diffused studio lighting, even front-overhead key light, \
+gentle falloff, no harsh shadows, professional studio photography quality.
+⑤ Consistency: strictly identical face, same hairstyle, same outfit, same accessories \
+across all three panels — zero variation in appearance between views.
+⑥ Pose: relaxed natural standing pose, arms loosely at sides or hands lightly clasped \
+in front, feet shoulder-width apart, neutral calm expression.
 
 Style: {style_line}
-Quality: highly detailed, 8K, professional character design reference sheet\
+Quality: 8K, highly detailed, sharp focus, professional film production character asset\
 """
 
 # ---------------------------------------------------------------------------
