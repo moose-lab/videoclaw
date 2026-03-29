@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import json
 import logging
+import math
+import re
 from pathlib import Path
 from typing import Any, Callable
 
@@ -31,6 +33,46 @@ from videoclaw.drama.models import (
 from videoclaw.models.llm.litellm_wrapper import LLMClient
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Dialogue pacing helpers
+# ---------------------------------------------------------------------------
+
+_CJK_RE = re.compile(r'[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7ff]')
+
+def _min_duration_for_dialogue(dialogue: str, max_cjk_cps: float = 3.5, max_en_wps: float = 2.5) -> float:
+    """Return the minimum shot duration (seconds) needed for natural speech pacing.
+
+    Chinese (CJK-dominant) text uses chars-per-second; English uses words-per-second.
+    Returns 0.0 if dialogue is empty.
+    """
+    text = (dialogue or "").strip()
+    if not text:
+        return 0.0
+    cjk_count = len(_CJK_RE.findall(text))
+    if cjk_count > len(text) * 0.3:
+        return math.ceil(cjk_count / max_cjk_cps)
+    return math.ceil(len(text.split()) / max_en_wps)
+
+
+def _enforce_pacing(scenes: list[dict[str, Any]]) -> None:
+    """Mutate scene dicts in-place: raise duration_seconds to meet pacing floor.
+
+    Caps at 15s (Seedance max). Logs every adjustment so the change is visible.
+    """
+    for s in scenes:
+        floor = _min_duration_for_dialogue(s.get("dialogue", ""))
+        if floor <= 0:
+            continue
+        cur = float(s.get("duration_seconds", 5.0))
+        target = min(15.0, max(cur, floor))
+        if target > cur:
+            logger.info(
+                "Pacing: %s duration %.1fs → %.1fs (dialogue needs ≥%.1fs)",
+                s.get("scene_id", "?"), cur, target, floor,
+            )
+            s["duration_seconds"] = target
+
 
 # ---------------------------------------------------------------------------
 # System prompts
@@ -170,6 +212,15 @@ EPISODE_SCRIPT_PROMPT: str = """\
 - 高潮场景用短镜头快切（5-6秒/镜头），铺垫场景可适当拉长（8-12秒）
 - 第一个场景必须是视觉钩子或衔接上集悬念，最后一个场景必须制造悬念
 
+# 语速规则 — 硬性约束（系统会自动校正违规，但请先自查）
+- 人声自然语速：中文 ≤ 3.5 字/秒，英文 ≤ 2.5 词/秒
+- 公式：duration_seconds ≥ ceil(字数 / 3.5)（中文）
+         duration_seconds ≥ ceil(词数 / 2.5)（英文）
+- 设置时长前必须先数对白字数，再套公式计算最小时长
+  示例：对白20字 → ceil(20 / 3.5) = 6s 起；对白35字 → ceil(35 / 3.5) = 10s 起
+- 如果计算最小时长超过 15s，设为 15s，保留完整对白
+- 禁止为了凑时长缩写对白；应调整时长来适配对白，而非反向操作
+
 # 台词与旁白
 - 中文对白总字数不超过100字（60秒集），语速约4字/秒
 - 对白要求："说人话" — 短句、口语化、有情绪爆发力，单句不超过15字
@@ -273,6 +324,17 @@ You are a professional short-drama storyboard decomposer for TikTok-style vertic
 - visual_prompt must be in ENGLISH, even if the script is in another language.
 - Dialogue in the shot should be in the SCRIPT'S ORIGINAL LANGUAGE.
 
+# Dialogue pacing — HARD RULE (system auto-corrects violations)
+- Natural human speech: English ≤ 2.5 words/s, Chinese ≤ 3.5 chars/s
+- FORMULA: duration_seconds >= ceil(word_count / 2.5) for EN
+           duration_seconds >= ceil(cjk_char_count / 3.5) for ZH
+- Always COUNT words/chars in the dialogue, then compute the minimum duration.
+  Example: 26-word EN dialogue → ceil(26 / 2.5) = 11s minimum. Do NOT set 7s.
+  Example: 20-char ZH dialogue → ceil(20 / 3.5) = 6s minimum.
+- If the minimum exceeds 15s (Seedance max), set 15s and keep the full dialogue.
+- DO NOT shorten the script's dialogue to fit a shorter duration.
+  Adjust duration to fit the dialogue, not the other way around.
+
 # Shot count constraint (CRITICAL — read before decomposing)
 - Target: **6-10 shots** per episode (max 60s). HARD CEILING: 12 shots max.
 - ALL duration_seconds MUST NOT exceed the target maximum episode duration.
@@ -289,7 +351,8 @@ For each shot:
 1. Write an ENGLISH visual_prompt describing the EXACT scene as written.
    Structure: [setting] + [character full appearance] + [action/expression] + [lighting/mood]
 2. Assign shot_scale, shot_type, camera_movement based on the scene content.
-3. Set duration_seconds within 5-15s. Dialogue/complex shots: 8-12s. Action cuts: 5-6s.
+3. Set duration_seconds: COUNT the dialogue words FIRST, then apply the formula below.
+   Action cuts with no dialogue: 5-6s. Complex dialogue shots: use pacing formula.
 4. Copy the EXACT dialogue from the script — do NOT paraphrase or summarize.
    Include dialogue as subtitle instruction for Seedance to render in-video.
 5. Identify characters_present strictly from who the script says is in the scene.
@@ -515,6 +578,9 @@ class DramaPlanner:
                 )
             s["duration_seconds"] = clamped
 
+        # Step 3: Enforce dialogue pacing floor (dialogue drives duration, not vice versa)
+        _enforce_pacing(scenes)
+
         episode.script = json.dumps(script_data, ensure_ascii=False)
         episode.scenes = [DramaScene.from_dict(s) for s in scenes]
         return script_data
@@ -647,6 +713,12 @@ class DramaPlanner:
             # Clamp durations to Seedance 2.0 range
             for scene in scenes:
                 scene.duration_seconds = max(5.0, min(15.0, scene.duration_seconds))
+
+            # Enforce dialogue pacing floor on raw dicts before DramaScene construction
+            raw_scenes = ep_data.get("scenes", [])
+            _enforce_pacing(raw_scenes)
+            for scene, raw in zip(scenes, raw_scenes):
+                scene.duration_seconds = float(raw.get("duration_seconds", scene.duration_seconds))
 
             episode = Episode(
                 number=ep_data.get("number", len(series.episodes) + 1),
