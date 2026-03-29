@@ -164,6 +164,8 @@ class DramaScene:
     time_of_day: str = ""       # morning / day / evening / night / unspecified
     scene_group: str = ""       # A / B / C — script location block
     shot_role: str = "normal"   # hook / normal / cliffhanger
+    # Vision audit result (written by VisionAuditor, persisted via DramaManager)
+    audit_result: dict | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)

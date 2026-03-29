@@ -1193,26 +1193,39 @@ def drama_regen_shot(
 
 @drama_app.command("audit")
 def drama_audit(
-    clip_dir: Annotated[str, typer.Argument(help="Directory containing generated MP4 clips.")],
-    scenes_json: Annotated[str, typer.Option("--scenes", "-s", help="Path to series_data.json or 05_redecomposition_60s.json.")] = "",
+    target: Annotated[Optional[str], typer.Argument(
+        help="Series ID (series-aware mode) or omit for standalone mode."
+    )] = None,
+    clip_dir: Annotated[str, typer.Option("--clip-dir", "-c", help="Directory containing generated MP4 clips.")] = "",
+    scenes_json: Annotated[str, typer.Option("--scenes", "-s", help="Path to scenes JSON (standalone mode).")] = "",
     episode: Annotated[int, typer.Option("--episode", "-e", help="Episode number.")] = 1,
-    clip_prefix: Annotated[str, typer.Option("--prefix", help="Filename prefix for session5 clips.")] = "session5_",
-    session6: Annotated[str, typer.Option("--session6", help="Comma-separated scene IDs re-generated in session6.")] = "",
     output: Annotated[str, typer.Option("--output", "-o", help="Write JSON audit report to this file.")] = "",
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Run Claude Vision audit on generated video clips.
 
     \b
-    Extracts keyframes from each clip and sends them to Claude Vision for
-    per-shot quality inspection: time-of-day consistency, character presence,
-    subtitle spelling errors, generation artifacts, and dramatic tension.
+    Extracts keyframes via FFmpeg and sends them to Claude Vision for per-shot
+    QA: time-of-day consistency, character presence, subtitle spelling errors,
+    generation artifacts, and dramatic tension.
+
+    \b
+    Audit results and repair directions are printed for your review.
+    No automatic regeneration is triggered — re-generation decisions are yours.
+
+    \b
+    SERIES-AWARE MODE (recommended — loads scenes from drama manager):
+        claw drama audit <series_id> [--clip-dir DIR] [--episode N]
+        Persists audit results back into the series state.
+
+    \b
+    STANDALONE MODE (for externally-generated clips):
+        claw drama audit --clip-dir DIR --scenes SCENES_JSON [--episode N]
 
     \b
     Examples:
-        claw drama audit docs/deliverables/ep01_satan_in_a_suit/video_clips \\
-            --scenes docs/deliverables/05_redecomposition_60s.json \\
-            --session6 ep01_s06 --output audit_session6.json
+        claw drama audit 97e8424712d24fb2 --clip-dir docs/deliverables/ep01/video_clips
+        claw drama audit --clip-dir video_clips --scenes series_data.json --output report.json
     """
     configure_logging(verbose)
     show_banner()
@@ -1222,57 +1235,26 @@ def drama_audit(
 
     import json as _json
     from pathlib import Path
-    from videoclaw.drama.models import DramaScene
     from videoclaw.drama.vision_auditor import VisionAuditor
 
-    clip_path = Path(clip_dir)
-    if not clip_path.is_dir():
-        console.print(f"[red]clip_dir {clip_dir!r} is not a directory.[/red]")
-        out.set_error(f"clip_dir {clip_dir!r} not found.")
-        out.emit()
-        raise typer.Exit(code=1)
+    # Determine mode: series-aware if target looks like a series_id (not a path)
+    series_mode = target is not None and not Path(target).is_dir()
 
-    # Load scenes
-    if not scenes_json:
-        console.print("[red]--scenes is required.[/red]")
-        raise typer.Exit(code=1)
-
-    scenes_path = Path(scenes_json)
-    if not scenes_path.exists():
-        console.print(f"[red]scenes file {scenes_json!r} not found.[/red]")
-        raise typer.Exit(code=1)
-
-    raw = _json.loads(scenes_path.read_text())
-    # Support both series.json (has 'episodes') and flat {'scenes': [...]}
-    if "episodes" in raw:
-        ep_data = next(
-            (e for e in raw["episodes"] if e.get("number", 1) == episode),
-            raw["episodes"][0] if raw["episodes"] else {},
-        )
-        scenes_data = ep_data.get("scenes", [])
-    elif "scenes" in raw:
-        scenes_data = raw["scenes"]
-    else:
-        console.print("[red]Cannot find 'scenes' in the provided JSON.[/red]")
-        raise typer.Exit(code=1)
-
-    scenes = [DramaScene.from_dict(s) for s in scenes_data]
-    session6_scenes = [s.strip() for s in session6.split(",") if s.strip()] if session6 else []
-
-    console.print(f"[bold]Auditing {len(scenes)} scenes[/bold] in [cyan]{clip_dir}[/cyan]")
-    if session6_scenes:
-        console.print(f"Session 6 clips: {session6_scenes}")
-
-    auditor = VisionAuditor()
-
-    async def _run() -> None:
-        report = await auditor.audit_episode(
-            scenes,
-            clip_path,
-            clip_prefix=clip_prefix,
-            session6_scenes=session6_scenes,
-        )
+    def _finish(report) -> None:  # type: ignore[no-untyped-def]
         console.print(report.summary())
+
+        failed = [r for r in report.shot_results if not r.passed]
+        if failed:
+            console.print("\n[bold yellow]Repair directions:[/bold yellow]")
+            for r in failed:
+                regen_flag = " [bold red][REGEN RECOMMENDED][/bold red]" if r.regen_required else ""
+                console.print(f"  [cyan]{r.shot_id}[/cyan]{regen_flag}")
+                for issue in r.issues:
+                    console.print(f"    • {issue}")
+                if r.regen_note:
+                    console.print(f"    → {r.regen_note}")
+        else:
+            console.print("\n[bold green]All shots passed — no repairs needed.[/bold green]")
 
         if output:
             out_path = Path(output)
@@ -1286,7 +1268,99 @@ def drama_audit(
         })
         out.emit()
 
-    asyncio.run(_run())
+    if series_mode:
+        # ---- Series-aware mode ----------------------------------------
+        from videoclaw.drama.models import DramaManager
+
+        series_id = target
+        mgr = DramaManager()
+        series = mgr.load(series_id)
+        if series is None:
+            console.print(f"[red]Series {series_id!r} not found. Use 'claw drama list' to see available series.[/red]")
+            out.set_error(f"series {series_id!r} not found")
+            out.emit()
+            raise typer.Exit(code=1)
+
+        clip_path: Path | None = Path(clip_dir) if clip_dir else None
+        if clip_path is not None and not clip_path.is_dir():
+            console.print(f"[red]--clip-dir {clip_dir!r} is not a directory.[/red]")
+            out.set_error(f"clip_dir {clip_dir!r} not found")
+            out.emit()
+            raise typer.Exit(code=1)
+
+        ep_obj = next((e for e in series.episodes if e.number == episode), None)
+        if ep_obj is None:
+            console.print(f"[red]Episode {episode} not found in series {series_id!r}.[/red]")
+            raise typer.Exit(code=1)
+
+        console.print(
+            f"[bold]Series-aware audit:[/bold] [cyan]{series_id}[/cyan] EP{episode:02d} "
+            f"— {len(ep_obj.scenes)} shots"
+        )
+
+        auditor = VisionAuditor()
+
+        async def _run_series() -> None:
+            report = await auditor.audit_series_episode(
+                series,
+                episode_number=episode,
+                clip_dir=clip_path,
+                drama_manager=mgr,
+                persist_results=True,
+            )
+            _finish(report)
+
+        asyncio.run(_run_series())
+
+    else:
+        # ---- Standalone mode ------------------------------------------
+        from videoclaw.drama.models import DramaScene
+
+        # target may be a legacy positional clip_dir (backward compat)
+        effective_clip_dir = clip_dir or (target if target and Path(target).is_dir() else "")
+        if not effective_clip_dir:
+            console.print("[red]Provide a series_id as argument (series-aware mode) or --clip-dir (standalone mode).[/red]")
+            raise typer.Exit(code=1)
+
+        clip_path = Path(effective_clip_dir)
+        if not clip_path.is_dir():
+            console.print(f"[red]clip-dir {effective_clip_dir!r} is not a directory.[/red]")
+            out.set_error(f"clip_dir {effective_clip_dir!r} not found")
+            out.emit()
+            raise typer.Exit(code=1)
+
+        if not scenes_json:
+            console.print("[red]--scenes is required in standalone mode.[/red]")
+            raise typer.Exit(code=1)
+
+        scenes_path = Path(scenes_json)
+        if not scenes_path.exists():
+            console.print(f"[red]scenes file {scenes_json!r} not found.[/red]")
+            raise typer.Exit(code=1)
+
+        raw = _json.loads(scenes_path.read_text())
+        if "episodes" in raw:
+            ep_data = next(
+                (e for e in raw["episodes"] if e.get("number", 1) == episode),
+                raw["episodes"][0] if raw["episodes"] else {},
+            )
+            scenes_data = ep_data.get("scenes", [])
+        elif "scenes" in raw:
+            scenes_data = raw["scenes"]
+        else:
+            console.print("[red]Cannot find 'scenes' key in the provided JSON.[/red]")
+            raise typer.Exit(code=1)
+
+        scenes = [DramaScene.from_dict(s) for s in scenes_data]
+        console.print(f"[bold]Standalone audit:[/bold] {len(scenes)} scenes in [cyan]{effective_clip_dir}[/cyan]")
+
+        auditor = VisionAuditor()
+
+        async def _run_standalone() -> None:
+            report = await auditor.audit_clip_dir(scenes, clip_path)
+            _finish(report)
+
+        asyncio.run(_run_standalone())
 
 
 async def _drama_regen_shot_async(
