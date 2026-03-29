@@ -77,6 +77,9 @@ def main_callback(
     """VideoClaw -- The Agent OS for AI Video Generation."""
     ctx = get_output()
     ctx.json_mode = json_output
+    # In JSON mode, suppress all logging to keep stdout/stderr clean for agents.
+    if json_output:
+        logging.disable(logging.CRITICAL)
 
 
 # ---------------------------------------------------------------------------
