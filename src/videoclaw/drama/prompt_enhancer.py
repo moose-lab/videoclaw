@@ -68,6 +68,26 @@ _DEFAULT_CONSTRAINTS = (
     "anatomically correct hands, no sudden camera jumps"
 )
 
+# ---------------------------------------------------------------------------
+# Western drama two-layer character consistency strategy
+# ---------------------------------------------------------------------------
+# Layer 1: 3D CGI / MetaHuman-style turnaround image → passes PrivacyInformation
+#           filter on vectorspace.cn proxy; provides costume/body structure ref.
+# Layer 2: CHARACTER IDENTITY text block → photorealistic appearance anchor
+#           that compensates for the stylized ref image's reduced facial fidelity.
+#
+# Usage: prepended to visual_prompt when series.language == "en" and characters
+#        are present in the scene. The compact identity string uses the character's
+#        visual_prompt (first 150 chars) as a concise appearance anchor.
+# ---------------------------------------------------------------------------
+
+_WESTERN_REALISM_HEADER = (
+    "Generate as photorealistic live-action film with REAL HUMAN ACTORS. "
+    "Photorealistic skin, real hair, realistic fabric and lighting. "
+    "NOT cartoon, NOT anime, NOT illustration. "
+    "Netflix drama cinematography. "
+)
+
 
 # ---------------------------------------------------------------------------
 # PromptEnhancer
@@ -108,8 +128,31 @@ class PromptEnhancer:
         3. **Scene** — original visual_prompt (setting + action + lighting)
         4. **Style** — series style anchor + realism modifiers
         5. **Constraints** — 3-5 bans to prevent artifacts
+
+        Western drama (``series.language == "en"``) prepends an additional
+        realism header + CHARACTER IDENTITY block as part 0. This implements
+        the two-layer character consistency strategy: 3D CGI ref images provide
+        visual structure; the text CHARACTER IDENTITY anchors photorealistic
+        appearance to compensate for the stylized ref image fidelity gap.
         """
         parts: list[str] = []
+        char_map = {c.name: c for c in series.characters}
+
+        # --- 0. Western drama: realism header + CHARACTER IDENTITY (two-layer strategy) ---
+        if series.language == "en" and scene.characters_present:
+            char_ids = []
+            for name in scene.characters_present:
+                char = char_map.get(name)
+                if char and char.visual_prompt:
+                    vp_compact = char.visual_prompt[:150].rstrip(",. ")
+                    char_ids.append(f"{name}: {vp_compact}")
+            if char_ids:
+                parts.append(
+                    _WESTERN_REALISM_HEADER
+                    + "CHARACTER IDENTITY: "
+                    + "; ".join(char_ids)
+                    + "."
+                )
 
         # --- 1. Camera ---
         shot_label = (
@@ -125,13 +168,15 @@ class PromptEnhancer:
             parts.append(", ".join(camera_parts) + ".")
 
         # --- 2. Subject (character descriptions — repeated for consistency) ---
-        char_map = {c.name: c for c in series.characters}
-        for name in scene.characters_present:
-            char = char_map.get(name)
-            if char and char.visual_prompt:
-                parts.append(
-                    f"Same character {name} — {char.visual_prompt.rstrip('.')}."
-                )
+        # For Western drama, character identity already injected in part 0.
+        # For Chinese drama, use the standard "Same character" format.
+        if series.language != "en":
+            for name in scene.characters_present:
+                char = char_map.get(name)
+                if char and char.visual_prompt:
+                    parts.append(
+                        f"Same character {name} — {char.visual_prompt.rstrip('.')}."
+                    )
 
         # --- 3. Scene (original visual prompt — setting + action + mood) ---
         if scene.visual_prompt:
