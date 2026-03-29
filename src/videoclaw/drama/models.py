@@ -160,6 +160,10 @@ class DramaScene:
     dialogue_audio_path: str | None = None
     narration_audio_path: str | None = None
     scene_status: str = "pending"
+    # Structural metadata (added Session 6)
+    time_of_day: str = ""       # morning / day / evening / night / unspecified
+    scene_group: str = ""       # A / B / C — script location block
+    shot_role: str = "normal"   # hook / normal / cliffhanger
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)

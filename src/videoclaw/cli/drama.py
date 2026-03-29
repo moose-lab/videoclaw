@@ -1187,6 +1187,108 @@ def drama_regen_shot(
     out.emit()
 
 
+# ---------------------------------------------------------------------------
+# claw drama audit
+# ---------------------------------------------------------------------------
+
+@drama_app.command("audit")
+def drama_audit(
+    clip_dir: Annotated[str, typer.Argument(help="Directory containing generated MP4 clips.")],
+    scenes_json: Annotated[str, typer.Option("--scenes", "-s", help="Path to series_data.json or 05_redecomposition_60s.json.")] = "",
+    episode: Annotated[int, typer.Option("--episode", "-e", help="Episode number.")] = 1,
+    clip_prefix: Annotated[str, typer.Option("--prefix", help="Filename prefix for session5 clips.")] = "session5_",
+    session6: Annotated[str, typer.Option("--session6", help="Comma-separated scene IDs re-generated in session6.")] = "",
+    output: Annotated[str, typer.Option("--output", "-o", help="Write JSON audit report to this file.")] = "",
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Run Claude Vision audit on generated video clips.
+
+    \b
+    Extracts keyframes from each clip and sends them to Claude Vision for
+    per-shot quality inspection: time-of-day consistency, character presence,
+    subtitle spelling errors, generation artifacts, and dramatic tension.
+
+    \b
+    Examples:
+        claw drama audit docs/deliverables/ep01_satan_in_a_suit/video_clips \\
+            --scenes docs/deliverables/05_redecomposition_60s.json \\
+            --session6 ep01_s06 --output audit_session6.json
+    """
+    configure_logging(verbose)
+    show_banner()
+    console = get_console()
+    out = get_output()
+    out._command = "drama.audit"
+
+    import json as _json
+    from pathlib import Path
+    from videoclaw.drama.models import DramaScene
+    from videoclaw.drama.vision_auditor import VisionAuditor
+
+    clip_path = Path(clip_dir)
+    if not clip_path.is_dir():
+        console.print(f"[red]clip_dir {clip_dir!r} is not a directory.[/red]")
+        out.set_error(f"clip_dir {clip_dir!r} not found.")
+        out.emit()
+        raise typer.Exit(code=1)
+
+    # Load scenes
+    if not scenes_json:
+        console.print("[red]--scenes is required.[/red]")
+        raise typer.Exit(code=1)
+
+    scenes_path = Path(scenes_json)
+    if not scenes_path.exists():
+        console.print(f"[red]scenes file {scenes_json!r} not found.[/red]")
+        raise typer.Exit(code=1)
+
+    raw = _json.loads(scenes_path.read_text())
+    # Support both series.json (has 'episodes') and flat {'scenes': [...]}
+    if "episodes" in raw:
+        ep_data = next(
+            (e for e in raw["episodes"] if e.get("number", 1) == episode),
+            raw["episodes"][0] if raw["episodes"] else {},
+        )
+        scenes_data = ep_data.get("scenes", [])
+    elif "scenes" in raw:
+        scenes_data = raw["scenes"]
+    else:
+        console.print("[red]Cannot find 'scenes' in the provided JSON.[/red]")
+        raise typer.Exit(code=1)
+
+    scenes = [DramaScene.from_dict(s) for s in scenes_data]
+    session6_scenes = [s.strip() for s in session6.split(",") if s.strip()] if session6 else []
+
+    console.print(f"[bold]Auditing {len(scenes)} scenes[/bold] in [cyan]{clip_dir}[/cyan]")
+    if session6_scenes:
+        console.print(f"Session 6 clips: {session6_scenes}")
+
+    auditor = VisionAuditor()
+
+    async def _run() -> None:
+        report = await auditor.audit_episode(
+            scenes,
+            clip_path,
+            clip_prefix=clip_prefix,
+            session6_scenes=session6_scenes,
+        )
+        console.print(report.summary())
+
+        if output:
+            out_path = Path(output)
+            out_path.write_text(_json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
+            console.print(f"[green]Report written: {output}[/green]")
+
+        out.set_result({
+            "total": report.total_shots,
+            "passed": report.passed_shots,
+            "regen_required": report.regen_required,
+        })
+        out.emit()
+
+    asyncio.run(_run())
+
+
 async def _drama_regen_shot_async(
     series: DramaSeries, mgr: DramaManager, episode: Episode, scene_id: str, recompose: bool,
 ) -> None:

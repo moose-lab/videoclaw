@@ -230,7 +230,10 @@ Output JSON schema:
       "emotion": "<从情绪词表中选择精确词汇>",
       "characters_present": ["<本场景出镜的角色名列表>"],
       "transition": "<cut | dissolve | fade_in | fade_out | wipe | match_cut | jump_cut>",
-      "sfx": "<此镜头关键音效，如：门声、脚步声、雷鸣。无则留空>"
+      "sfx": "<此镜头关键音效，如：门声、脚步声、雷鸣。无则留空>",
+      "time_of_day": "<morning|day|evening|night|unspecified — 从场景语境推断，保持同场景内一致>",
+      "scene_group": "<A|B|C|... — 剧本位置区块标签，同一物理地点的镜头应相同，如 A=泳池边 B=水下 C=走廊>",
+      "shot_role": "<hook|normal|cliffhanger — 第一个镜头=hook，最后一个镜头=cliffhanger，其余=normal>"
     }
   ],
   "voice_over": {
@@ -333,7 +336,10 @@ If you notice any of the following gaps, report them in the "detected_gaps" arra
           "emotion": "<from emotion list above>",
           "characters_present": ["<names from script>"],
           "transition": "<cut|dissolve|fade_in|fade_out|match_cut>",
-          "sfx": "<sound effects implied by the script>"
+          "sfx": "<sound effects implied by the script>",
+          "time_of_day": "<morning|day|evening|night|unspecified — infer from script context>",
+          "scene_group": "<A|B|C|... — location block label, e.g. A=poolside B=underwater C=corridor>",
+          "shot_role": "<hook|normal|cliffhanger — first shot=hook, last shot=cliffhanger, rest=normal>"
         }
       ]
     }
