@@ -5,7 +5,12 @@ a structured JSON envelope is printed to stdout on command exit.
 
 Envelope format::
 
-    {"ok": true, "command": "video", "data": {...}, "error": null}
+    {"ok": true, "version": "0.1.0", "command": "video", "data": {...}, "error": null}
+
+Thread safety: :class:`OutputContext` is a module-level singleton.  It is
+**NOT** thread-safe and is designed exclusively for single-threaded CLI
+invocations.  The ``json_mode`` flag must be set by the Typer callback
+BEFORE any async operations begin.
 """
 
 from __future__ import annotations

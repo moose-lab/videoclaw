@@ -385,8 +385,11 @@ class VideoComposer:
         output_path: Path,
     ) -> list[str]:
         """Build FFmpeg command to burn subtitles into a video."""
-        # Escape special characters in path for FFmpeg subtitle filter
-        sub_path_escaped = str(subtitle_path).replace("\\", "\\\\").replace(":", "\\:")
+        # Escape special characters in path for FFmpeg subtitle filter.
+        # FFmpeg filter syntax requires escaping: \ : ' [ ] ;
+        sub_path_escaped = str(subtitle_path)
+        for ch in ("\\", ":", "'", "[", "]", ";"):
+            sub_path_escaped = sub_path_escaped.replace(ch, f"\\{ch}")
         return [
             "ffmpeg", "-y",
             "-i", str(video_path),

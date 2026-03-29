@@ -36,6 +36,10 @@ from videoclaw.cli._app import (
 from videoclaw.cli._output import get_console, get_output
 from videoclaw.config import get_config
 
+# Input safety limits
+_MAX_PROMPT_LENGTH = 10_000
+_MAX_JSON_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
+
 
 # ---------------------------------------------------------------------------
 # claw video
@@ -676,6 +680,14 @@ def subtitle(
     if not input_path.exists():
         console.print(f"[red]Input file not found: {input_file}[/red]")
         out.set_error(f"File not found: {input_file}")
+        out.emit()
+        raise typer.Exit(code=1)
+
+    # Guard against excessively large JSON files (DoS prevention)
+    file_size = input_path.stat().st_size
+    if file_size > _MAX_JSON_FILE_SIZE:
+        console.print(f"[red]JSON file too large: {file_size / 1024 / 1024:.0f} MB (max 100 MB)[/red]")
+        out.set_error(f"JSON file too large: {file_size} bytes")
         out.emit()
         raise typer.Exit(code=1)
 

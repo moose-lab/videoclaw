@@ -182,10 +182,15 @@ class VideoRenderer:
         cmd.extend(["-b:v", bitrate])
         cmd.extend(["-c:a", "aac", "-b:a", audio_bitrate])
 
-        # --- Metadata ---
+        # --- Metadata (sanitized to prevent injection) ---
         if metadata:
+            import re
             for key, value in metadata.items():
-                cmd.extend(["-metadata", f"{key}={value}"])
+                # Only allow safe characters in metadata keys/values
+                safe_key = re.sub(r"[^a-zA-Z0-9_\-]", "", key)
+                safe_value = re.sub(r"[^\w\s\-.,!?;:()'\"@#/]", "", str(value))
+                if safe_key:
+                    cmd.extend(["-metadata", f"{safe_key}={safe_value}"])
 
         cmd.append(str(output_path))
         return cmd

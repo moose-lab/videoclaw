@@ -166,7 +166,22 @@ def project_delete(
     out._command = "project.delete"
 
     cfg = get_config()
-    project_dir = cfg.projects_dir / project_id
+    # Sanitize project_id to prevent path traversal
+    if "/" in project_id or "\\" in project_id or ".." in project_id:
+        console.print(f"[red]Invalid project ID: {project_id!r}[/red]")
+        out.set_error(f"Invalid project ID: {project_id!r}")
+        out.emit()
+        raise typer.Exit(code=1)
+
+    project_dir = (cfg.projects_dir / project_id).resolve()
+    projects_root = cfg.projects_dir.resolve()
+
+    # Ensure target is within projects directory (prevent symlink escape)
+    if not str(project_dir).startswith(str(projects_root)):
+        console.print(f"[red]Project path escapes projects directory.[/red]")
+        out.set_error("Project path escapes projects directory.")
+        out.emit()
+        raise typer.Exit(code=1)
 
     if not project_dir.exists():
         console.print(f"[red]Project {project_id!r} not found.[/red]")
@@ -182,6 +197,13 @@ def project_delete(
         if not confirm:
             console.print("[yellow]Cancelled.[/yellow]")
             raise typer.Exit()
+
+    # Final safety check: must be a directory, not a symlink
+    if project_dir.is_symlink():
+        console.print(f"[red]Project directory is a symlink. Refusing to delete.[/red]")
+        out.set_error("Project directory is a symlink.")
+        out.emit()
+        raise typer.Exit(code=1)
 
     shutil.rmtree(project_dir)
     console.print(f"[green]Project {project_id!r} deleted.[/green]")
