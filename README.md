@@ -23,6 +23,19 @@
 
 ---
 
+## Install
+
+```bash
+git clone https://github.com/moose-lab/videoclaw.git
+cd videoclaw
+uv sync            # Python 3.12+, installs deps + creates .venv
+uv run claw --help # Done. No activation needed.
+```
+
+> Or activate the venv to use `claw` directly: `source .venv/bin/activate && claw --help`
+
+---
+
 > **VideoClaw doesn't generate videos. It orchestrates the models that do.**
 >
 > Think Kubernetes for containers, but for AI video generation.
