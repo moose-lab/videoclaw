@@ -360,14 +360,134 @@ def concat_ep01_v1() -> bool:
 # Main
 # ---------------------------------------------------------------------------
 
-async def main(dry_run: bool, skip_s06: bool, skip_concat: bool) -> None:
+async def generate_scene(scene_id: str, dry_run: bool = False) -> dict:
+    """Generate any scene by ID → session6_{scene_id}.mp4."""
+    with open(SERIES_DATA) as f:
+        series = json.load(f)
+    scenes = series["episodes"][0]["scenes"]
+    scene = next((s for s in scenes if s["scene_id"] == scene_id), None)
+    if not scene:
+        raise ValueError(f"{scene_id} not found in series_data.json")
+
+    image_data = json.load(open(IMAGE_URLS_FILE))
+    char_url_map = image_data.get("characters", {})
+
+    dur = max(5, min(15, int(float(scene.get("duration_seconds", 8)))))
+    # All chars are already introduced in earlier shots
+    chars_introduced: set[str] = {"Ivy Angel", "Colton Black", "Chloe Green"}
+    prompt = _build_prompt(scene, chars_introduced)
+
+    content: list[dict] = [{"type": "text", "text": prompt}]
+    char_imgs = _get_char_urls(scene.get("characters_present", []), char_url_map)
+    for ci in char_imgs:
+        content.append({"type": "image_url", "image_url": {"url": ci["url"]}, "role": ci["role"]})
+
+    img_count = len(char_imgs)
+    logger.info("%s: %ds, %d refs", scene_id, dur, img_count)
+
+    output_path = VIDEO_DIR / f"session6_{scene_id}.mp4"
+
+    if dry_run:
+        logger.info("[DRY RUN] %s", scene_id)
+        return {"scene_id": scene_id, "status": "dry_run"}
+
+    payload = {
+        "model": MODEL,
+        "content": content,
+        "generate_audio": True,
+        "ratio": "9:16",
+        "resolution": "720p",
+        "duration": dur,
+        "watermark": False,
+    }
+
+    base_url, headers = _get_api_config()
+    t0 = time.time()
+    task_id = await _create_task(base_url, headers, payload)
+    logger.info("  %s task=%s", scene_id, task_id)
+
+    video_url = await _poll_task(base_url, headers, task_id)
+    video_bytes = await _download(video_url)
+    elapsed = time.time() - t0
+    cost = dur * COST_PER_SECOND
+
+    VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(video_bytes)
+
+    result = {
+        "scene_id": scene_id,
+        "status": "success",
+        "output_path": str(output_path),
+        "cost_usd": round(cost, 2),
+        "elapsed_s": round(elapsed, 1),
+        "size_mb": round(len(video_bytes) / 1024 / 1024, 2),
+        "task_id": task_id,
+        "ref_images": img_count,
+    }
+    logger.info("%s OK — %.0fs, $%.2f, %.1fMB", scene_id, elapsed, cost, result["size_mb"])
+    return result
+
+
+def concat_ep01(session6_scenes: list[str], output_name: str = "ep01_v2.mp4") -> bool:
+    """Concat 7 clips into output_name. session6_scenes use session6_ prefix."""
+    all_scene_ids = ["ep01_s01", "ep01_s02", "ep01_s03", "ep01_s04",
+                     "ep01_s05", "ep01_s06", "ep01_s07"]
+    clips = []
+    for sid in all_scene_ids:
+        if sid in session6_scenes:
+            p = VIDEO_DIR / f"session6_{sid}.mp4"
+        else:
+            p = VIDEO_DIR / f"session5_{sid}.mp4"
+        clips.append(p)
+
+    missing = [c for c in clips if not c.exists()]
+    if missing:
+        logger.error("Missing clips: %s", [c.name for c in missing])
+        return False
+
+    concat_list = VIDEO_DIR / "concat_list.txt"
+    concat_list.write_text("\n".join(f"file '{c.resolve()}'" for c in clips))
+
+    output_path = VIDEO_DIR / output_name
+    cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+           "-i", str(concat_list), "-c", "copy", str(output_path)]
+    logger.info("Concatenating 7 clips → %s", output_name)
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        logger.error("FFmpeg error:\n%s", result.stderr[-2000:])
+        return False
+
+    size_mb = output_path.stat().st_size / 1024 / 1024
+    probe = subprocess.run(
+        ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+         "-of", "csv=p=0", str(output_path)],
+        capture_output=True, text=True,
+    )
+    dur_str = ""
+    if probe.returncode == 0 and probe.stdout.strip():
+        dur_str = f", {float(probe.stdout.strip()):.1f}s"
+    logger.info("%s — %.1fMB%s", output_name, size_mb, dur_str)
+    concat_list.unlink(missing_ok=True)
+    return True
+
+
+async def main(
+    dry_run: bool,
+    skip_s06: bool,
+    skip_concat: bool,
+    regen_scenes: list[str] | None = None,
+    output_name: str = "ep01_v2.mp4",
+) -> None:
     checkpoint: dict = {
         "session": 6,
         "timestamp": time.strftime("%Y%m%d_%H%M%S"),
     }
     CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+    regen_scenes = regen_scenes or []
+    session6_scenes = list(regen_scenes)
 
-    # Step 1: s06
+    # Step 1: s06 (original regen from session 5 failure)
     if not skip_s06:
         logger.info("=" * 50)
         logger.info("STEP 1: Generate ep01_s06")
@@ -380,22 +500,42 @@ async def main(dry_run: bool, skip_s06: bool, skip_concat: bool) -> None:
             s06_result = await generate_s06(dry_run=dry_run)
             checkpoint["s06"] = s06_result
             if s06_result.get("status") != "success" and not dry_run:
-                logger.error("s06 generation failed — aborting concat step")
+                logger.error("s06 generation failed — aborting")
                 _save_checkpoint(checkpoint)
                 return
-    else:
-        logger.info("Skipping s06 generation (--skip-s06)")
-        checkpoint["s06"] = {"status": "skipped_by_flag"}
+        if "ep01_s06" not in session6_scenes:
+            session6_scenes.append("ep01_s06")
+
+    # Step 1b: Additional regen scenes from vision audit
+    if regen_scenes:
+        logger.info("=" * 50)
+        logger.info("STEP 1b: Regen from vision audit: %s", regen_scenes)
+        logger.info("=" * 50)
+        checkpoint["regen"] = {}
+        for sid in regen_scenes:
+            out_path = VIDEO_DIR / f"session6_{sid}.mp4"
+            if out_path.exists() and out_path.stat().st_size > 10_000:
+                logger.info("%s already exists — skipping", out_path.name)
+                checkpoint["regen"][sid] = {"status": "skipped_existing"}
+                continue
+            result = await generate_scene(sid, dry_run=dry_run)
+            checkpoint["regen"][sid] = result
+            if result.get("status") != "success" and not dry_run:
+                logger.error("%s regen failed: %s", sid, result.get("error"))
 
     # Step 2: Concat
     if not skip_concat and not dry_run:
         logger.info("=" * 50)
-        logger.info("STEP 2: Concat EP01 v1")
+        logger.info("STEP 2: Concat EP01 %s", output_name)
         logger.info("=" * 50)
-        ok = concat_ep01_v1()
-        checkpoint["concat"] = {"status": "success" if ok else "failed", "output": str(EP01_V1)}
+        ok = concat_ep01(session6_scenes, output_name=output_name)
+        checkpoint["concat"] = {
+            "status": "success" if ok else "failed",
+            "output": str(VIDEO_DIR / output_name),
+            "session6_scenes": session6_scenes,
+        }
         if ok:
-            logger.info("EP01 v1 delivered: %s", EP01_V1)
+            logger.info("Delivered: %s", VIDEO_DIR / output_name)
         else:
             logger.error("Concat failed")
     else:
@@ -413,12 +553,25 @@ def _save_checkpoint(data: dict) -> None:
 
 
 def cli_main() -> None:
-    parser = argparse.ArgumentParser(description="Session 6 — EP01 s06 regen + concat")
+    parser = argparse.ArgumentParser(description="Session 6 — EP01 regen + concat")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--skip-s06", action="store_true", help="Skip s06 generation")
     parser.add_argument("--skip-concat", action="store_true", help="Skip final concat")
+    parser.add_argument(
+        "--regen", type=str, default="",
+        help="Comma-separated scene IDs to regenerate (e.g. ep01_s02,ep01_s03)",
+    )
+    parser.add_argument("--output", type=str, default="ep01_v2.mp4",
+                        help="Output filename for concat [default: ep01_v2.mp4]")
     args = parser.parse_args()
-    asyncio.run(main(dry_run=args.dry_run, skip_s06=args.skip_s06, skip_concat=args.skip_concat))
+    regen = [s.strip() for s in args.regen.split(",") if s.strip()] if args.regen else []
+    asyncio.run(main(
+        dry_run=args.dry_run,
+        skip_s06=args.skip_s06,
+        skip_concat=args.skip_concat,
+        regen_scenes=regen,
+        output_name=args.output,
+    ))
 
 
 if __name__ == "__main__":
