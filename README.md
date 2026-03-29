@@ -43,17 +43,35 @@ But making a *real* video still means:
 ## Quick Start
 
 ```bash
-# Install
-pip install videoclaw
+# Clone and install (requires Python 3.12+ and uv)
+git clone https://github.com/moose-lab/videoclaw.git
+cd videoclaw
+uv sync                          # Install dependencies + create .venv
 
-# Check system readiness
+# Option A: Use uv run (recommended, no activation needed)
+uv run claw --help
+uv run claw doctor               # Check system readiness
+
+# Option B: Activate virtualenv, then use claw directly
+source .venv/bin/activate
+claw --help
 claw doctor
 
 # Generate a video from a single prompt
-claw generate "A 30-second product intro for a smart watch, cinematic style"
+uv run claw generate "A 30-second product intro for a smart watch, cinematic style"
+
+# Or run individual stages independently
+uv run claw video "A cat riding a skateboard" -d 5 -o cat.mp4
+uv run claw image "Character portrait" --provider gemini -o portrait.png
+uv run claw tts "Hello world" --lang en -o hello.mp3
+uv run claw storyboard "Product unboxing" -d 30 -o shots.json
+
+# Agent-friendly: JSON output for programmatic use
+uv run claw -j video "sunset over ocean" -o sunset.mp4
+# → {"ok": true, "command": "video", "data": {"path": "...", "cost_usd": 0.05}, "error": null}
 
 # Or run a YAML pipeline
-claw flow run examples/product-promo.yaml
+uv run claw flow run examples/product-promo.yaml
 ```
 
 ## Features
@@ -173,17 +191,41 @@ Six-layer design:
 
 ## CLI Commands
 
+> All commands support `--json / -j` for structured JSON output (agent-friendly).
+
 ```bash
-claw generate <prompt>        # Full pipeline: script -> shots -> compose -> output
-claw flow run <file.yaml>     # Execute a ClawFlow YAML pipeline
-claw flow validate <file.yaml># Validate flow without running
-claw doctor                   # System health check
-claw model list               # List available model adapters
-claw model pull <id>          # Download a local model
-claw project list             # List all projects
-claw project show <id>        # Show project details + cost
-claw template list            # List flow templates
-claw template use <name>      # Generate from template
+# Full pipeline
+claw generate <prompt>              # Script → shots → compose → render
+claw generate <prompt> --dry-run    # Preview DAG without executing
+
+# Single-stage commands (run each step independently)
+claw video <prompt>                 # Generate a single video clip
+claw image <prompt>                 # Generate a single image
+claw tts <text>                     # Text-to-speech (supports stdin pipe)
+claw storyboard <prompt>            # Decompose prompt into shot list
+claw compose <v1.mp4> <v2.mp4> ...  # Compose multiple clips together
+claw render <input.mp4>             # Encode/render final video
+claw subtitle <scenes.json>         # Generate SRT/ASS subtitles
+
+# ClawFlow YAML pipelines
+claw flow run <file.yaml>           # Execute a pipeline
+claw flow validate <file.yaml>      # Validate without running
+
+# AI short drama series
+claw drama new <synopsis>           # Create from concept
+claw drama import <script.docx>     # Import complete script
+claw drama list                     # List all series
+claw drama show <id>                # Show series details
+claw drama run <id>                 # Execute generation pipeline
+
+# Management
+claw config show                    # View all config (API keys masked)
+claw config check                   # Validate config completeness
+claw doctor                         # System health check
+claw model list                     # List model adapters
+claw project list                   # List all projects
+claw project show <id>              # Show project details
+claw project delete <id>            # Delete project and assets
 ```
 
 ## REST API
@@ -216,12 +258,20 @@ docker compose up
 ```
 videoclaw/
 ├── src/videoclaw/
-│   ├── cli.py              # CLI entry point (Typer + Rich)
+│   ├── cli/                # CLI package (Typer + Rich)
+│   │   ├── _app.py         # App definition, validators, helpers
+│   │   ├── _output.py      # JSON output mode (OutputContext)
+│   │   ├── stage.py        # Single-stage commands (video/image/tts/...)
+│   │   ├── generate.py     # Full pipeline command
+│   │   ├── drama.py        # Drama series commands
+│   │   ├── config_cmd.py   # Config management
+│   │   └── ...             # doctor, model, project, template, flow
 │   ├── config.py           # Configuration (Pydantic Settings)
 │   ├── core/               # Director, DAG engine, state, events
 │   ├── agents/             # Video Agent protocol + roles
 │   ├── models/             # Model adapters, registry, LLM wrapper
 │   ├── generation/         # Script, storyboard, video, audio, compose
+│   ├── drama/              # AI short drama orchestration
 │   ├── cost/               # Cost tracking + budget guards
 │   ├── flow/               # ClawFlow YAML parser + runner
 │   ├── server/             # FastAPI REST API (optional, headless)
@@ -255,11 +305,14 @@ export ANTHROPIC_API_KEY=sk-ant-...
 ## Development
 
 ```bash
-git clone https://github.com/your-org/videoclaw.git
+git clone https://github.com/moose-lab/videoclaw.git
 cd videoclaw
-pip install -e ".[dev]"
-pytest                    # Run 37 tests
-ruff check src/ tests/    # Lint
+uv sync --all-extras          # Install all deps including dev/server
+# or: make dev
+
+uv run pytest tests/ -v       # Run tests
+uv run ruff check src/ tests/ # Lint
+# or: make test / make lint
 ```
 
 ## Roadmap
