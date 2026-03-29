@@ -65,15 +65,20 @@ def video(
     out = get_output()
     out._command = "video"
 
-    asyncio.run(_video_async(
-        prompt=prompt,
-        duration=duration,
-        aspect_ratio=aspect_ratio,
-        model_id=model,
-        strategy=strategy,
-        reference_image=reference_image,
-        output_path=output,
-    ))
+    try:
+        asyncio.run(_video_async(
+            prompt=prompt,
+            duration=duration,
+            aspect_ratio=aspect_ratio,
+            model_id=model,
+            strategy=strategy,
+            reference_image=reference_image,
+            output_path=output,
+        ))
+    except Exception as exc:
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
 
 
 async def _video_async(
@@ -177,12 +182,17 @@ def image(
     out = get_output()
     out._command = "image"
 
-    asyncio.run(_image_async(
-        prompt=prompt,
-        provider=provider,
-        size=size,
-        output_path=output,
-    ))
+    try:
+        asyncio.run(_image_async(
+            prompt=prompt,
+            provider=provider,
+            size=size,
+            output_path=output,
+        ))
+    except Exception as exc:
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
 
 
 async def _image_async(
@@ -271,12 +281,17 @@ def tts(
             out.emit()
             raise typer.Exit(code=1)
 
-    asyncio.run(_tts_async(
-        text=effective_text,
-        voice=voice,
-        language=language,
-        output_path=output,
-    ))
+    try:
+        asyncio.run(_tts_async(
+            text=effective_text,
+            voice=voice,
+            language=language,
+            output_path=output,
+        ))
+    except Exception as exc:
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
 
 
 async def _tts_async(
@@ -339,13 +354,18 @@ def storyboard(
     out = get_output()
     out._command = "storyboard"
 
-    asyncio.run(_storyboard_async(
-        prompt=prompt,
-        duration=duration,
-        style=style,
-        aspect_ratio=aspect_ratio,
-        output_path=output,
-    ))
+    try:
+        asyncio.run(_storyboard_async(
+            prompt=prompt,
+            duration=duration,
+            style=style,
+            aspect_ratio=aspect_ratio,
+            output_path=output,
+        ))
+    except Exception as exc:
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
 
 
 async def _storyboard_async(
@@ -465,12 +485,17 @@ def compose(
         out.emit()
         raise typer.Exit(code=1)
 
-    asyncio.run(_compose_async(
-        video_paths=video_paths,
-        transition=transition,
-        transition_duration=transition_duration,
-        output_path=output,
-    ))
+    try:
+        asyncio.run(_compose_async(
+            video_paths=video_paths,
+            transition=transition,
+            transition_duration=transition_duration,
+            output_path=output,
+        ))
+    except Exception as exc:
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
 
 
 async def _compose_async(
@@ -541,16 +566,21 @@ def render(
         out.emit()
         raise typer.Exit(code=1)
 
-    asyncio.run(_render_async(
-        input_path=input_path,
-        output_path=output,
-        resolution=resolution,
-        codec=codec,
-        bitrate=bitrate,
-        audio_bitrate=audio_bitrate,
-        preset=preset,
-        crf=crf,
-    ))
+    try:
+        asyncio.run(_render_async(
+            input_path=input_path,
+            output_path=output,
+            resolution=resolution,
+            codec=codec,
+            bitrate=bitrate,
+            audio_bitrate=audio_bitrate,
+            preset=preset,
+            crf=crf,
+        ))
+    except Exception as exc:
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
 
 
 async def _render_async(

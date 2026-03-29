@@ -72,22 +72,27 @@ def flow_run(
     sm = StateManager()
     state = sm.create_project(prompt=prompt or flow.name)
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        TimeElapsedColumn(),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Running flow...", total=len(flow.steps))
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Running flow...", total=len(flow.steps))
 
-        async def _run() -> None:
-            runner = FlowRunner(state_manager=sm, max_concurrency=concurrency)
-            await runner.run(flow, state)
+            async def _run() -> None:
+                runner = FlowRunner(state_manager=sm, max_concurrency=concurrency)
+                await runner.run(flow, state)
 
-        asyncio.run(_run())
-        progress.update(task, completed=len(flow.steps))
+            asyncio.run(_run())
+            progress.update(task, completed=len(flow.steps))
+    except Exception as exc:
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
 
     console.print(
         Panel(

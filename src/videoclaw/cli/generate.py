@@ -49,20 +49,28 @@ def generate(
     configure_logging(verbose)
     show_banner()
 
-    asyncio.run(
-        _generate_async(
-            prompt=prompt,
-            duration=duration,
-            style=style,
-            aspect_ratio=aspect_ratio,
-            strategy=strategy,
-            output_path=output,
-            budget_usd=budget,
-            preferred_model=model,
-            max_concurrency=concurrency,
-            dry_run=dry_run,
+    try:
+        asyncio.run(
+            _generate_async(
+                prompt=prompt,
+                duration=duration,
+                style=style,
+                aspect_ratio=aspect_ratio,
+                strategy=strategy,
+                output_path=output,
+                budget_usd=budget,
+                preferred_model=model,
+                max_concurrency=concurrency,
+                dry_run=dry_run,
+            )
         )
-    )
+    except Exception as exc:
+        from videoclaw.cli._output import get_output
+        out = get_output()
+        out._command = "generate"
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
 
 
 async def _generate_async(

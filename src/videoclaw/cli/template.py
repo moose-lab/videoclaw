@@ -71,12 +71,16 @@ def template_use(
 ) -> None:
     """Generate a video using a predefined flow template."""
     console = get_console()
+    out = get_output()
+    out._command = "template.use"
 
     tpl_dir = resolve_templates_dir()
     tpl_path = tpl_dir / f"{name}.claw.yaml"
 
     if not tpl_path.exists():
         console.print(f"[red]Template {name!r} not found at {tpl_path}[/red]")
+        out.set_error(f"Template {name!r} not found at {tpl_path}")
+        out.emit()
         raise typer.Exit(code=1)
 
     import yaml  # type: ignore[import-untyped]
@@ -99,7 +103,7 @@ def template_use(
     effective_prompt = prompt or f"Generate a {data.get('name', name)} video"
     console.print(f"\n[dim]Launching generation with prompt: {effective_prompt!r}[/dim]\n")
 
-    # Delegate to the generate command.
+    # Delegate to the generate command (its JSON output will be emitted by generate itself).
     from videoclaw.cli.generate import generate
 
     generate(

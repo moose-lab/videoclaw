@@ -92,13 +92,18 @@ def drama_new(
         )
     )
 
-    if plan:
-        console.print("\n[bold cyan]Planning episodes via LLM...[/bold cyan]")
-        asyncio.run(_drama_plan_async(series, mgr))
+    try:
+        if plan:
+            console.print("\n[bold cyan]Planning episodes via LLM...[/bold cyan]")
+            asyncio.run(_drama_plan_async(series, mgr))
 
-    if design_characters and plan:
-        console.print("\n[bold cyan]Generating character reference images...[/bold cyan]")
-        asyncio.run(_design_characters_async(series, mgr, force=False))
+        if design_characters and plan:
+            console.print("\n[bold cyan]Generating character reference images...[/bold cyan]")
+            asyncio.run(_design_characters_async(series, mgr, force=False))
+    except Exception as exc:
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
 
     out.set_result({
         "series_id": series.series_id,
@@ -145,9 +150,18 @@ def drama_import(
     configure_logging(verbose)
     show_banner()
 
-    asyncio.run(_drama_import_async(
-        script_file, title, genre, language, style, aspect_ratio, model,
-    ))
+    try:
+        asyncio.run(_drama_import_async(
+            script_file, title, genre, language, style, aspect_ratio, model,
+        ))
+    except typer.Exit:
+        raise
+    except Exception as exc:
+        out = get_output()
+        out._command = "drama.import"
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
 
 
 async def _drama_import_async(
@@ -203,6 +217,12 @@ async def _drama_import_async(
     def _confirm_gaps(modifications: list[ScriptModification]) -> list[ScriptModification]:
         if not modifications:
             return []
+
+        # In JSON mode, auto-approve all modifications (no interactive prompt)
+        if out.json_mode:
+            for mod in modifications:
+                mod.approved = True
+            return modifications
 
         console.print(
             f"\n[bold yellow]Detected {len(modifications)} gap(s) "
@@ -484,7 +504,12 @@ def drama_plan(
         out.emit()
         raise typer.Exit(code=1)
 
-    asyncio.run(_drama_plan_async(series, mgr))
+    try:
+        asyncio.run(_drama_plan_async(series, mgr))
+    except Exception as exc:
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
 
     out.set_result({
         "series_id": series.series_id,
@@ -559,6 +584,8 @@ def drama_script(
 
     if not series.episodes:
         console.print("[yellow]No episodes planned. Run `claw drama plan` first.[/yellow]")
+        out.set_error("No episodes planned. Run `claw drama plan` first.")
+        out.emit()
         raise typer.Exit(code=1)
 
     ep = next((e for e in series.episodes if e.number == episode), None)
@@ -568,7 +595,12 @@ def drama_script(
         out.emit()
         raise typer.Exit(code=1)
 
-    asyncio.run(_drama_script_async(series, ep, mgr))
+    try:
+        asyncio.run(_drama_script_async(series, ep, mgr))
+    except Exception as exc:
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
 
     out.set_result({
         "series_id": series.series_id,
@@ -679,6 +711,8 @@ def drama_design_characters(
 
     if not series.characters:
         console.print("[yellow]No characters found. Run `claw drama plan` first.[/yellow]")
+        out.set_error("No characters found. Run `claw drama plan` first.")
+        out.emit()
         raise typer.Exit(code=1)
 
     console.print(
@@ -691,7 +725,12 @@ def drama_design_characters(
         )
     )
 
-    asyncio.run(_design_characters_async(series, mgr, force))
+    try:
+        asyncio.run(_design_characters_async(series, mgr, force))
+    except Exception as exc:
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
 
     out.set_result({
         "series_id": series.series_id,
@@ -748,6 +787,8 @@ def drama_design_scenes(
 
     if not series.episodes or not any(ep.scenes for ep in series.episodes):
         console.print("[yellow]No scenes found. Run `claw drama script` first.[/yellow]")
+        out.set_error("No scenes found. Run `claw drama script` first.")
+        out.emit()
         raise typer.Exit(code=1)
 
     console.print(
@@ -760,7 +801,12 @@ def drama_design_scenes(
         )
     )
 
-    asyncio.run(_design_scenes_async(series, mgr, force))
+    try:
+        asyncio.run(_design_scenes_async(series, mgr, force))
+    except Exception as exc:
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
 
     out.set_result({"series_id": series.series_id})
     out.emit()
@@ -820,6 +866,8 @@ def drama_assign_voices(
 
     if not series.characters:
         console.print("[yellow]No characters found. Run `claw drama plan` first.[/yellow]")
+        out.set_error("No characters found. Run `claw drama plan` first.")
+        out.emit()
         raise typer.Exit(code=1)
 
     if force:
@@ -900,6 +948,8 @@ def drama_run(
 
     if not series.episodes:
         console.print("[yellow]No episodes planned. Run `claw drama plan` first.[/yellow]")
+        out.set_error("No episodes planned. Run `claw drama plan` first.")
+        out.emit()
         raise typer.Exit(code=1)
 
     if episode is not None:
@@ -942,7 +992,14 @@ def drama_run(
         out.emit()
         return
 
-    asyncio.run(_drama_run_async(series, mgr, start, end, budget, concurrency))
+    try:
+        asyncio.run(_drama_run_async(series, mgr, start, end, budget, concurrency))
+    except typer.Exit:
+        raise
+    except Exception as exc:
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
 
     out.set_result({
         "series_id": series.series_id,
@@ -1087,6 +1144,8 @@ def drama_regen_shot(
 
     if not ep.scenes:
         console.print("[yellow]Episode has no scenes. Run `claw drama script` first.[/yellow]")
+        out.set_error("Episode has no scenes. Run `claw drama script` first.")
+        out.emit()
         raise typer.Exit(code=1)
 
     scene_ids = [s.scene_id for s in ep.scenes]
@@ -1108,7 +1167,12 @@ def drama_regen_shot(
         )
     )
 
-    asyncio.run(_drama_regen_shot_async(series, mgr, ep, scene, recompose))
+    try:
+        asyncio.run(_drama_regen_shot_async(series, mgr, ep, scene, recompose))
+    except Exception as exc:
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
 
     out.set_result({
         "series_id": series_id,
