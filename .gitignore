@@ -36,6 +36,7 @@ htmlcov/
 .DS_Store
 
 projects/
+scripts/run_ep*.py
 models_cache/
 .worktrees
 
