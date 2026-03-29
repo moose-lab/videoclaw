@@ -162,7 +162,9 @@ EPISODE_SCRIPT_PROMPT: str = """\
 
 # 节奏控制（Seedance 2.0 约束：单镜头时长 5～15 秒）
 - 每个场景的 duration_seconds 必须在 5～15 秒之间（视频模型硬限制）
-- 场景数量：60秒约 6-10 个场景，按时长等比缩放
+- 场景数量：60秒约 **6-10 个场景**，按时长等比缩放。**硬上限：60秒集不超过 12 场景**
+- 每个 shot = 一次 Seedance 视频生成调用，合并细碎动作为复合镜头
+  例如"角色说话 + 对方反应"= 1 个 shot，不是 2 个
 - 所有场景的 duration_seconds 之和必须等于目标集时长（±2秒）
 - 节奏模板：钩子(0-5s) → 铺垫(5-15s) → 递进(15-35s) → 高潮(35-50s) → 悬念(50-60s)
 - 高潮场景用短镜头快切（5-6秒/镜头），铺垫场景可适当拉长（8-12秒）
@@ -262,19 +264,31 @@ You are a professional short-drama storyboard decomposer for TikTok-style vertic
 5. Character names, ages, descriptions must match EXACTLY what the script provides.
 
 # Seedance 2.0 technical constraints
-- Each shot: 5-15s (hard limit).
-- Seedance 2.0 co-generates video + audio + dialogue in one pass.
+- Each shot: 5-15s (hard limit). One shot = one Seedance video generation call.
+- Seedance 2.0 co-generates video + audio + dialogue + subtitles in one pass.
 - 9:16 vertical format, 720p.
 - visual_prompt must be in ENGLISH, even if the script is in another language.
 - Dialogue in the shot should be in the SCRIPT'S ORIGINAL LANGUAGE.
+
+# Shot count constraint (CRITICAL — read before decomposing)
+- Target: **6-10 shots** for a 60-second episode. HARD CEILING: 12 shots max.
+- ALL duration_seconds MUST sum to the target episode duration (±2 seconds).
+- MERGE consecutive fine-grained actions into COMPOSITE shots.
+  Each shot can contain multiple narrative beats (dialogue + reaction + transition).
+  Example: "Ivy pleads → Colton turns coldly → guests gasp" = ONE 10-12s shot, NOT three 4s shots.
+- Reaction shots of minor characters (guests, extras) should be part of the main shot,
+  NOT separate shots. Only cut away if the reaction is a major dramatic beat.
+- Underwater/flashback sequences: merge into 1-2 long shots (10-15s), not 4-5 short ones.
+- If your first pass exceeds 12 shots, RE-MERGE until you are within limit.
 
 # Decomposition rules
 For each shot:
 1. Write an ENGLISH visual_prompt describing the EXACT scene as written.
    Structure: [setting] + [character full appearance] + [action/expression] + [lighting/mood]
 2. Assign shot_scale, shot_type, camera_movement based on the scene content.
-3. Set duration_seconds within 5-15s. Aim for: dialogue shots ≥5s, action shots 5-6s.
+3. Set duration_seconds within 5-15s. Dialogue/complex shots: 8-12s. Action cuts: 5-6s.
 4. Copy the EXACT dialogue from the script — do NOT paraphrase or summarize.
+   Include dialogue as subtitle instruction for Seedance to render in-video.
 5. Identify characters_present strictly from who the script says is in the scene.
 6. Assign emotion from: tense, anxious, angry, furious, sad, heartbroken, shock, \
    disbelief, warm, tender, sweet, intimate, fear, panic, triumphant, defiant.
