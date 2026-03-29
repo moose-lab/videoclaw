@@ -34,7 +34,10 @@ def model_list() -> None:
         return
 
     # Run health checks asynchronously.
-    health = asyncio.run(registry.health_check_all())
+    try:
+        health = asyncio.run(registry.health_check_all())
+    except Exception:
+        health = {}  # Graceful degradation: show models without health status
 
     table = Table(
         title="Registered Model Adapters",

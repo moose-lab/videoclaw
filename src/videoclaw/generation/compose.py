@@ -447,7 +447,9 @@ class VideoComposer:
         # -- Subtitle filter on video stream --
         video_filters: list[str] = []
         if subtitle_path is not None:
-            sub_escaped = str(subtitle_path).replace("\\", "\\\\").replace(":", "\\:")
+            sub_escaped = str(subtitle_path)
+            for ch in ("\\", ":", "'", "[", "]", ";"):
+                sub_escaped = sub_escaped.replace(ch, f"\\{ch}")
             video_filters.append(f"subtitles={sub_escaped}")
 
         if video_filters:
