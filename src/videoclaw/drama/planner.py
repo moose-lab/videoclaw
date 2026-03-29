@@ -162,7 +162,7 @@ EPISODE_SCRIPT_PROMPT: str = """\
 
 # 节奏控制（Seedance 2.0 约束：单镜头时长 5～15 秒）
 - 每个场景的 duration_seconds 必须在 5～15 秒之间（视频模型硬限制）
-- 场景数量：60秒约 **6-10 个场景**，按时长等比缩放。**硬上限：60秒集不超过 12 场景**
+- 场景数量：**6-10 个场景**（单集最长 60 秒）。**硬上限：不超过 12 场景**
 - 每个 shot = 一次 Seedance 视频生成调用，合并细碎动作为复合镜头
   例如"角色说话 + 对方反应"= 1 个 shot，不是 2 个
 - 所有场景的 duration_seconds 之和必须等于目标集时长（±2秒）
@@ -271,8 +271,8 @@ You are a professional short-drama storyboard decomposer for TikTok-style vertic
 - Dialogue in the shot should be in the SCRIPT'S ORIGINAL LANGUAGE.
 
 # Shot count constraint (CRITICAL — read before decomposing)
-- Target: **6-10 shots** for a 60-second episode. HARD CEILING: 12 shots max.
-- ALL duration_seconds MUST sum to the target episode duration (±2 seconds).
+- Target: **6-10 shots** per episode (max 60s). HARD CEILING: 12 shots max.
+- ALL duration_seconds MUST NOT exceed the target maximum episode duration.
 - MERGE consecutive fine-grained actions into COMPOSITE shots.
   Each shot can contain multiple narrative beats (dialogue + reaction + transition).
   Example: "Ivy pleads → Colton turns coldly → guests gasp" = ONE 10-12s shot, NOT three 4s shots.
@@ -589,12 +589,16 @@ class DramaPlanner:
                 for c in series.characters
             )
 
+        max_dur = series.target_episode_duration or 60.0
         user_message = (
             f"Series: {series.title}\n"
             f"Genre: {series.genre or 'drama'}\n"
             f"Language: {series.language}\n"
             f"Target aspect ratio: {series.aspect_ratio}\n"
+            f"Maximum episode duration: {max_dur:.0f} seconds (MUST NOT exceed)\n"
             f"Video model: Seedance 2.0 (5-15s per clip, audio co-generation)\n"
+            f"HARD CONSTRAINT: 6-10 shots. NEVER exceed 12 shots. "
+            f"Sum of durations MUST NOT exceed {max_dur:.0f}s.\n"
             f"{characters_text}\n\n"
             f"=== COMPLETE SCRIPT (DO NOT MODIFY) ===\n\n"
             f"{script_text}\n\n"

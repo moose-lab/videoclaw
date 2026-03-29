@@ -419,10 +419,10 @@ TikTok / YouTube Shorts / Instagram Reels (9:16 vertical video, 30-90 seconds).
 - jump_cut: time compression within a scene, urgency
 
 # Pacing Rules (Seedance 2.0 hard constraint: 5-15s per shot)
-- Scene count: **6-10 shots** per 60-second episode. Scale proportionally for other durations.
-  Hard ceiling: NEVER exceed 12 shots for a 60s episode. Each shot = one Seedance video generation call.
+- Scene count: **6-10 shots** per episode (max 60s). Hard ceiling: NEVER exceed 12 shots.
+  Each shot = one Seedance video generation call.
 - Each shot duration_seconds MUST be between 5 and 15 seconds (video model hard limit).
-- ALL scene duration_seconds MUST sum to the target episode duration (+-2 seconds).
+- ALL scene duration_seconds MUST NOT exceed the target episode maximum duration.
 - Merge fine-grained actions into composite shots — e.g. "character speaks, then reacts" = 1 shot, not 2.
   A single shot can contain multiple beats: dialogue + reaction + camera movement.
 - Rhythm template: Hook(0-5s) -> Build(5-15s) -> Escalate(15-35s) -> Peak(35-50s) -> Cliffhanger(50-60s)

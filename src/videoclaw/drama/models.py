@@ -661,7 +661,7 @@ class DramaSeries:
     style: str = "cinematic"
     language: str = "zh"
     aspect_ratio: str = "9:16"
-    target_episode_duration: float = 60.0
+    target_episode_duration: float = 60.0  # Maximum seconds per episode (not fixed)
     total_episodes: int = 5
     status: DramaStatus = DramaStatus.DRAFT
     characters: list[Character] = field(default_factory=list)
