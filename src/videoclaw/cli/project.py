@@ -30,7 +30,7 @@ def project_list() -> None:
         console.print("[yellow]No projects found.[/yellow]")
         out.set_result({"projects": []})
         out.emit()
-        raise typer.Exit()
+        return
 
     table = Table(
         title="Projects",

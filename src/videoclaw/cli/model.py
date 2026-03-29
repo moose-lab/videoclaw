@@ -31,7 +31,7 @@ def model_list() -> None:
         console.print("Adapters are auto-discovered via the [cyan]videoclaw.adapters[/cyan] entry-point group.")
         out.set_result({"models": []})
         out.emit()
-        raise typer.Exit()
+        return
 
     # Run health checks asynchronously.
     health = asyncio.run(registry.health_check_all())

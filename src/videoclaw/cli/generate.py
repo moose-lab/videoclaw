@@ -22,6 +22,7 @@ from videoclaw.cli._app import (
     configure_logging,
     show_banner,
     validate_aspect_ratio,
+    validate_prompt,
     validate_strategy,
 )
 from videoclaw.cli._output import get_console, get_output
@@ -30,7 +31,7 @@ from videoclaw.config import get_config
 
 @app.command()
 def generate(
-    prompt: Annotated[str, typer.Argument(help="Creative prompt for the video.")],
+    prompt: Annotated[str, typer.Argument(help="Creative prompt for the video.", callback=validate_prompt)],
     duration: Annotated[int, typer.Option("--duration", "-d", help="Target duration in seconds.")] = 30,
     style: Annotated[Optional[str], typer.Option("--style", "-s", help="Visual style hint.")] = None,
     aspect_ratio: Annotated[str, typer.Option("--aspect-ratio", "-a", help="Aspect ratio.", callback=validate_aspect_ratio)] = "16:9",

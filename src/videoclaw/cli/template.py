@@ -25,14 +25,14 @@ def template_list() -> None:
         console.print("[yellow]No templates directory found.[/yellow]")
         out.set_result({"templates": []})
         out.emit()
-        raise typer.Exit()
+        return
 
     templates = sorted(tpl_dir.glob("*.claw.yaml"))
     if not templates:
         console.print("[yellow]No .claw.yaml templates found.[/yellow]")
         out.set_result({"templates": []})
         out.emit()
-        raise typer.Exit()
+        return
 
     table = Table(
         title="Flow Templates",

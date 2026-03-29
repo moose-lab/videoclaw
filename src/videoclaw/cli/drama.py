@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Annotated, Optional
+from typing import TYPE_CHECKING, Annotated, Optional
 
 import typer
+
+if TYPE_CHECKING:
+    from videoclaw.drama.models import DramaManager, DramaSeries, Episode
 from rich.panel import Panel
 from rich.progress import (
     BarColumn,
@@ -24,6 +27,7 @@ from videoclaw.cli._app import (
     show_banner,
     validate_aspect_ratio,
     validate_language,
+    validate_prompt,
 )
 from videoclaw.cli._output import get_console, get_output
 from videoclaw.config import get_config
@@ -35,7 +39,7 @@ from videoclaw.config import get_config
 
 @drama_app.command("new")
 def drama_new(
-    synopsis: Annotated[str, typer.Argument(help="High-level story concept for the drama series.")],
+    synopsis: Annotated[str, typer.Argument(help="High-level story concept for the drama series.", callback=validate_prompt)],
     title: Annotated[Optional[str], typer.Option("--title", "-t", help="Series title.")] = None,
     genre: Annotated[str, typer.Option("--genre", "-g", help="Genre.")] = "drama",
     episodes: Annotated[int, typer.Option("--episodes", "-n", help="Number of episodes.")] = 5,
@@ -351,7 +355,7 @@ def drama_list() -> None:
         console.print("[yellow]No drama series found.[/yellow]")
         out.set_result({"series": []})
         out.emit()
-        raise typer.Exit()
+        return
 
     table = Table(title="Drama Series", show_header=True, header_style="bold cyan")
     table.add_column("Series ID", style="cyan", min_width=18)
@@ -519,7 +523,7 @@ def drama_plan(
     out.emit()
 
 
-async def _drama_plan_async(series, mgr) -> None:
+async def _drama_plan_async(series: DramaSeries, mgr: DramaManager) -> None:
     console = get_console()
 
     from videoclaw.drama.planner import DramaPlanner
@@ -611,7 +615,7 @@ def drama_script(
     out.emit()
 
 
-async def _drama_script_async(series, ep, mgr) -> None:
+async def _drama_script_async(series: DramaSeries, ep: Episode, mgr: DramaManager) -> None:
     console = get_console()
 
     from videoclaw.drama.planner import DramaPlanner
@@ -742,7 +746,7 @@ def drama_design_characters(
     out.emit()
 
 
-async def _design_characters_async(series, mgr, force: bool) -> None:
+async def _design_characters_async(series: DramaSeries, mgr: DramaManager, force: bool) -> None:
     console = get_console()
 
     from videoclaw.drama.character_designer import CharacterDesigner
@@ -812,7 +816,7 @@ def drama_design_scenes(
     out.emit()
 
 
-async def _design_scenes_async(series, mgr, force: bool) -> None:
+async def _design_scenes_async(series: DramaSeries, mgr: DramaManager, force: bool) -> None:
     console = get_console()
 
     from videoclaw.drama.scene_designer import SceneDesigner
@@ -1010,7 +1014,7 @@ def drama_run(
 
 
 async def _drama_run_async(
-    series, mgr, start: int, end: int | None,
+    series: DramaSeries, mgr: DramaManager, start: int, end: int | None,
     budget_usd: float | None = None, max_concurrency: int = 4,
 ) -> None:
     console = get_console()
@@ -1184,7 +1188,7 @@ def drama_regen_shot(
 
 
 async def _drama_regen_shot_async(
-    series, mgr, episode, scene_id: str, recompose: bool,
+    series: DramaSeries, mgr: DramaManager, episode: Episode, scene_id: str, recompose: bool,
 ) -> None:
     console = get_console()
 

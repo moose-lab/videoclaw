@@ -31,13 +31,13 @@ from videoclaw.cli._app import (
     show_banner,
     validate_aspect_ratio,
     validate_language,
+    validate_prompt,
     validate_strategy,
 )
 from videoclaw.cli._output import get_console, get_output
 from videoclaw.config import get_config
 
 # Input safety limits
-_MAX_PROMPT_LENGTH = 10_000
 _MAX_JSON_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
 
 
@@ -47,7 +47,7 @@ _MAX_JSON_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
 
 @app.command()
 def video(
-    prompt: Annotated[str, typer.Argument(help="Generation prompt for the video clip.")],
+    prompt: Annotated[str, typer.Argument(help="Generation prompt for the video clip.", callback=validate_prompt)],
     duration: Annotated[float, typer.Option("--duration", "-d", help="Clip duration in seconds.")] = 5.0,
     aspect_ratio: Annotated[str, typer.Option("--aspect-ratio", "-a", help="Aspect ratio.", callback=validate_aspect_ratio)] = "16:9",
     model: Annotated[Optional[str], typer.Option("--model", "-m", help="Video model id.")] = None,
@@ -167,7 +167,7 @@ async def _video_async(
 
 @app.command()
 def image(
-    prompt: Annotated[str, typer.Argument(help="Generation prompt for the image.")],
+    prompt: Annotated[str, typer.Argument(help="Generation prompt for the image.", callback=validate_prompt)],
     provider: Annotated[str, typer.Option("--provider", "-p", help="Image provider: gemini / evolink / byteplus.")] = "gemini",
     size: Annotated[str, typer.Option("--size", "-s", help="Image aspect ratio (e.g. 3:4, 1:1, 16:9).")] = "3:4",
     output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output file path.")] = None,
@@ -334,7 +334,7 @@ async def _tts_async(
 
 @app.command()
 def storyboard(
-    prompt: Annotated[str, typer.Argument(help="Creative prompt or script text to decompose.")],
+    prompt: Annotated[str, typer.Argument(help="Creative prompt or script text to decompose.", callback=validate_prompt)],
     duration: Annotated[float, typer.Option("--duration", "-d", help="Target total duration in seconds.")] = 60.0,
     style: Annotated[str, typer.Option("--style", "-s", help="Visual style hint.")] = "cinematic",
     aspect_ratio: Annotated[str, typer.Option("--aspect-ratio", "-a", help="Aspect ratio.", callback=validate_aspect_ratio)] = "16:9",

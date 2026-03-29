@@ -137,6 +137,8 @@ def status_icon(ok: bool) -> str:
 # Input validators
 # ---------------------------------------------------------------------------
 
+MAX_PROMPT_LENGTH = 10_000
+
 VALID_ASPECT_RATIOS = {"16:9", "9:16", "1:1", "4:3", "3:4", "21:9"}
 VALID_STRATEGIES = {"quality", "cost", "speed", "auto"}
 VALID_LANGUAGES = {"zh", "en"}
@@ -169,3 +171,15 @@ def validate_language(value: str) -> str:
             f"Invalid language {value!r}. Valid: {', '.join(sorted(VALID_LANGUAGES))}"
         )
     return value
+
+
+def validate_prompt(value: str) -> str:
+    """Typer callback to reject empty or excessively long prompts."""
+    stripped = value.strip()
+    if not stripped:
+        raise typer.BadParameter("Prompt cannot be empty.")
+    if len(stripped) > MAX_PROMPT_LENGTH:
+        raise typer.BadParameter(
+            f"Prompt too long ({len(stripped)} chars). Max: {MAX_PROMPT_LENGTH}."
+        )
+    return stripped
