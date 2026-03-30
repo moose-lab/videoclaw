@@ -173,12 +173,20 @@ class CharacterDesigner:
     def _ensure_generator(self) -> ImageGenerator:
         if self._img_gen is None:
             # Default to BytePlus Seedream for character turnaround generation
+            # Verify the API key is actually available before committing to BytePlus
             try:
-                from videoclaw.generation.byteplus_image import BytePlusImageGenerator
-                self._img_gen = BytePlusImageGenerator()
+                from videoclaw.config import get_config
+                cfg = get_config()
+                if cfg.byteplus_api_key:
+                    from videoclaw.generation.byteplus_image import BytePlusImageGenerator
+                    self._img_gen = BytePlusImageGenerator()
+                    logger.info("Using BytePlus Seedream for character images")
+                else:
+                    raise ValueError("No BytePlus API key")
             except Exception:
                 from videoclaw.generation.image import EvolinkImageGenerator
                 self._img_gen = EvolinkImageGenerator()
+                logger.info("Using Evolink for character images (BytePlus unavailable)")
         return self._img_gen
 
     async def design_characters(
