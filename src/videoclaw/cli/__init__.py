@@ -11,6 +11,7 @@ from videoclaw.cli._app import app  # noqa: F401
 # Import command modules to trigger Typer command registration.
 import videoclaw.cli.generate  # noqa: F401
 import videoclaw.cli.doctor  # noqa: F401
+import videoclaw.cli.info  # noqa: F401
 import videoclaw.cli.model  # noqa: F401
 import videoclaw.cli.project  # noqa: F401
 import videoclaw.cli.template  # noqa: F401

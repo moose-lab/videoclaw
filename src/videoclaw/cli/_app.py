@@ -73,6 +73,13 @@ def main_callback(
             help="Output structured JSON instead of rich formatting (agent-friendly).",
         ),
     ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose", "-v",
+            help="Enable debug logging.",
+        ),
+    ] = False,
 ) -> None:
     """VideoClaw -- The Agent OS for AI Video Generation."""
     ctx = get_output()
@@ -80,6 +87,8 @@ def main_callback(
     # In JSON mode, suppress all logging to keep stdout/stderr clean for agents.
     if json_output:
         logging.disable(logging.CRITICAL)
+    if verbose:
+        configure_logging(verbose=True)
 
 
 # ---------------------------------------------------------------------------
