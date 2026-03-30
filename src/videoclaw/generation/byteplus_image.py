@@ -22,14 +22,13 @@ from __future__ import annotations
 
 import base64
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
 import httpx
 
-from videoclaw.config import get_config
 from videoclaw.generation.base_image import BaseImageGenerator
+from videoclaw.utils import resolve_credential
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +50,12 @@ def _resolve_byteplus_credentials(
     api_base: str | None = None,
 ) -> tuple[str | None, str]:
     """Resolve BytePlus API key and base URL from args / env / config."""
-    config = get_config()
-    key = api_key or os.environ.get("BYTEPLUS_API_KEY") or config.byteplus_api_key
-    base = (api_base or config.byteplus_api_base).rstrip("/")
+    from videoclaw.config import get_config
+    key = resolve_credential(
+        explicit=api_key, env_vars="BYTEPLUS_API_KEY",
+        config_attr="byteplus_api_key",
+    )
+    base = (api_base or get_config().byteplus_api_base).rstrip("/")
     return key, base
 
 

@@ -12,14 +12,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-import os
 from collections.abc import AsyncIterator
 from math import gcd
 
 import httpx
 
-from videoclaw.config import get_config
 from videoclaw.models.adapters.base import BaseCloudVideoAdapter
+from videoclaw.utils import resolve_credential
 from videoclaw.models.protocol import (
     GenerationRequest,
     GenerationResult,
@@ -53,16 +52,13 @@ class KlingVideoAdapter(BaseCloudVideoAdapter):
         access_key: str | None = None,
         secret_key: str | None = None,
     ) -> None:
-        config = get_config()
-        self._access_key = (
-            access_key
-            or os.environ.get("KLING_ACCESS_KEY")
-            or config.kling_access_key
+        self._access_key = resolve_credential(
+            explicit=access_key, env_vars="KLING_ACCESS_KEY",
+            config_attr="kling_access_key",
         )
-        self._secret_key = (
-            secret_key
-            or os.environ.get("KLING_SECRET_KEY")
-            or config.kling_secret_key
+        self._secret_key = resolve_credential(
+            explicit=secret_key, env_vars="KLING_SECRET_KEY",
+            config_attr="kling_secret_key",
         )
         # BaseCloudVideoAdapter uses _api_key for health_check
         self._api_key = self._access_key

@@ -12,14 +12,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-import os
 from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
 
-from videoclaw.config import get_config
 from videoclaw.models.adapters.base import BaseCloudVideoAdapter
+from videoclaw.utils import resolve_credential
 from videoclaw.models.protocol import (
     GenerationRequest,
     GenerationResult,
@@ -55,13 +54,12 @@ class SeedanceBytePlusAdapter(BaseCloudVideoAdapter):
         api_key: str | None = None,
         api_base: str | None = None,
     ) -> None:
-        config = get_config()
-        self._api_key = (
-            api_key
-            or os.environ.get("BYTEPLUS_API_KEY")
-            or config.byteplus_api_key
+        from videoclaw.config import get_config
+        self._api_key = resolve_credential(
+            explicit=api_key, env_vars="BYTEPLUS_API_KEY",
+            config_attr="byteplus_api_key",
         )
-        self._api_base = (api_base or config.byteplus_api_base).rstrip("/")
+        self._api_base = (api_base or get_config().byteplus_api_base).rstrip("/")
 
     @property
     def model_id(self) -> str:

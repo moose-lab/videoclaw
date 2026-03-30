@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from collections.abc import AsyncIterator
 
 import httpx
 
 from videoclaw.models.adapters.base import BaseCloudVideoAdapter
+from videoclaw.utils import resolve_credential
 from videoclaw.models.protocol import (
     GenerationRequest,
     GenerationResult,
@@ -39,7 +39,9 @@ class OpenAIVideoAdapter(BaseCloudVideoAdapter):
         api_key: str | None = None,
         base_url: str = _BASE_URL,
     ) -> None:
-        self._api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        self._api_key = resolve_credential(
+            explicit=api_key, env_vars="OPENAI_API_KEY", config_attr="openai_api_key",
+        )
         self._base_url = base_url.rstrip("/")
 
     @property

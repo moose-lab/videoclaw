@@ -11,13 +11,12 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-import os
 from collections.abc import AsyncIterator
 
 import httpx
 
-from videoclaw.config import get_config
 from videoclaw.models.adapters.base import BaseCloudVideoAdapter
+from videoclaw.utils import resolve_credential
 from videoclaw.models.protocol import (
     GenerationRequest,
     GenerationResult,
@@ -53,11 +52,9 @@ class MiniMaxVideoAdapter(BaseCloudVideoAdapter):
         api_key: str | None = None,
         model: str = "minimax-hailuo-2.3",
     ) -> None:
-        config = get_config()
-        self._api_key = (
-            api_key
-            or os.environ.get("MINIMAX_API_KEY")
-            or config.minimax_api_key
+        self._api_key = resolve_credential(
+            explicit=api_key, env_vars="MINIMAX_API_KEY",
+            config_attr="minimax_api_key",
         )
         self._model = model
         self._base_url = _BASE_URL

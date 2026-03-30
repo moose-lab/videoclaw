@@ -15,14 +15,13 @@ from __future__ import annotations
 
 import base64
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
 import httpx
 
-from videoclaw.config import get_config
 from videoclaw.generation.base_image import BaseImageGenerator
+from videoclaw.utils import resolve_credential
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +45,10 @@ class GeminiImageGenerator(BaseImageGenerator):
         api_key: str | None = None,
         model: str = DEFAULT_MODEL,
     ) -> None:
-        config = get_config()
-        self._api_key = (
-            api_key
-            or os.environ.get("GOOGLE_API_KEY")
-            or os.environ.get("GEMINI_API_KEY")
-            or getattr(config, "google_api_key", None)
+        self._api_key = resolve_credential(
+            explicit=api_key,
+            env_vars=["GOOGLE_API_KEY", "GEMINI_API_KEY"],
+            config_attr="google_api_key",
         )
         self._model = model
         self.last_image_url: str | None = None
