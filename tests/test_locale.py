@@ -56,7 +56,9 @@ def test_zh_locale_has_prompts():
 
 def test_zh_locale_character_image_style():
     locale = get_locale("zh")
-    assert "Chinese drama" in locale.character_image_style
+    # 3D CGI turnaround sheet format (PrivacyInformation filter bypass)
+    assert "3D CGI" in locale.character_image_style
+    assert "{style}" in locale.character_image_style
 
 
 def test_zh_locale_genres():

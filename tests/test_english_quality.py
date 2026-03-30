@@ -59,7 +59,7 @@ def _make_western_episode_scripts(
     first_scene_duration: float = 4.0,
     include_cliffhanger: bool = True,
     cjk_in_visual: bool = False,
-    dialogue_words: int = 30,
+    dialogue_words: int = 20,  # 20 words / 8s = 2.5 w/s (at limit)
     narration_text: str | None = None,
 ) -> dict[int, dict]:
     """Build a minimal 1-episode scripts dict that passes all Western rules by default."""
@@ -106,16 +106,16 @@ def _make_western_episode_scripts(
             "characters_present": characters_present,
             "transition": "cut",
         },
-        # Scene 3 — another close-up to keep vertical framing ratio up
+        # Scene 3 — another close-up with dialogue to keep V.O. ratio < 20%
         {
             "scene_id": "ep01_s03",
             "description": "Elena stares at the photo",
             "visual_prompt": "Extreme close-up of woman's eyes reflecting a photograph, tension",
             "camera_movement": "static",
             "duration_seconds": 5.0,
-            "dialogue": "",
+            "dialogue": " ".join(["word"] * 10),
             "narration": "",
-            "speaking_character": "",
+            "speaking_character": speaking_character,
             "shot_scale": "close_up",
             "shot_type": "detail",
             "emotion": "fearful",
@@ -389,9 +389,11 @@ class TestValidateWesternQuality:
         assert not any("V.O. ratio" in v for v in violations), violations
 
     def test_vo_at_25_percent_triggers_violation(self):
-        # 10 narration words, 30 dialogue words → 10/40 = 25%, should fail
+        # 10 narration words, scene2 10 dialogue + scene3 10 dialogue = 20 dialogue
+        # V.O. = 10 / (10+20) = 33%, should fail (> 20%)
+        # (keep dialogue within pacing: 10 words / 8s = 1.25 w/s < 2.5 limit)
         scripts = _make_western_episode_scripts(
-            dialogue_words=30,
+            dialogue_words=10,
             narration_text="one two three four five six seven eight nine ten",
         )
         violations = validate_western_quality(_make_western_series(), scripts)

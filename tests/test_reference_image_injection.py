@@ -260,8 +260,8 @@ class TestPrimaryCharacterSelection:
 
 class TestHandleVideoGen:
     @pytest.mark.asyncio
-    async def test_handle_video_gen_uses_text_only_flow(self):
-        """_handle_video_gen should not forward character reference images to the generator."""
+    async def test_handle_video_gen_passes_local_images_as_fallback(self):
+        """_handle_video_gen passes local reference images via image_paths when no HTTPS URLs."""
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a fake reference image
             img_path = Path(tmpdir) / "linwei.png"
@@ -319,11 +319,12 @@ class TestHandleVideoGen:
 
                 await executor._handle_video_gen(node, state)
 
-                # Verify text-only flow: no reference images are forwarded
+                # Local images passed via extra.image_paths (fallback when no HTTPS URLs)
                 call_kwargs = mock_gen_instance.generate_shot.call_args
-                assert "reference_image" not in call_kwargs.kwargs
-                assert "extra_references" not in call_kwargs.kwargs
-                assert "extra" not in call_kwargs.kwargs
+                extra = call_kwargs.kwargs.get("extra", {})
+                assert "image_paths" in extra
+                assert len(extra["image_paths"]) == 1
+                assert extra["image_paths"][0]["role"] == "reference_image"
 
     @pytest.mark.asyncio
     async def test_handle_video_gen_missing_file_degrades(self):

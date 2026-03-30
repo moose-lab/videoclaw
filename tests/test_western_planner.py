@@ -271,10 +271,11 @@ def test_en_locale_subtitle_config():
 
 
 def test_en_locale_character_image_style():
-    """English locale character_image_style should reference Hollywood aesthetics."""
+    """English locale character_image_style uses 3D CGI turnaround format."""
     locale = get_locale("en")
-    assert "Hollywood" in locale.character_image_style
-    assert "Western drama" in locale.character_image_style
+    assert "3D CGI" in locale.character_image_style
+    assert "Unreal Engine" in locale.character_image_style
+    assert "{style}" in locale.character_image_style
 
 
 def test_en_locale_genres():

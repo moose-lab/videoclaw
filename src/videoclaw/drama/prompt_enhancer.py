@@ -71,8 +71,12 @@ _CJK_RE = re.compile(r'[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\uff00-\uffef]+')
 _REALISM_MODIFIERS = "film grain, natural lighting, shallow depth of field"
 
 # Default constraints (3-5 items max per Seedance best practice)
+# Note: "no text overlays" was removed because the text directive layer
+# explicitly instructs Seedance to render subtitles, name cards, and title
+# cards. The constraint "no unwanted text" covers random/hallucinated text
+# while allowing the intentional text directives to work.
 _DEFAULT_CONSTRAINTS = (
-    "no text overlays, no watermarks, no extra characters, "
+    "no unwanted text or random letters, no watermarks, no extra characters, "
     "anatomically correct hands, no sudden camera jumps"
 )
 

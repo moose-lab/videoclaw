@@ -42,8 +42,8 @@ def mock_image_generator():
 
 
 @pytest.mark.asyncio
-async def test_english_series_gets_western_drama_prompt(mock_image_generator, mock_drama_manager):
-    """English series generates a prompt containing 'Western drama'."""
+async def test_english_series_gets_3d_cgi_turnaround_prompt(mock_image_generator, mock_drama_manager):
+    """English series generates a 3D CGI turnaround sheet prompt."""
     designer = CharacterDesigner(
         image_generator=mock_image_generator,
         drama_manager=mock_drama_manager,
@@ -56,14 +56,19 @@ async def test_english_series_gets_western_drama_prompt(mock_image_generator, mo
     call_args = mock_image_generator.generate.call_args
     prompt = call_args[0][0]  # first positional arg
 
-    assert "Western drama" in prompt
-    assert "Hollywood cinematography aesthetics" in prompt
-    assert "Chinese drama" not in prompt
+    # Turnaround sheet format: 3D CGI, Unreal Engine, MetaHuman
+    assert "3D CGI" in prompt
+    assert "Unreal Engine" in prompt
+    assert "MetaHuman" in prompt
+    assert "cinematic" in prompt.lower()
+    # Three-panel layout
+    assert "front view" in prompt
+    assert "back view" in prompt
 
 
 @pytest.mark.asyncio
-async def test_chinese_series_gets_chinese_drama_prompt(mock_image_generator, mock_drama_manager):
-    """Chinese series generates a prompt containing 'Chinese drama'."""
+async def test_chinese_series_gets_3d_cgi_turnaround_prompt(mock_image_generator, mock_drama_manager):
+    """Chinese series also generates a 3D CGI turnaround sheet prompt."""
     designer = CharacterDesigner(
         image_generator=mock_image_generator,
         drama_manager=mock_drama_manager,
@@ -76,9 +81,10 @@ async def test_chinese_series_gets_chinese_drama_prompt(mock_image_generator, mo
     call_args = mock_image_generator.generate.call_args
     prompt = call_args[0][0]
 
-    assert "Chinese drama" in prompt
-    assert "modern Asian aesthetics" in prompt
-    assert "Western drama" not in prompt
+    # Same 3D CGI turnaround format for both languages
+    assert "3D CGI" in prompt
+    assert "Unreal Engine" in prompt
+    assert "cinematic" in prompt.lower()
 
 
 @pytest.mark.asyncio
