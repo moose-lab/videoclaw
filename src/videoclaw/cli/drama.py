@@ -1832,3 +1832,260 @@ async def _drama_audit_regen_async(
     )
 
     return summary
+
+
+# ---------------------------------------------------------------------------
+# claw drama pipeline — 全流程一键制作
+# ---------------------------------------------------------------------------
+
+@drama_app.command("pipeline")
+def drama_pipeline(
+    series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
+    episode: Annotated[int, typer.Option("--episode", "-e", help="Episode number.")] = 1,
+    skip_design: Annotated[bool, typer.Option("--skip-design", help="Skip character design (already done).")] = False,
+    skip_refresh: Annotated[bool, typer.Option("--skip-refresh", help="Skip URL refresh (URLs still valid).")] = False,
+    skip_run: Annotated[bool, typer.Option("--skip-run", help="Skip video generation.")] = False,
+    skip_audit: Annotated[bool, typer.Option("--skip-audit", help="Skip audit-regen loop.")] = False,
+    audit_rounds: Annotated[int, typer.Option("--audit-rounds", "-n", help="Max audit-regen iterations.")] = 3,
+    concurrency: Annotated[int, typer.Option("--concurrency", "-c", help="Max parallel tasks.")] = 4,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Run the full production pipeline: design → refresh → generate → audit.
+
+    \b
+    One command from prepared script to final video:
+      1. design-characters — generate turnaround sheets (skip with --skip-design)
+      2. refresh-urls — ensure fresh HTTPS URLs (skip with --skip-refresh)
+      3. run — execute video generation pipeline (skip with --skip-run)
+      4. audit-regen — vision QA + auto-regenerate failing shots (skip with --skip-audit)
+
+    \b
+    Prerequisites: series must exist with planned episodes and scenes.
+    Use `claw drama import` or `claw drama plan` + `claw drama script` first.
+
+    \b
+    Examples:
+        claw drama pipeline 97e8424712d24fb2
+        claw drama pipeline abc123 -e 1 --skip-design
+        claw drama pipeline abc123 -e 2 -n 5 -c 2
+    """
+    configure_logging(verbose)
+    show_banner()
+    console = get_console()
+    out = get_output()
+    out._command = "drama.pipeline"
+
+    from videoclaw.drama.models import DramaManager
+
+    mgr = DramaManager()
+    try:
+        series = mgr.load(series_id)
+    except FileNotFoundError:
+        console.print(f"[red]Series {series_id!r} not found.[/red]")
+        out.set_error(f"Series {series_id!r} not found.")
+        out.emit()
+        raise typer.Exit(code=1)
+
+    ep = next((e for e in series.episodes if e.number == episode), None)
+    if ep is None:
+        console.print(f"[red]Episode {episode} not found in series.[/red]")
+        out.set_error(f"Episode {episode} not found.")
+        out.emit()
+        raise typer.Exit(code=1)
+
+    if not ep.scenes:
+        console.print("[yellow]Episode has no scenes. Run `claw drama script` or `claw drama import` first.[/yellow]")
+        out.set_error("Episode has no scenes.")
+        out.emit()
+        raise typer.Exit(code=1)
+
+    stages = []
+    if not skip_design:
+        stages.append("design-characters")
+    if not skip_refresh:
+        stages.append("refresh-urls")
+    if not skip_run:
+        stages.append("run")
+    if not skip_audit:
+        stages.append("audit-regen")
+
+    console.print(
+        Panel(
+            f"[bold]Series:[/bold]      {series.title}\n"
+            f"[bold]Episode:[/bold]     {episode} ({len(ep.scenes)} scenes)\n"
+            f"[bold]Stages:[/bold]      {' → '.join(stages)}\n"
+            f"[bold]Audit rounds:[/bold] {audit_rounds}",
+            title="[bold cyan]Full Pipeline[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+
+    try:
+        result = asyncio.run(
+            _drama_pipeline_async(
+                series, mgr, ep, skip_design, skip_refresh,
+                skip_run, skip_audit, audit_rounds, concurrency,
+            )
+        )
+    except Exception as exc:
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
+
+    out.set_result(result)
+    out.emit()
+
+
+async def _drama_pipeline_async(
+    series: DramaSeries,
+    mgr: DramaManager,
+    episode: Episode,
+    skip_design: bool,
+    skip_refresh: bool,
+    skip_run: bool,
+    skip_audit: bool,
+    audit_rounds: int,
+    concurrency: int,
+) -> dict:
+    """Execute the full production pipeline stages sequentially."""
+    console = get_console()
+    result: dict = {
+        "series_id": series.series_id,
+        "episode": episode.number,
+        "stages": {},
+        "total_cost": 0.0,
+    }
+
+    # --- Stage 1: Design characters ---
+    if not skip_design:
+        console.print("\n[bold cyan]═══ Stage 1/4: Design Characters ═══[/bold cyan]")
+        from videoclaw.drama.character_designer import CharacterDesigner
+
+        designer = CharacterDesigner(drama_manager=mgr)
+        with console.status("[cyan]Generating turnaround sheets...", spinner="dots"):
+            await designer.design_characters(series, force=False)
+
+        chars_with_img = sum(1 for c in series.characters if c.reference_image)
+        console.print(
+            f"  [green]{chars_with_img}/{len(series.characters)} characters have reference images[/green]"
+        )
+        result["stages"]["design_characters"] = {"characters": chars_with_img}
+    else:
+        console.print("\n[dim]Stage 1/4: Design Characters — skipped[/dim]")
+
+    # --- Stage 2: Refresh URLs ---
+    if not skip_refresh:
+        console.print("\n[bold cyan]═══ Stage 2/4: Refresh URLs ═══[/bold cyan]")
+        from videoclaw.drama.runner import ensure_fresh_urls
+
+        with console.status("[cyan]Validating character URLs...", spinner="dots"):
+            refreshed = await ensure_fresh_urls(series, drama_manager=mgr)
+
+        ok_count = sum(1 for v in refreshed.values() if v)
+        console.print(f"  [green]{ok_count}/{len(refreshed)} characters have valid URLs[/green]")
+        result["stages"]["refresh_urls"] = {"valid": ok_count, "total": len(refreshed)}
+    else:
+        console.print("\n[dim]Stage 2/4: Refresh URLs — skipped[/dim]")
+
+    # --- Stage 3: Run generation ---
+    if not skip_run:
+        console.print("\n[bold cyan]═══ Stage 3/4: Generate Episode ═══[/bold cyan]")
+        from videoclaw.drama.runner import DramaRunner
+
+        runner = DramaRunner(
+            drama_manager=mgr,
+            max_concurrency=concurrency,
+            auto_refresh_urls=False,  # Already refreshed in stage 2
+        )
+
+        state = await runner.run_episode(series, episode)
+        gen_cost = state.cost_total
+        result["total_cost"] += gen_cost
+
+        status_style = "green" if state.status.value == "completed" else "red"
+        console.print(
+            f"  [{status_style}]Generation {state.status.value}[/{status_style}] — "
+            f"${gen_cost:.4f}"
+        )
+        result["stages"]["run"] = {
+            "status": state.status.value,
+            "cost": round(gen_cost, 4),
+        }
+    else:
+        console.print("\n[dim]Stage 3/4: Generate Episode — skipped[/dim]")
+
+    # --- Stage 4: Audit-regen loop ---
+    if not skip_audit:
+        console.print("\n[bold cyan]═══ Stage 4/4: Audit & Regen ═══[/bold cyan]")
+        from videoclaw.drama.runner import DramaRunner
+        from videoclaw.drama.vision_auditor import VisionAuditor
+
+        auditor = VisionAuditor()
+        runner = DramaRunner(drama_manager=mgr, auto_refresh_urls=False)
+
+        audit_cost = 0.0
+        final_passed = 0
+        final_total = len(episode.scenes)
+
+        for round_num in range(1, audit_rounds + 1):
+            console.print(f"  [cyan]Audit round {round_num}/{audit_rounds}...[/cyan]")
+
+            report = await auditor.audit_series_episode(
+                series,
+                episode_number=episode.number,
+                drama_manager=mgr,
+                persist_results=True,
+            )
+
+            final_passed = report.passed_shots
+            final_total = report.total_shots
+
+            if not report.regen_required:
+                console.print(
+                    f"  [green]All {final_total} shots passed after round {round_num}[/green]"
+                )
+                break
+
+            console.print(
+                f"  [yellow]Regenerating {len(report.regen_required)} scene(s): "
+                f"{', '.join(report.regen_required)}[/yellow]"
+            )
+
+            for scene_id in report.regen_required:
+                state = await runner.regenerate_scene(
+                    series, episode, scene_id, recompose=False,
+                )
+                audit_cost += state.cost_total
+
+        result["total_cost"] += audit_cost
+        result["stages"]["audit_regen"] = {
+            "passed": final_passed,
+            "total": final_total,
+            "cost": round(audit_cost, 4),
+        }
+    else:
+        console.print("\n[dim]Stage 4/4: Audit & Regen — skipped[/dim]")
+
+    # --- Summary ---
+    all_stages_ok = all(
+        stage.get("status", "completed") != "failed"
+        for stage in result["stages"].values()
+        if isinstance(stage, dict) and "status" in stage
+    )
+    style = "green" if all_stages_ok else "yellow"
+    console.print(
+        Panel(
+            f"[bold]Stages completed:[/bold] {len(result['stages'])}\n"
+            f"[bold]Total cost:[/bold]       ${result['total_cost']:.4f}\n"
+            + (
+                f"[bold]Audit result:[/bold]     "
+                f"{result['stages'].get('audit_regen', {}).get('passed', '?')}/"
+                f"{result['stages'].get('audit_regen', {}).get('total', '?')} passed"
+                if "audit_regen" in result["stages"] else ""
+            ),
+            title=f"[bold {style}]Pipeline Complete[/bold {style}]",
+            border_style=style,
+        )
+    )
+
+    return result

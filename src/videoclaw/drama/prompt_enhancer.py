@@ -96,6 +96,32 @@ _WESTERN_REALISM_HEADER = (
     "Netflix drama cinematography. "
 )
 
+# ---------------------------------------------------------------------------
+# Dramatic tension modifiers for hook / cliffhanger scenes
+# ---------------------------------------------------------------------------
+# 黄金3秒法则: first shot must grab viewer within 3 seconds
+# 悬念收尾: last shot must leave viewer wanting the next episode
+# ---------------------------------------------------------------------------
+
+_HOOK_MODIFIERS = (
+    "HIGH DRAMATIC IMPACT opening shot. "
+    "Immediately convey conflict, suspense, or visual spectacle within the first 3 seconds. "
+    "Dynamic composition, intense emotion, cinematic urgency."
+)
+
+_CLIFFHANGER_MODIFIERS = (
+    "CLIFFHANGER ending shot. "
+    "End on unresolved tension — freeze at the moment of maximum suspense. "
+    "The viewer must feel compelled to watch the next episode. "
+    "Dramatic lighting shift, intense close-up on pivotal action."
+)
+
+# ---------------------------------------------------------------------------
+# Scene continuity hints for adjacent shots
+# ---------------------------------------------------------------------------
+
+_CONTINUITY_PREFIX = "Continuing seamlessly from the previous shot — same location, same lighting, consistent character positions."
+
 
 # ---------------------------------------------------------------------------
 # PromptEnhancer
@@ -127,6 +153,11 @@ class PromptEnhancer:
         # Track which characters have been introduced across scenes
         # within a single enhance_all_scenes() call.
         self._chars_introduced: set[str] = set()
+        # Previous scene context for continuity hints
+        self._prev_scene: DramaScene | None = None
+        # Total scene count and current index for hook/cliffhanger detection
+        self._total_scenes: int = 0
+        self._scene_index: int = 0
 
     # -- public API ---------------------------------------------------------
 
@@ -155,11 +186,34 @@ class PromptEnhancer:
         - Character name cards on first close-up appearance
         - Title cards for dramatic narration
         - Inner monologue styling (italicised thought subtitles)
+
+        Additionally injects:
+
+        - **Dramatic tension** for hook (first) and cliffhanger (last) shots
+        - **Continuity hints** linking adjacent shots for visual coherence
         """
         parts: list[str] = []
         char_map = {c.name: c for c in series.characters}
 
-        # --- 0. Western drama: realism header + CHARACTER IDENTITY (two-layer strategy) ---
+        # --- 0a. Dramatic tension modifiers (hook / cliffhanger) ---
+        shot_role = getattr(scene, "shot_role", "normal")
+        if shot_role == "hook" or self._scene_index == 0:
+            parts.append(_HOOK_MODIFIERS)
+        elif shot_role == "cliffhanger" or (
+            self._total_scenes > 0 and self._scene_index == self._total_scenes - 1
+        ):
+            parts.append(_CLIFFHANGER_MODIFIERS)
+
+        # --- 0b. Scene continuity (link to previous shot) ---
+        if self._prev_scene is not None and self._scene_index > 0:
+            # Only add continuity hint when scenes share location or characters
+            prev_chars = set(self._prev_scene.characters_present or [])
+            curr_chars = set(scene.characters_present or [])
+            shared_chars = prev_chars & curr_chars
+            if shared_chars:
+                parts.append(_CONTINUITY_PREFIX)
+
+        # --- 0c. Western drama: realism header + CHARACTER IDENTITY (two-layer strategy) ---
         if series.language == "en" and scene.characters_present:
             char_ids = []
             for name in scene.characters_present:
@@ -228,13 +282,21 @@ class PromptEnhancer:
     def enhance_all_scenes(self, episode: Episode, series: DramaSeries) -> Episode:
         """Enhance all scenes in *episode* in-place. Returns the mutated episode.
 
-        Resets the character introduction tracker so that name cards are
-        injected correctly on first close-up/medium-close appearance within
-        the episode.
+        Resets all per-episode tracking state:
+        - Character introduction tracker (name cards)
+        - Scene index counter (hook / cliffhanger detection)
+        - Previous scene reference (continuity hints)
         """
         self._chars_introduced = set()
+        self._prev_scene = None
+        self._total_scenes = len(episode.scenes)
+        self._scene_index = 0
+
         for scene in episode.scenes:
             scene.visual_prompt = self.enhance_scene_prompt(scene, series)
+            self._prev_scene = scene
+            self._scene_index += 1
+
         return episode
 
     # -- internal -----------------------------------------------------------
