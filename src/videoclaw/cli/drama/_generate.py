@@ -97,6 +97,8 @@ def drama_preview_prompts(
 
     # Enhance all scenes (populates name card tracking across episode)
     enhancer.enhance_all_scenes(ep, series)
+    # Persist enhanced prompts to series.json for reproducibility
+    mgr.save(series)
 
     prompts_data: list[dict] = []
     for sc in ep.scenes:

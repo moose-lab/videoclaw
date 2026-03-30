@@ -300,7 +300,11 @@ class PromptEnhancer:
         self._scene_index = 0
 
         for scene in episode.scenes:
-            scene.visual_prompt = self.enhance_scene_prompt(scene, series)
+            enhanced = self.enhance_scene_prompt(scene, series)
+            scene.enhanced_visual_prompt = enhanced
+            # Also set visual_prompt for backward compatibility with
+            # downstream code that reads scene.visual_prompt directly.
+            scene.visual_prompt = enhanced
             self._prev_scene = scene
             self._scene_index += 1
 

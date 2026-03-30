@@ -530,7 +530,9 @@ def build_scene_regen_dag(
 
     # Enhance the target scene's visual prompt
     enhancer = PromptEnhancer()
-    target_scene.visual_prompt = enhancer.enhance_scene_prompt(target_scene, series)
+    enhanced = enhancer.enhance_scene_prompt(target_scene, series)
+    target_scene.visual_prompt = enhanced
+    target_scene.enhanced_visual_prompt = enhanced
 
     dag = DAG()
 
