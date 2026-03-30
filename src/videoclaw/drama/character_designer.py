@@ -336,5 +336,93 @@ class CharacterDesigner:
         )
         character.reference_image = str(path)
 
+    async def refresh_urls(
+        self,
+        series: DramaSeries,
+        *,
+        force: bool = False,
+    ) -> dict[str, str]:
+        """Refresh character reference image HTTPS URLs.
+
+        Image URLs from providers like Evolink/BytePlus are TOS-signed and
+        expire after ~24 hours. This method re-generates turnaround sheets
+        for characters whose URLs are missing or expired, capturing fresh
+        HTTPS URLs.
+
+        When *force* is ``False`` (default), only refreshes characters
+        whose ``reference_image_url`` is empty or falsy. When *force*,
+        regenerates all character images to get fresh URLs.
+
+        Returns a dict mapping character name → fresh HTTPS URL.
+        """
+        from videoclaw.drama.locale import get_locale
+
+        gen = self._ensure_generator()
+        char_dir = self._char_dir(series.series_id)
+        style = series.style or "cinematic"
+        locale = get_locale(series.language)
+        style_line = locale.character_image_style.format(style=style)
+
+        refreshed: dict[str, str] = {}
+
+        for character in series.characters:
+            if not force and character.reference_image_url:
+                logger.info(
+                    "Skipping %s URL refresh (has URL: %s...)",
+                    character.name,
+                    character.reference_image_url[:60],
+                )
+                refreshed[character.name] = character.reference_image_url
+                continue
+
+            appearance = clean_visual_prompt(character.visual_prompt)
+            safe_name = re.sub(r"[^\w\-]", "_", character.name).strip("_")
+            filename = f"{safe_name}_turnaround.png"
+
+            # Delete stale local file so provider generates anew
+            local_path = char_dir / filename
+            if local_path.exists():
+                local_path.unlink()
+                logger.info("Deleted stale turnaround: %s", filename)
+
+            prompt = TURNAROUND_SHEET_PROMPT.format(
+                appearance=appearance,
+                style_line=style_line,
+            )
+
+            logger.info("Refreshing URL for %s...", character.name)
+            try:
+                path = await gen.generate(
+                    prompt,
+                    output_dir=char_dir,
+                    filename=filename,
+                    size="16:9",
+                )
+                character.reference_image = str(path)
+                character.reference_images = [str(path)]
+
+                url = ""
+                if hasattr(gen, "last_image_url") and gen.last_image_url:
+                    url = gen.last_image_url
+                    character.reference_image_url = url
+                    logger.info(
+                        "Refreshed %s URL: %s...",
+                        character.name,
+                        url[:80],
+                    )
+
+                refreshed[character.name] = url
+            except Exception as e:
+                logger.error("Failed to refresh %s: %s", character.name, e)
+                refreshed[character.name] = ""
+
+        self._drama_mgr.save(series)
+        logger.info(
+            "URL refresh complete: %d/%d characters have URLs",
+            sum(1 for v in refreshed.values() if v),
+            len(refreshed),
+        )
+        return refreshed
+
     def _char_dir(self, series_id: str) -> Path:
         return self._drama_mgr.base_dir / series_id / "characters"

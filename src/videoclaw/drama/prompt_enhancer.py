@@ -4,6 +4,14 @@ Follows the five-part director-style prompt anatomy::
 
     Camera (shot + movement) → Subject (character + action) → Scene → Style → Constraints
 
+Plus a **text directive layer** that instructs Seedance to render in-video text:
+
+- **Dialogue subtitles** — ``[Show subtitle at bottom: "..."]``
+- **Narration subtitles** — ``[Narrator speaks: "...". Show subtitle: "..."]``
+- **Title cards** — ``[Show large centered title text: "..."]``
+- **Inner monologue** — ``[Character thinks: "...". Show subtitle: "..."]``
+- **Character name cards** — ``[Show name card at bottom: "NAME, AGE — Role"]``
+
 Ensures every scene's ``visual_prompt`` includes complete character appearance,
 Seedance-friendly camera vocabulary, style anchors, and realism modifiers —
 regardless of LLM output quality.
@@ -17,7 +25,7 @@ from typing import TYPE_CHECKING
 from videoclaw.drama.models import ShotScale
 
 if TYPE_CHECKING:
-    from videoclaw.drama.models import DramaScene, DramaSeries, Episode
+    from videoclaw.drama.models import Character, DramaScene, DramaSeries, Episode
 
 # ---------------------------------------------------------------------------
 # Seedance 2.0 camera vocabulary
@@ -98,7 +106,13 @@ class PromptEnhancer:
 
     Output follows the five-part director-style anatomy::
 
-        Camera → Subject → Scene → Style → Constraints
+        Camera → Subject → Scene → Style → Constraints → Text Directives
+
+    The text directive layer instructs Seedance to render on-screen text
+    (subtitles, name cards, title cards) directly in the generated video.
+    This matches Seedance 2.0's ``generate_audio: true`` workflow where
+    dialogue is baked into the video — external TTS/subtitle overlays are
+    not needed.
 
     Parameters
     ----------
@@ -110,6 +124,9 @@ class PromptEnhancer:
 
     def __init__(self, strip_chinese: bool | None = None) -> None:
         self._strip_chinese = strip_chinese
+        # Track which characters have been introduced across scenes
+        # within a single enhance_all_scenes() call.
+        self._chars_introduced: set[str] = set()
 
     # -- public API ---------------------------------------------------------
 
@@ -122,18 +139,22 @@ class PromptEnhancer:
     def enhance_scene_prompt(self, scene: DramaScene, series: DramaSeries) -> str:
         """Build a Seedance 2.0 optimised visual prompt for a single *scene*.
 
-        Five-part structure:
+        Six-part structure:
+        0. **Realism header** — (Western only) photorealistic + CHARACTER IDENTITY
         1. **Camera** — shot scale + single camera movement verb
         2. **Subject** — character appearance (repeated every scene for consistency)
         3. **Scene** — original visual_prompt (setting + action + lighting)
         4. **Style** — series style anchor + realism modifiers
         5. **Constraints** — 3-5 bans to prevent artifacts
+        6. **Text directives** — subtitle / name card / title card / inner monologue
 
-        Western drama (``series.language == "en"``) prepends an additional
-        realism header + CHARACTER IDENTITY block as part 0. This implements
-        the two-layer character consistency strategy: 3D CGI ref images provide
-        visual structure; the text CHARACTER IDENTITY anchors photorealistic
-        appearance to compensate for the stylized ref image fidelity gap.
+        The text directive layer instructs Seedance to render on-screen text
+        directly in the generated video. This is critical for:
+
+        - Dialogue subtitles visible at the bottom of the frame
+        - Character name cards on first close-up appearance
+        - Title cards for dramatic narration
+        - Inner monologue styling (italicised thought subtitles)
         """
         parts: list[str] = []
         char_map = {c.name: c for c in series.characters}
@@ -182,30 +203,152 @@ class PromptEnhancer:
         if scene.visual_prompt:
             parts.append(scene.visual_prompt.rstrip(".") + ".")
 
-        # --- 4. Conditionally strip CJK ---
+        # --- 4. Text directives (subtitle / name card / title card / inner monologue) ---
+        text_directives = self._build_text_directives(scene, char_map, series)
+        if text_directives:
+            parts.extend(text_directives)
+
+        # --- 5. Conditionally strip CJK ---
         text = " ".join(parts)
         if self.should_strip_chinese(series.model_id):
             text = self._strip_cjk(text)
 
-        # --- 5. Style anchor + realism modifiers ---
+        # --- 6. Style anchor + realism modifiers ---
         style_tag = (
             f"Style: {series.style}, vertical {series.aspect_ratio}, "
             f"{_REALISM_MODIFIERS}."
         )
         text = text.rstrip() + " " + style_tag
 
-        # --- 6. Constraints ---
+        # --- 7. Constraints ---
         text = text.rstrip() + " " + f"Constraints: {_DEFAULT_CONSTRAINTS}."
 
         return text.strip()
 
     def enhance_all_scenes(self, episode: Episode, series: DramaSeries) -> Episode:
-        """Enhance all scenes in *episode* in-place. Returns the mutated episode."""
+        """Enhance all scenes in *episode* in-place. Returns the mutated episode.
+
+        Resets the character introduction tracker so that name cards are
+        injected correctly on first close-up/medium-close appearance within
+        the episode.
+        """
+        self._chars_introduced = set()
         for scene in episode.scenes:
             scene.visual_prompt = self.enhance_scene_prompt(scene, series)
         return episode
 
     # -- internal -----------------------------------------------------------
+
+    def _build_text_directives(
+        self,
+        scene: DramaScene,
+        char_map: dict[str, Character],
+        series: DramaSeries,
+    ) -> list[str]:
+        """Build Seedance text rendering directives for a scene.
+
+        Returns a list of prompt fragments that instruct Seedance to render
+        on-screen text elements (subtitles, name cards, title cards).
+
+        Text directives follow the established Seedance convention::
+
+            [Show subtitle at bottom of screen: "dialogue text"]
+            [Show name card at bottom: "CHARACTER NAME, AGE — Role"]
+            [Show large centered title text on screen: "title"]
+
+        These directives are placed AFTER the visual scene description so
+        they don't interfere with Seedance's scene composition.
+        """
+        directives: list[str] = []
+
+        # --- Character name card (first close-up/medium-close appearance) ---
+        intro_scales = {ShotScale.CLOSE_UP, ShotScale.MEDIUM_CLOSE}
+        if scene.shot_scale in intro_scales:
+            # Determine focal character for name card
+            focal: str | None = None
+            speaker = (scene.speaking_character or "").strip()
+            if speaker and speaker in char_map:
+                focal = speaker
+            elif len(scene.characters_present) == 1 and scene.characters_present[0] in char_map:
+                focal = scene.characters_present[0]
+
+            if focal and focal not in self._chars_introduced:
+                char = char_map[focal]
+                # Build name card: "NAME, AGE — Role" or just "NAME — Description"
+                # Extract age/role from character description if available
+                name_card = self._format_name_card(char)
+                directives.append(
+                    f'[Show name card at bottom: {name_card}]'
+                )
+                self._chars_introduced.add(focal)
+
+        # --- Narration (voiceover or title card) ---
+        narration = (scene.narration or "").strip()
+        if narration:
+            narration_type = getattr(scene, "narration_type", "voiceover")
+            if narration_type == "title_card":
+                directives.append(
+                    f'[Show large centered title text on screen: "{narration}"]'
+                )
+            else:
+                # Voiceover narration with subtitle
+                directives.append(
+                    f'[Narrator speaks: "{narration}". '
+                    f'Show subtitle at bottom of screen: "{narration}"]'
+                )
+
+        # --- Dialogue (spoken dialogue or inner monologue) ---
+        dialogue = (scene.dialogue or "").strip()
+        if dialogue:
+            speaker = scene.speaking_character or "Character"
+            line_type = getattr(scene, "dialogue_line_type", "dialogue")
+            if line_type == "inner_monologue":
+                directives.append(
+                    f'[{speaker} thinks (inner monologue): "{dialogue}". '
+                    f'Show subtitle at bottom of screen: "{dialogue}"]'
+                )
+            else:
+                directives.append(
+                    f'[{speaker} speaks: "{dialogue}". '
+                    f'Show subtitle at bottom of screen: "{dialogue}"]'
+                )
+
+        return directives
+
+    @staticmethod
+    def _format_name_card(char: Character) -> str:
+        """Format a character name card string.
+
+        Tries to extract age and role from the character description.
+        Falls back to just the character name if no structured info is available.
+        """
+        name = char.name
+
+        # Try to extract age from description (e.g. "26-year-old", "mid-twenties")
+        age_match = re.search(
+            r'(\d{2})\s*[-–]?\s*(?:year|岁)',
+            char.description,
+            re.IGNORECASE,
+        )
+        age_str = age_match.group(1) if age_match else ""
+
+        # Try to extract a short role descriptor (first phrase before comma or period)
+        role = ""
+        desc = char.description.strip()
+        if desc:
+            # Take first meaningful fragment (up to 30 chars, before first comma/period)
+            first_fragment = re.split(r'[,，.。;；]', desc)[0].strip()
+            if len(first_fragment) <= 40:
+                role = first_fragment
+            else:
+                role = first_fragment[:37] + "..."
+
+        parts = [name]
+        if age_str:
+            parts[0] = f"{name}, {age_str}"
+        if role:
+            return f'"{" — ".join([parts[0], role])}"'
+        return f'"{parts[0]}"'
 
     @staticmethod
     def _strip_cjk(text: str) -> str:

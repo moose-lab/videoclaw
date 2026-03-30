@@ -766,6 +766,98 @@ async def _design_characters_async(series: DramaSeries, mgr: DramaManager, force
     console.print(f"\n[bold green]Character designs complete for {series.series_id}[/bold green]")
 
 
+@drama_app.command("refresh-urls")
+def drama_refresh_urls(
+    series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="Force refresh all URLs, even valid ones.")] = False,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Refresh character reference image HTTPS URLs.
+
+    Image provider URLs (Evolink/BytePlus) expire after ~24 hours.
+    This command regenerates turnaround sheets to obtain fresh HTTPS URLs
+    that Seedance 2.0 can accept as reference images.
+
+    By default, only refreshes characters whose URLs are missing.
+    Use --force to regenerate all character images.
+    """
+    configure_logging(verbose)
+    console = get_console()
+    out = get_output()
+    out._command = "drama.refresh-urls"
+
+    from videoclaw.drama.models import DramaManager
+
+    mgr = DramaManager()
+    try:
+        series = mgr.load(series_id)
+    except FileNotFoundError:
+        console.print(f"[red]Series {series_id!r} not found.[/red]")
+        out.set_error(f"Series {series_id!r} not found.")
+        out.emit()
+        raise typer.Exit(code=1)
+
+    if not series.characters:
+        console.print("[yellow]No characters found. Run `claw drama design-characters` first.[/yellow]")
+        out.set_error("No characters found.")
+        out.emit()
+        raise typer.Exit(code=1)
+
+    console.print(
+        Panel(
+            f"[bold]Series:[/bold]     {series.title}\n"
+            f"[bold]Characters:[/bold] {len(series.characters)}\n"
+            f"[bold]Force:[/bold]      {force}",
+            title="[bold cyan]Refresh Character URLs[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+
+    try:
+        refreshed = asyncio.run(_refresh_urls_async(series, mgr, force))
+    except Exception as exc:
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
+
+    out.set_result({
+        "series_id": series.series_id,
+        "refreshed": {
+            name: url[:80] + "..." if url and len(url) > 80 else url
+            for name, url in refreshed.items()
+        },
+    })
+    out.emit()
+
+
+async def _refresh_urls_async(
+    series: DramaSeries, mgr: DramaManager, force: bool,
+) -> dict[str, str]:
+    console = get_console()
+
+    from videoclaw.drama.character_designer import CharacterDesigner
+
+    designer = CharacterDesigner(drama_manager=mgr)
+
+    with console.status("[cyan]Refreshing character reference URLs...", spinner="dots"):
+        refreshed = await designer.refresh_urls(series, force=force)
+
+    table = Table(title="Character URLs", show_header=True, header_style="bold magenta")
+    table.add_column("Name", style="cyan")
+    table.add_column("URL", style="green")
+    for name, url in refreshed.items():
+        display_url = url[:60] + "..." if url and len(url) > 60 else url or "[dim]none[/dim]"
+        table.add_row(name, display_url)
+    console.print(table)
+
+    ok_count = sum(1 for v in refreshed.values() if v)
+    console.print(
+        f"\n[bold green]URL refresh complete: "
+        f"{ok_count}/{len(refreshed)} characters have valid URLs[/bold green]"
+    )
+    return refreshed
+
+
 @drama_app.command("design-scenes")
 def drama_design_scenes(
     series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
@@ -1105,21 +1197,22 @@ async def _drama_run_async(
 @drama_app.command("regen-shot")
 def drama_regen_shot(
     series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
-    scene: Annotated[str, typer.Option("--scene", "-s", help="Scene ID to regenerate (e.g. ep01_s03).")],
+    scene: Annotated[str, typer.Option("--scene", "-s", help="Scene ID(s) to regenerate, comma-separated (e.g. ep01_s01,ep01_s03,ep01_s05).")],
     episode: Annotated[int, typer.Option("--episode", "-e", help="Episode number.")] = 1,
     recompose: Annotated[bool, typer.Option("--recompose", help="Re-compose and re-render the full episode after regenerating.")] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
-    """Regenerate a single scene's video and audio assets.
+    """Regenerate one or more scene's video and audio assets.
 
     \b
-    Use `claw drama show <series_id>` to find scene IDs, then re-run only the
-    scene that needs fixing.  With --recompose, the entire episode is
-    re-assembled after the scene is regenerated.
+    Supports batch regeneration: pass multiple scene IDs separated by commas.
+    With --recompose, the entire episode is re-assembled after all scenes
+    are regenerated.
 
     \b
     Examples:
         claw drama regen-shot abc123 -e 2 -s ep02_s03
+        claw drama regen-shot abc123 -e 1 -s ep01_s01,ep01_s03,ep01_s05
         claw drama regen-shot abc123 -e 1 -s ep01_s01 --recompose
     """
     configure_logging(verbose)
@@ -1152,11 +1245,15 @@ def drama_regen_shot(
         out.emit()
         raise typer.Exit(code=1)
 
-    scene_ids = [s.scene_id for s in ep.scenes]
-    if scene not in scene_ids:
-        console.print(f"[red]Scene {scene!r} not found in episode {episode}.[/red]")
-        console.print(f"[dim]Available scenes: {', '.join(scene_ids)}[/dim]")
-        out.set_error(f"Scene {scene!r} not found. Available: {', '.join(scene_ids)}")
+    # Parse comma-separated scene IDs for batch regeneration
+    regen_scene_ids = [s.strip() for s in scene.split(",") if s.strip()]
+    available_scene_ids = [s.scene_id for s in ep.scenes]
+
+    invalid = [sid for sid in regen_scene_ids if sid not in available_scene_ids]
+    if invalid:
+        console.print(f"[red]Scene(s) not found: {', '.join(invalid)}[/red]")
+        console.print(f"[dim]Available scenes: {', '.join(available_scene_ids)}[/dim]")
+        out.set_error(f"Scenes not found: {', '.join(invalid)}")
         out.emit()
         raise typer.Exit(code=1)
 
@@ -1164,7 +1261,7 @@ def drama_regen_shot(
         Panel(
             f"[bold]Series:[/bold]    {series.title}\n"
             f"[bold]Episode:[/bold]   {episode}\n"
-            f"[bold]Scene:[/bold]     {scene}\n"
+            f"[bold]Scene(s):[/bold]  {', '.join(regen_scene_ids)}\n"
             f"[bold]Recompose:[/bold] {'yes' if recompose else 'no'}",
             title="[bold cyan]Regen Shot[/bold cyan]",
             border_style="cyan",
@@ -1172,7 +1269,7 @@ def drama_regen_shot(
     )
 
     try:
-        asyncio.run(_drama_regen_shot_async(series, mgr, ep, scene, recompose))
+        asyncio.run(_drama_regen_shot_async(series, mgr, ep, regen_scene_ids, recompose))
     except Exception as exc:
         out.set_error(str(exc))
         out.emit()
@@ -1181,7 +1278,7 @@ def drama_regen_shot(
     out.set_result({
         "series_id": series_id,
         "episode": episode,
-        "scene": scene,
+        "scenes": regen_scene_ids,
         "recompose": recompose,
     })
     out.emit()
@@ -1364,7 +1461,11 @@ def drama_audit(
 
 
 async def _drama_regen_shot_async(
-    series: DramaSeries, mgr: DramaManager, episode: Episode, scene_id: str, recompose: bool,
+    series: DramaSeries,
+    mgr: DramaManager,
+    episode: Episode,
+    scene_ids: list[str],
+    recompose: bool,
 ) -> None:
     console = get_console()
 
@@ -1372,26 +1473,251 @@ async def _drama_regen_shot_async(
 
     runner = DramaRunner(drama_manager=mgr)
 
-    node_count = 2 + (3 if recompose else 0)
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        TimeElapsedColumn(),
-        console=console,
-    ) as progress:
-        task = progress.add_task(f"Regenerating {scene_id}...", total=node_count)
-        state = await runner.regenerate_scene(series, episode, scene_id, recompose)
-        progress.update(task, completed=node_count)
+    # Regenerate each scene sequentially; only recompose on the last one
+    total_cost = 0.0
+    results: list[tuple[str, str]] = []
 
-    status_style = "green" if state.status.value == "completed" else "red"
+    for i, scene_id in enumerate(scene_ids):
+        is_last = i == len(scene_ids) - 1
+        do_recompose = recompose and is_last
+
+        node_count = 2 + (3 if do_recompose else 0)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            label = f"Regenerating {scene_id} ({i+1}/{len(scene_ids)})"
+            if do_recompose:
+                label += " + recompose"
+            task = progress.add_task(label, total=node_count)
+            state = await runner.regenerate_scene(series, episode, scene_id, do_recompose)
+            progress.update(task, completed=node_count)
+
+        total_cost += state.cost_total
+        results.append((scene_id, state.status.value))
+
+    # Summary
+    all_ok = all(s == "completed" for _, s in results)
+    status_style = "green" if all_ok else "red"
+    scenes_summary = "\n".join(
+        f"  {sid}: [{'green' if s == 'completed' else 'red'}]{s}[/{'green' if s == 'completed' else 'red'}]"
+        for sid, s in results
+    )
     console.print(
         Panel(
-            f"[bold]Scene:[/bold]  {scene_id}\n"
-            f"[bold]Status:[/bold] [{status_style}]{state.status.value}[/{status_style}]\n"
-            f"[bold]Cost:[/bold]   ${state.cost_total:.4f}",
-            title="[bold green]Regen Complete[/bold green]",
-            border_style="green",
+            f"[bold]Scenes:[/bold]\n{scenes_summary}\n"
+            f"[bold]Total cost:[/bold] ${total_cost:.4f}",
+            title=f"[bold {status_style}]Regen Complete[/bold {status_style}]",
+            border_style=status_style,
         )
     )
+
+
+# ---------------------------------------------------------------------------
+# claw drama audit-regen — 审计-重生成自动循环
+# ---------------------------------------------------------------------------
+
+@drama_app.command("audit-regen")
+def drama_audit_regen(
+    series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
+    episode: Annotated[int, typer.Option("--episode", "-e", help="Episode number.")] = 1,
+    clip_dir: Annotated[str, typer.Option("--clip-dir", "-c", help="Directory containing generated MP4 clips.")] = "",
+    max_rounds: Annotated[int, typer.Option("--max-rounds", "-n", help="Maximum audit-regen iterations.")] = 3,
+    recompose: Annotated[bool, typer.Option("--recompose", help="Re-compose after final round.")] = True,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Run vision audit → regenerate failing scenes → re-audit loop.
+
+    \b
+    Automated QA loop that:
+    1. Audits all scenes via Claude Vision
+    2. Identifies scenes with regen_required=true
+    3. Regenerates those scenes
+    4. Re-audits to verify fixes
+    5. Repeats until all pass or max rounds reached
+
+    \b
+    With --recompose (default), the full episode is re-composed after the
+    final round of regeneration.
+
+    \b
+    Examples:
+        claw drama audit-regen 97e8424712d24fb2
+        claw drama audit-regen abc123 -e 1 -n 5 --clip-dir video_clips/
+    """
+    configure_logging(verbose)
+    show_banner()
+    console = get_console()
+    out = get_output()
+    out._command = "drama.audit-regen"
+
+    from videoclaw.drama.models import DramaManager
+
+    mgr = DramaManager()
+    try:
+        series = mgr.load(series_id)
+    except FileNotFoundError:
+        console.print(f"[red]Series {series_id!r} not found.[/red]")
+        out.set_error(f"Series {series_id!r} not found.")
+        out.emit()
+        raise typer.Exit(code=1)
+
+    ep = next((e for e in series.episodes if e.number == episode), None)
+    if ep is None:
+        console.print(f"[red]Episode {episode} not found in series.[/red]")
+        out.set_error(f"Episode {episode} not found.")
+        out.emit()
+        raise typer.Exit(code=1)
+
+    if not ep.scenes:
+        console.print("[yellow]Episode has no scenes.[/yellow]")
+        out.set_error("Episode has no scenes.")
+        out.emit()
+        raise typer.Exit(code=1)
+
+    from pathlib import Path as _Path
+
+    clip_path: _Path | None = _Path(clip_dir) if clip_dir else None
+
+    console.print(
+        Panel(
+            f"[bold]Series:[/bold]     {series.title}\n"
+            f"[bold]Episode:[/bold]    {episode} ({len(ep.scenes)} scenes)\n"
+            f"[bold]Max rounds:[/bold] {max_rounds}\n"
+            f"[bold]Recompose:[/bold]  {'yes' if recompose else 'no'}",
+            title="[bold cyan]Audit-Regen Loop[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+
+    try:
+        result = asyncio.run(
+            _drama_audit_regen_async(
+                series, mgr, ep, clip_path, max_rounds, recompose,
+            )
+        )
+    except Exception as exc:
+        out.set_error(str(exc))
+        out.emit()
+        raise typer.Exit(code=1)
+
+    out.set_result(result)
+    out.emit()
+
+
+async def _drama_audit_regen_async(
+    series: DramaSeries,
+    mgr: DramaManager,
+    episode: Episode,
+    clip_dir: Path | None,
+    max_rounds: int,
+    recompose: bool,
+) -> dict:
+    """Execute the audit → regen → re-audit loop."""
+    from pathlib import Path as _Path
+
+    from videoclaw.drama.runner import DramaRunner
+    from videoclaw.drama.vision_auditor import VisionAuditor
+
+    console = get_console()
+    auditor = VisionAuditor()
+    runner = DramaRunner(drama_manager=mgr)
+
+    total_cost = 0.0
+    history: list[dict] = []
+
+    for round_num in range(1, max_rounds + 1):
+        console.print(f"\n[bold cyan]═══ Round {round_num}/{max_rounds} — Audit ═══[/bold cyan]")
+
+        # --- Audit ---
+        report = await auditor.audit_series_episode(
+            series,
+            episode_number=episode.number,
+            clip_dir=clip_dir,
+            drama_manager=mgr,
+            persist_results=True,
+        )
+        console.print(report.summary())
+
+        regen_ids = report.regen_required
+        round_record = {
+            "round": round_num,
+            "total": report.total_shots,
+            "passed": report.passed_shots,
+            "regen_required": list(regen_ids),
+        }
+        history.append(round_record)
+
+        if not regen_ids:
+            console.print(
+                f"\n[bold green]All {report.total_shots} shots passed "
+                f"after {round_num} round(s).[/bold green]"
+            )
+            break
+
+        console.print(
+            f"\n[bold yellow]Regenerating {len(regen_ids)} scene(s): "
+            f"{', '.join(regen_ids)}[/bold yellow]"
+        )
+
+        # --- Regen failing scenes ---
+        for i, scene_id in enumerate(regen_ids):
+            is_last_scene = i == len(regen_ids) - 1
+            is_last_round = round_num == max_rounds
+            # Only recompose on the very last scene of the very last round
+            do_recompose = recompose and is_last_scene and is_last_round
+
+            console.print(
+                f"  Regenerating {scene_id} ({i+1}/{len(regen_ids)})..."
+            )
+            state = await runner.regenerate_scene(
+                series, episode, scene_id, do_recompose,
+            )
+            total_cost += state.cost_total
+
+            status = state.status.value
+            style = "green" if status == "completed" else "red"
+            console.print(f"    [{style}]{status}[/{style}] — ${state.cost_total:.4f}")
+    else:
+        # Exhausted max rounds — do final recompose if requested
+        if recompose and regen_ids:
+            console.print(
+                f"\n[bold yellow]Max rounds reached. "
+                f"Remaining issues: {', '.join(regen_ids)}[/bold yellow]"
+            )
+            # Final recompose with the last regen
+            console.print("[dim]Running final recompose...[/dim]")
+            last_scene = regen_ids[-1]
+            state = await runner.regenerate_scene(
+                series, episode, last_scene, recompose=True,
+            )
+            total_cost += state.cost_total
+
+    summary = {
+        "series_id": series.series_id,
+        "episode": episode.number,
+        "rounds": len(history),
+        "total_cost": round(total_cost, 4),
+        "final_passed": history[-1]["passed"] if history else 0,
+        "final_total": history[-1]["total"] if history else 0,
+        "remaining_issues": history[-1].get("regen_required", []) if history else [],
+        "history": history,
+    }
+
+    all_passed = summary["final_passed"] == summary["final_total"]
+    style = "green" if all_passed else "yellow"
+    console.print(
+        Panel(
+            f"[bold]Rounds:[/bold]    {summary['rounds']}\n"
+            f"[bold]Passed:[/bold]    {summary['final_passed']}/{summary['final_total']}\n"
+            f"[bold]Total cost:[/bold] ${summary['total_cost']:.4f}",
+            title=f"[bold {style}]Audit-Regen Complete[/bold {style}]",
+            border_style=style,
+        )
+    )
+
+    return summary
