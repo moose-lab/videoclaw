@@ -1004,6 +1004,115 @@ def drama_assign_voices(
 
 
 # ---------------------------------------------------------------------------
+# claw drama preview-prompts — 预览增强后 Seedance 提示词
+# ---------------------------------------------------------------------------
+
+@drama_app.command("preview-prompts")
+def drama_preview_prompts(
+    series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
+    episode: Annotated[int, typer.Option("--episode", "-e", help="Episode number.")] = 1,
+    scene: Annotated[Optional[str], typer.Option("--scene", "-s", help="Show only this scene ID.")] = None,
+    output: Annotated[str, typer.Option("--output", "-o", help="Write prompts to JSON file.")] = "",
+    verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+) -> None:
+    """Preview the enhanced Seedance 2.0 prompts for each scene.
+
+    \b
+    Shows the final prompt that would be sent to Seedance, including:
+    - Realism header + CHARACTER IDENTITY (Western drama)
+    - Camera (shot scale + movement)
+    - Visual scene description
+    - Text directives (subtitles, name cards, title cards)
+    - Style anchor + constraints
+
+    \b
+    Use this to debug prompt quality before spending API credits on generation.
+
+    \b
+    Examples:
+        claw drama preview-prompts abc123
+        claw drama preview-prompts abc123 -e 1 -s ep01_s03
+        claw drama preview-prompts abc123 -o prompts.json
+    """
+    configure_logging(verbose)
+    console = get_console()
+    out_ctx = get_output()
+    out_ctx._command = "drama.preview-prompts"
+
+    from videoclaw.drama.models import DramaManager
+    from videoclaw.drama.prompt_enhancer import PromptEnhancer
+
+    mgr = DramaManager()
+    try:
+        series = mgr.load(series_id)
+    except FileNotFoundError:
+        console.print(f"[red]Series {series_id!r} not found.[/red]")
+        out_ctx.set_error(f"Series {series_id!r} not found.")
+        out_ctx.emit()
+        raise typer.Exit(code=1)
+
+    ep = next((e for e in series.episodes if e.number == episode), None)
+    if ep is None:
+        console.print(f"[red]Episode {episode} not found in series.[/red]")
+        out_ctx.set_error(f"Episode {episode} not found.")
+        out_ctx.emit()
+        raise typer.Exit(code=1)
+
+    if not ep.scenes:
+        console.print("[yellow]Episode has no scenes.[/yellow]")
+        out_ctx.set_error("Episode has no scenes.")
+        out_ctx.emit()
+        raise typer.Exit(code=1)
+
+    enhancer = PromptEnhancer()
+
+    # Enhance all scenes (populates name card tracking across episode)
+    enhancer.enhance_all_scenes(ep, series)
+
+    prompts_data: list[dict] = []
+    for sc in ep.scenes:
+        if scene and sc.scene_id != scene:
+            continue
+        entry = {
+            "scene_id": sc.scene_id,
+            "duration": sc.duration_seconds,
+            "shot_scale": sc.shot_scale.value if sc.shot_scale else "",
+            "camera": sc.camera_movement,
+            "characters": sc.characters_present,
+            "dialogue": sc.dialogue,
+            "narration": sc.narration,
+            "prompt": sc.visual_prompt,
+        }
+        prompts_data.append(entry)
+
+        # Rich display
+        console.print(f"\n[bold cyan]── {sc.scene_id} ──[/bold cyan]")
+        console.print(f"[dim]Duration: {sc.duration_seconds}s | "
+                      f"Scale: {sc.shot_scale.value if sc.shot_scale else 'n/a'} | "
+                      f"Camera: {sc.camera_movement}[/dim]")
+        if sc.characters_present:
+            console.print(f"[dim]Characters: {', '.join(sc.characters_present)}[/dim]")
+        if sc.dialogue:
+            console.print(f'[dim]Dialogue: "{sc.dialogue[:80]}{"…" if len(sc.dialogue) > 80 else ""}"[/dim]')
+        console.print(f"\n[green]{sc.visual_prompt}[/green]")
+
+    if output:
+        import json as _json
+        from pathlib import Path as _Path
+        _Path(output).write_text(_json.dumps(prompts_data, indent=2, ensure_ascii=False))
+        console.print(f"\n[green]Prompts written to {output}[/green]")
+
+    console.print(f"\n[bold]Total: {len(prompts_data)} scene(s)[/bold]")
+
+    out_ctx.set_result({
+        "series_id": series_id,
+        "episode": episode,
+        "scene_count": len(prompts_data),
+    })
+    out_ctx.emit()
+
+
+# ---------------------------------------------------------------------------
 # claw drama run
 # ---------------------------------------------------------------------------
 
@@ -1015,6 +1124,7 @@ def drama_run(
     end: Annotated[Optional[int], typer.Option("--end", help="End at episode number.")] = None,
     budget: Annotated[Optional[float], typer.Option("--budget", "-b", help="Max budget in USD.")] = None,
     concurrency: Annotated[int, typer.Option("--concurrency", "-c", help="Max parallel tasks.")] = 4,
+    refresh_urls: Annotated[bool, typer.Option("--refresh-urls/--no-refresh-urls", help="Auto-validate and refresh expired character reference URLs before generation.")] = True,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Show execution plan without running.")] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
@@ -1089,7 +1199,7 @@ def drama_run(
         return
 
     try:
-        asyncio.run(_drama_run_async(series, mgr, start, end, budget, concurrency))
+        asyncio.run(_drama_run_async(series, mgr, start, end, budget, concurrency, refresh_urls))
     except typer.Exit:
         raise
     except Exception as exc:
@@ -1108,6 +1218,7 @@ def drama_run(
 async def _drama_run_async(
     series: DramaSeries, mgr: DramaManager, start: int, end: int | None,
     budget_usd: float | None = None, max_concurrency: int = 4,
+    auto_refresh_urls: bool = True,
 ) -> None:
     console = get_console()
 
@@ -1115,7 +1226,7 @@ async def _drama_run_async(
     from videoclaw.drama.runner import DramaRunner
 
     planner = DramaPlanner()
-    runner = DramaRunner(drama_manager=mgr)
+    runner = DramaRunner(drama_manager=mgr, auto_refresh_urls=auto_refresh_urls)
     effective_budget = budget_usd or get_config().budget_default_usd
 
     episodes_to_run = [

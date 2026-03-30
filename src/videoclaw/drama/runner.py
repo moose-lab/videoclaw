@@ -2,6 +2,10 @@
 
 Converts each episode's script into a ClawFlow-compatible DAG and runs it
 through the standard DAGExecutor pipeline.
+
+Includes automatic URL freshness validation for character reference images.
+When URLs are expired (HTTP 403/404), the runner auto-refreshes them via
+:class:`CharacterDesigner` before proceeding with generation.
 """
 
 from __future__ import annotations
@@ -18,6 +22,86 @@ from videoclaw.drama.models import DramaManager, DramaSeries, DramaStatus, Episo
 from videoclaw.drama.prompt_enhancer import PromptEnhancer
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# URL freshness validation
+# ---------------------------------------------------------------------------
+
+async def _check_url_alive(url: str, timeout: float = 10.0) -> bool:
+    """Return True if *url* responds with HTTP 2xx to a HEAD request."""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.head(url, follow_redirects=True)
+            return 200 <= resp.status_code < 400
+    except Exception:
+        return False
+
+
+async def ensure_fresh_urls(
+    series: DramaSeries,
+    drama_manager: DramaManager | None = None,
+    *,
+    force: bool = False,
+) -> dict[str, str]:
+    """Validate character reference image URLs; refresh expired ones.
+
+    Performs an HTTP HEAD check on each character's ``reference_image_url``.
+    If the URL is missing, empty, or returns non-2xx, re-generates the
+    turnaround sheet to obtain a fresh URL.
+
+    Parameters
+    ----------
+    series:
+        The drama series whose characters need URL validation.
+    drama_manager:
+        If provided, used to persist refreshed URLs back to disk.
+    force:
+        When ``True``, skip validation and refresh all URLs unconditionally.
+
+    Returns
+    -------
+    dict[str, str]
+        Mapping of character name → current (possibly refreshed) HTTPS URL.
+    """
+    from videoclaw.drama.character_designer import CharacterDesigner
+
+    chars_needing_refresh: list[str] = []
+
+    if force:
+        chars_needing_refresh = [c.name for c in series.characters]
+    else:
+        for char in series.characters:
+            url = char.reference_image_url
+            if not url:
+                chars_needing_refresh.append(char.name)
+                continue
+            alive = await _check_url_alive(url)
+            if not alive:
+                logger.warning(
+                    "Character %s URL expired/unreachable: %s...",
+                    char.name, url[:60],
+                )
+                # Clear the stale URL so refresh_urls() will regenerate
+                char.reference_image_url = None
+                chars_needing_refresh.append(char.name)
+
+    if not chars_needing_refresh:
+        logger.info("All character URLs are fresh — no refresh needed")
+        return {c.name: c.reference_image_url or "" for c in series.characters}
+
+    logger.info(
+        "Refreshing URLs for %d character(s): %s",
+        len(chars_needing_refresh),
+        ", ".join(chars_needing_refresh),
+    )
+
+    mgr = drama_manager or DramaManager()
+    designer = CharacterDesigner(drama_manager=mgr)
+    refreshed = await designer.refresh_urls(series, force=False)
+    return refreshed
 
 
 def _ensure_consistency_manifest(series: DramaSeries) -> None:
@@ -545,22 +629,37 @@ def build_scene_regen_dag(
 
 
 class DramaRunner:
-    """Runs drama episodes through the VideoClaw pipeline sequentially."""
+    """Runs drama episodes through the VideoClaw pipeline sequentially.
+
+    Before generation, automatically validates character reference image URLs
+    and refreshes expired ones to ensure Seedance 2.0 can access them.
+    """
 
     def __init__(
         self,
         drama_manager: DramaManager | None = None,
         state_manager: StateManager | None = None,
         max_concurrency: int = 4,
+        auto_refresh_urls: bool = True,
     ) -> None:
         self.drama_mgr = drama_manager or DramaManager()
         self.state_mgr = state_manager or StateManager()
         self.max_concurrency = max_concurrency
+        self.auto_refresh_urls = auto_refresh_urls
 
     async def run_episode(self, series: DramaSeries, episode: Episode) -> ProjectState:
-        """Execute a single episode through the full generation pipeline."""
+        """Execute a single episode through the full generation pipeline.
+
+        When ``auto_refresh_urls`` is ``True`` (default), validates all
+        character reference image URLs before starting generation. Expired
+        URLs are automatically refreshed via :func:`ensure_fresh_urls`.
+        """
         logger.info("Running episode %d: %r", episode.number, episode.title)
         episode.status = EpisodeStatus.GENERATING
+
+        # --- Pre-generation: validate & refresh character reference URLs ---
+        if self.auto_refresh_urls:
+            await ensure_fresh_urls(series, drama_manager=self.drama_mgr)
 
         dag, state = build_episode_dag(episode, series)
         self.state_mgr.save(state)

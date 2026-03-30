@@ -257,10 +257,17 @@ class DAGExecutor:
     async def _handle_scene_validate(self, node: TaskNode, state: ProjectState) -> Any:
         """Validate scene data before committing to expensive generation.
 
-        Runs locale-aware quality checks on scene-level data: shot scale
-        distribution, dialogue density, emotion vocabulary, character
-        consistency, and V.O. ratio.  Logs violations as warnings but does
-        not block the pipeline (lenient mode).
+        Runs locale-aware quality checks on scene-level data:
+        - Emotion vocabulary presence
+        - Speaker/character consistency
+        - Shot scale distribution (vertical framing)
+        - Subtitle readability (dialogue word count vs duration)
+        - Structural role validation (hook/cliffhanger placement)
+        - Time-of-day coverage
+        - Duration bounds (Seedance 5-15s constraint)
+
+        Logs violations as warnings but does not block the pipeline
+        (lenient mode).
         """
         scenes = node.params.get("scenes", [])
         language = node.params.get("language", state.metadata.get("language", "zh"))
@@ -271,24 +278,79 @@ class DAGExecutor:
 
         # Per-scene quick checks
         violations: list[str] = []
+        warnings: list[str] = []
         total_close = 0
         total_scenes = len(scenes)
 
-        for scene in scenes:
+        # Subtitle readability limits
+        # English: ≤8 words per subtitle segment (readable at 9:16 720p)
+        # Chinese: ≤16 characters per subtitle line
+        max_subtitle_words_en = 8
+        max_subtitle_chars_zh = 16
+
+        for idx, scene in enumerate(scenes):
             scene_id = scene.get("scene_id", "?")
-            # Emotion field required
+
+            # --- Emotion field required ---
             if not scene.get("emotion"):
                 violations.append(f"Scene {scene_id}: missing emotion field")
-            # speaking_character consistency
+
+            # --- speaking_character consistency ---
             speaker = scene.get("speaking_character", "")
             present = scene.get("characters_present", [])
             if speaker and present and speaker not in present:
                 violations.append(
                     f"Scene {scene_id}: speaker '{speaker}' not in characters_present"
                 )
-            # Track shot scale distribution
+
+            # --- Track shot scale distribution ---
             if scene.get("shot_scale") in ("close_up", "medium_close"):
                 total_close += 1
+
+            # --- Duration bounds (Seedance 5-15s) ---
+            dur = float(scene.get("duration_seconds", 0))
+            if dur > 0 and (dur < 5 or dur > 15):
+                warnings.append(
+                    f"Scene {scene_id}: duration {dur:.1f}s outside Seedance range [5-15s]"
+                )
+
+            # --- Subtitle readability ---
+            dialogue = (scene.get("dialogue") or "").strip()
+            if dialogue and dur > 0:
+                if language == "zh":
+                    char_count = len(dialogue)
+                    if char_count > max_subtitle_chars_zh:
+                        warnings.append(
+                            f"Scene {scene_id}: dialogue {char_count} chars > {max_subtitle_chars_zh} "
+                            f"char subtitle limit — may be hard to read on 9:16"
+                        )
+                else:
+                    word_count = len(dialogue.split())
+                    if word_count > max_subtitle_words_en:
+                        warnings.append(
+                            f"Scene {scene_id}: dialogue {word_count} words > {max_subtitle_words_en} "
+                            f"word subtitle limit — consider splitting"
+                        )
+
+            # --- Time-of-day coverage ---
+            if not scene.get("time_of_day"):
+                warnings.append(
+                    f"Scene {scene_id}: missing time_of_day — "
+                    f"lighting may be inconsistent"
+                )
+
+            # --- Structural role validation ---
+            shot_role = scene.get("shot_role", "normal")
+            if idx == 0 and shot_role != "hook":
+                warnings.append(
+                    f"Scene {scene_id}: first scene should have shot_role='hook' "
+                    f"(has '{shot_role}')"
+                )
+            if idx == total_scenes - 1 and shot_role != "cliffhanger":
+                warnings.append(
+                    f"Scene {scene_id}: last scene should have shot_role='cliffhanger' "
+                    f"(has '{shot_role}')"
+                )
 
         # Vertical framing ratio (close_up + medium_close >= 50%)
         if total_scenes > 0:
@@ -298,15 +360,23 @@ class DAGExecutor:
                     f"Vertical framing: {ratio:.0%} close shots < 50% minimum"
                 )
 
-        if violations:
+        all_issues = violations + warnings
+        if all_issues:
             logger.warning(
-                "[scene_validate] %d violations found: %s",
-                len(violations), violations,
+                "[scene_validate] %d violation(s), %d warning(s):",
+                len(violations), len(warnings),
             )
+            for issue in all_issues:
+                logger.warning("  • %s", issue)
         else:
             logger.info("[scene_validate] All %d scenes passed validation", total_scenes)
 
-        return {"status": "ok", "violations": violations, "scene_count": total_scenes}
+        return {
+            "status": "ok",
+            "violations": violations,
+            "warnings": warnings,
+            "scene_count": total_scenes,
+        }
 
     async def _handle_video_gen(self, node: TaskNode, state: ProjectState) -> Any:
         """Generate video for a single shot using VideoGenerator."""
