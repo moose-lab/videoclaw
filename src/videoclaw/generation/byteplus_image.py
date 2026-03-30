@@ -29,6 +29,7 @@ from typing import Any
 import httpx
 
 from videoclaw.config import get_config
+from videoclaw.generation.base_image import BaseImageGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -45,23 +46,25 @@ SEEDREAM_MODELS: dict[str, str] = {
 SEEDEDIT_MODEL_ID = "seededit-3-0-i2i-250628"
 
 
+def _resolve_byteplus_credentials(
+    api_key: str | None = None,
+    api_base: str | None = None,
+) -> tuple[str | None, str]:
+    """Resolve BytePlus API key and base URL from args / env / config."""
+    config = get_config()
+    key = api_key or os.environ.get("BYTEPLUS_API_KEY") or config.byteplus_api_key
+    base = (api_base or config.byteplus_api_base).rstrip("/")
+    return key, base
+
+
 # ===================================================================
 # BytePlusImageGenerator  (Text-to-Image — Seedream)
 # ===================================================================
 
-class BytePlusImageGenerator:
+class BytePlusImageGenerator(BaseImageGenerator):
     """Generate images via BytePlus Seedream models.
 
     Endpoint: ``POST {base}/images/generations`` (synchronous).
-
-    Parameters
-    ----------
-    api_key : str | None
-        BytePlus ModelArk API key.  Falls back to env var ``BYTEPLUS_API_KEY``
-        or config ``byteplus_api_key``.
-    model : str
-        One of ``"seedream-5.0"`` (default), ``"seedream-4.5"``,
-        ``"seedream-4.0"``.
     """
 
     def __init__(
@@ -70,16 +73,8 @@ class BytePlusImageGenerator:
         model: str = "seedream-5.0",
         api_base: str | None = None,
     ) -> None:
-        config = get_config()
-        self._api_key = (
-            api_key
-            or os.environ.get("BYTEPLUS_API_KEY")
-            or config.byteplus_api_key
-        )
-        self._api_base = (api_base or config.byteplus_api_base).rstrip("/")
+        self._api_key, self._api_base = _resolve_byteplus_credentials(api_key, api_base)
         self._model_id = SEEDREAM_MODELS.get(model, SEEDREAM_MODELS["seedream-5.0"])
-        # Stores the HTTPS URL of the last generated image (before download).
-        # Used by CharacterDesigner to pass URLs to Seedance API.
         self.last_image_url: str | None = None
 
     def _headers(self) -> dict[str, str]:
@@ -97,19 +92,16 @@ class BytePlusImageGenerator:
         size: str = "2K",
         output_format: str = "jpeg",
         watermark: bool = False,
+        **kwargs: Any,
     ) -> Path:
-        """Generate an image and save to *output_dir/filename*.
-
-        Returns the local :class:`Path` to the downloaded image.
-        """
+        """Generate an image and save to *output_dir/filename*."""
         if not self._api_key:
             raise RuntimeError(
                 "BytePlus API key required. Set BYTEPLUS_API_KEY or "
                 "VIDEOCLAW_BYTEPLUS_API_KEY."
             )
 
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / filename
+        output_path = self._ensure_dir(output_dir, filename)
 
         body: dict[str, Any] = {
             "model": self._model_id,
@@ -117,7 +109,6 @@ class BytePlusImageGenerator:
             "size": size,
             "watermark": watermark,
         }
-        # output_format only supported by Seedream 5.0 Lite
         if self._model_id == SEEDREAM_MODELS["seedream-5.0"]:
             body["output_format"] = output_format
 
@@ -144,45 +135,21 @@ class BytePlusImageGenerator:
             if not image_url:
                 raise RuntimeError(f"No image URL in response: {data}")
 
-            # Store HTTPS URL before download (for Seedance API passthrough)
-            self.last_image_url = image_url
-
-            # Download the image
-            img_resp = await client.get(image_url, timeout=60.0)
-            img_resp.raise_for_status()
-            output_path.write_bytes(img_resp.content)
+            await self._download_and_save(client, image_url, output_path)
 
         logger.info("[byteplus-image] Saved: %s", output_path)
         return output_path
-
-    @staticmethod
-    def _extract_image_url(data: dict[str, Any]) -> str | None:
-        """Extract image URL from the BytePlus response.
-
-        Response format::
-
-            {"data": [{"url": "https://tos-..."}], "usage": {...}}
-        """
-        for item in data.get("data", []):
-            if url := item.get("url"):
-                return url
-        return None
 
 
 # ===================================================================
 # BytePlusImageEditor  (Image-to-Image — Seededit 3.0)
 # ===================================================================
 
-class BytePlusImageEditor:
+class BytePlusImageEditor(BaseImageGenerator):
     """Edit images via BytePlus Seededit 3.0.
 
-    Endpoint: ``POST {base}/images/generations`` with ``image`` parameter.
-
     Accepts a source image (HTTPS URL or base64) and a text instruction
-    to produce a modified version.  Useful for:
-    - Character costume/appearance changes
-    - Background/lighting alterations
-    - Style transfers within drama scenes
+    to produce a modified version.
     """
 
     def __init__(
@@ -190,19 +157,36 @@ class BytePlusImageEditor:
         api_key: str | None = None,
         api_base: str | None = None,
     ) -> None:
-        config = get_config()
-        self._api_key = (
-            api_key
-            or os.environ.get("BYTEPLUS_API_KEY")
-            or config.byteplus_api_key
-        )
-        self._api_base = (api_base or config.byteplus_api_base).rstrip("/")
+        self._api_key, self._api_base = _resolve_byteplus_credentials(api_key, api_base)
+        self.last_image_url: str | None = None
 
     def _headers(self) -> dict[str, str]:
         return {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self._api_key}",
         }
+
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        output_dir: Path,
+        filename: str = "image.png",
+        **kwargs: Any,
+    ) -> Path:
+        """Edit interface conforming to BaseImageGenerator.
+
+        Pass ``image_url`` or ``image_bytes`` via kwargs.
+        """
+        return await self.edit(
+            prompt,
+            image_url=kwargs.get("image_url"),
+            image_bytes=kwargs.get("image_bytes"),
+            output_dir=output_dir,
+            filename=filename,
+            guidance_scale=kwargs.get("guidance_scale", 5.5),
+            size=kwargs.get("size", "adaptive"),
+        )
 
     async def edit(
         self,
@@ -219,8 +203,6 @@ class BytePlusImageEditor:
 
         Provide either *image_url* (HTTPS URL) or *image_bytes* (raw bytes
         that will be base64-encoded).
-
-        Returns the local :class:`Path` to the edited image.
         """
         if not self._api_key:
             raise RuntimeError(
@@ -228,10 +210,8 @@ class BytePlusImageEditor:
                 "or VIDEOCLAW_BYTEPLUS_API_KEY."
             )
 
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / filename
+        output_path = self._ensure_dir(output_dir, filename)
 
-        # Resolve image source
         if image_url:
             image_src = image_url
         elif image_bytes:
@@ -250,10 +230,7 @@ class BytePlusImageEditor:
             "watermark": False,
         }
 
-        logger.info(
-            "[byteplus-edit] Editing: instruction=%.60s...",
-            instruction,
-        )
+        logger.info("[byteplus-edit] Editing: instruction=%.60s...", instruction)
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             resp = await client.post(
@@ -273,16 +250,7 @@ class BytePlusImageEditor:
             if not result_url:
                 raise RuntimeError(f"No image URL in edit response: {data}")
 
-            img_resp = await client.get(result_url, timeout=60.0)
-            img_resp.raise_for_status()
-            output_path.write_bytes(img_resp.content)
+            await self._download_and_save(client, result_url, output_path)
 
         logger.info("[byteplus-edit] Saved: %s", output_path)
         return output_path
-
-    @staticmethod
-    def _extract_image_url(data: dict[str, Any]) -> str | None:
-        for item in data.get("data", []):
-            if url := item.get("url"):
-                return url
-        return None
