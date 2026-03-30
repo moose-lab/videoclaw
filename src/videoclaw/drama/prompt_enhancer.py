@@ -316,18 +316,28 @@ class PromptEnhancer:
         Returns a list of prompt fragments that instruct Seedance to render
         on-screen text elements (subtitles, name cards, title cards).
 
-        Text directives follow the established Seedance convention::
+        Text directives follow Seedance positioning conventions:
 
-            [Show subtitle at bottom of screen: "dialogue text"]
-            [Show name card at bottom: "CHARACTER NAME, AGE — Role"]
-            [Show large centered title text on screen: "title"]
+        - **Subtitles** — bottom center of frame (standard subtitle position)
+        - **Name cards** — lower-third beside the character, ABOVE the subtitle
+          area to avoid overlap (任务要求: 角色介绍和字幕互相不应遮挡)
+        - **Title cards** — large centered text on screen
 
         These directives are placed AFTER the visual scene description so
         they don't interfere with Seedance's scene composition.
         """
         directives: list[str] = []
+        has_subtitle = False  # Track if this scene has dialogue/narration subtitle
+
+        # --- Check if this scene will have a subtitle ---
+        dialogue = (scene.dialogue or "").strip()
+        narration = (scene.narration or "").strip()
+        narration_type = getattr(scene, "narration_type", "voiceover")
+        has_subtitle = bool(dialogue) or (bool(narration) and narration_type != "title_card")
 
         # --- Character name card (first close-up/medium-close appearance) ---
+        # Position: lower-third overlay beside the character, NOT at bottom
+        # center where subtitles go. This prevents name card / subtitle overlap.
         intro_scales = {ShotScale.CLOSE_UP, ShotScale.MEDIUM_CLOSE}
         if scene.shot_scale in intro_scales:
             # Determine focal character for name card
@@ -340,43 +350,47 @@ class PromptEnhancer:
 
             if focal and focal not in self._chars_introduced:
                 char = char_map[focal]
-                # Build name card: "NAME, AGE — Role" or just "NAME — Description"
-                # Extract age/role from character description if available
                 name_card = self._format_name_card(char)
-                directives.append(
-                    f'[Show name card at bottom: {name_card}]'
-                )
+                if has_subtitle:
+                    # Name card positioned in lower-third beside character,
+                    # ABOVE the subtitle line to avoid overlap
+                    directives.append(
+                        f'[Show name card in lower-third beside character: {name_card}. '
+                        f'Position ABOVE the subtitle line, do NOT overlap with bottom subtitle]'
+                    )
+                else:
+                    # No subtitle conflict — can use standard bottom position
+                    directives.append(
+                        f'[Show name card in lower-third beside character: {name_card}]'
+                    )
                 self._chars_introduced.add(focal)
 
         # --- Narration (voiceover or title card) ---
-        narration = (scene.narration or "").strip()
         if narration:
-            narration_type = getattr(scene, "narration_type", "voiceover")
             if narration_type == "title_card":
                 directives.append(
                     f'[Show large centered title text on screen: "{narration}"]'
                 )
             else:
-                # Voiceover narration with subtitle
+                # Voiceover narration with subtitle at bottom center
                 directives.append(
                     f'[Narrator speaks: "{narration}". '
-                    f'Show subtitle at bottom of screen: "{narration}"]'
+                    f'Show subtitle at bottom center of screen: "{narration}"]'
                 )
 
         # --- Dialogue (spoken dialogue or inner monologue) ---
-        dialogue = (scene.dialogue or "").strip()
         if dialogue:
             speaker = scene.speaking_character or "Character"
             line_type = getattr(scene, "dialogue_line_type", "dialogue")
             if line_type == "inner_monologue":
                 directives.append(
                     f'[{speaker} thinks (inner monologue): "{dialogue}". '
-                    f'Show subtitle at bottom of screen: "{dialogue}"]'
+                    f'Show subtitle at bottom center of screen: "{dialogue}"]'
                 )
             else:
                 directives.append(
                     f'[{speaker} speaks: "{dialogue}". '
-                    f'Show subtitle at bottom of screen: "{dialogue}"]'
+                    f'Show subtitle at bottom center of screen: "{dialogue}"]'
                 )
 
         return directives
