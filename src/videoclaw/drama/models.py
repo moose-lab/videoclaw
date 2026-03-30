@@ -728,6 +728,10 @@ class ConsistencyManifest:
     """name → [front, three_quarter, full_body] reference image paths."""
     scene_settings: dict[str, str] = field(default_factory=dict)
     """scene_id → frozen setting description for location continuity."""
+    scene_references: dict[str, str] = field(default_factory=dict)
+    """location_key → reference image path for key scene environments."""
+    prop_references: dict[str, str] = field(default_factory=dict)
+    """prop_name → reference image path for key props/items."""
     style_anchor: str = ""
     """Frozen style prompt appended to all generations."""
     verified: bool = False
@@ -755,6 +759,12 @@ class ConsistencyManifest:
             for p in paths:
                 if not Path(p).exists():
                     missing.append(f"{name}: {p}")
+        for name, path in self.scene_references.items():
+            if not Path(path).exists():
+                missing.append(f"scene/{name}: {path}")
+        for name, path in self.prop_references.items():
+            if not Path(path).exists():
+                missing.append(f"prop/{name}: {path}")
         self.verified = len(missing) == 0
         return missing
 

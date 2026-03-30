@@ -1,9 +1,14 @@
-"""Scene/environment reference image generation for drama series.
+"""Scene/environment and prop reference image generation for drama series.
 
-Extracts unique locations from episode scenes and generates reference images
-to ensure visual consistency across shots set in the same environment.
+Extracts unique locations and key props from episode scenes and generates
+reference images to ensure visual consistency across shots set in the same
+environment or featuring the same objects.
 
-Analogous to :class:`CharacterDesigner` but for backgrounds/settings.
+Analogous to :class:`CharacterDesigner` but for backgrounds/settings and props.
+
+Production flow::
+
+    剧本分镜 → 角色参考图 → **场景/物品参考图** → 视频生成
 """
 
 from __future__ import annotations
@@ -28,27 +33,38 @@ Atmosphere: cinematic, atmospheric, highly detailed
 Quality: photorealistic, 8K, clean composition\
 """
 
+# Prompt template for prop/item reference images
+PROP_IMAGE_PROMPT = """\
+Product photography of {description}.
+Isolated on white background, studio lighting, multiple angles if possible.
+Highly detailed, photorealistic, clean composition.
+Style: {style_line}\
+"""
+
 
 class SceneLocation:
     """A unique location extracted from episode scenes."""
 
-    __slots__ = ("name", "description", "reference_image")
+    __slots__ = ("name", "description", "reference_image", "reference_image_url")
 
     def __init__(
         self,
         name: str,
         description: str = "",
         reference_image: str | None = None,
+        reference_image_url: str | None = None,
     ) -> None:
         self.name = name
         self.description = description
         self.reference_image = reference_image
+        self.reference_image_url = reference_image_url
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "description": self.description,
             "reference_image": self.reference_image,
+            "reference_image_url": self.reference_image_url,
         }
 
     @classmethod
@@ -57,6 +73,46 @@ class SceneLocation:
             name=data.get("name", ""),
             description=data.get("description", ""),
             reference_image=data.get("reference_image"),
+            reference_image_url=data.get("reference_image_url"),
+        )
+
+
+class PropAsset:
+    """A key prop or item that needs visual consistency across shots."""
+
+    __slots__ = ("name", "description", "scenes_used", "reference_image", "reference_image_url")
+
+    def __init__(
+        self,
+        name: str,
+        description: str = "",
+        scenes_used: list[str] | None = None,
+        reference_image: str | None = None,
+        reference_image_url: str | None = None,
+    ) -> None:
+        self.name = name
+        self.description = description
+        self.scenes_used = scenes_used or []
+        self.reference_image = reference_image
+        self.reference_image_url = reference_image_url
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "scenes_used": self.scenes_used,
+            "reference_image": self.reference_image,
+            "reference_image_url": self.reference_image_url,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> PropAsset:
+        return cls(
+            name=data.get("name", ""),
+            description=data.get("description", ""),
+            scenes_used=data.get("scenes_used", []),
+            reference_image=data.get("reference_image"),
+            reference_image_url=data.get("reference_image_url"),
         )
 
 
@@ -85,14 +141,75 @@ def extract_locations(episodes: list[Episode]) -> list[SceneLocation]:
     return list(seen.values())
 
 
-def _extract_location_key(text: str) -> str:
-    """Extract the setting/environment portion from a visual prompt.
+def extract_props(episodes: list[Episode]) -> list[PropAsset]:
+    """Extract key props/items from episode scenes that need visual consistency.
 
-    Heuristic: take the first clause before any character or action description.
+    Identifies props mentioned multiple times across scenes or in important
+    dramatic moments (e.g. a letter, a weapon, a vehicle, a specific object).
     """
+    # Count prop mentions across scenes
+    prop_mentions: dict[str, dict[str, Any]] = {}
+
+    for ep in episodes:
+        for scene in ep.scenes:
+            text = f"{scene.visual_prompt} {scene.dialogue} {scene.description}".lower()
+            scene_id = scene.scene_id
+
+            # Extract props via keyword patterns
+            for prop_name, pattern in _PROP_PATTERNS:
+                if re.search(pattern, text, re.IGNORECASE):
+                    if prop_name not in prop_mentions:
+                        prop_mentions[prop_name] = {
+                            "description": _extract_prop_description(prop_name, text),
+                            "scenes": [],
+                        }
+                    if scene_id not in prop_mentions[prop_name]["scenes"]:
+                        prop_mentions[prop_name]["scenes"].append(scene_id)
+
+    # Only keep props that appear in 2+ scenes (need consistency) or are dramatically important
+    props: list[PropAsset] = []
+    for name, info in prop_mentions.items():
+        if len(info["scenes"]) >= 2:
+            props.append(PropAsset(
+                name=name,
+                description=info["description"],
+                scenes_used=info["scenes"],
+            ))
+
+    return props
+
+
+# Common prop patterns for Western drama
+_PROP_PATTERNS: list[tuple[str, str]] = [
+    ("brochure", r"\bbrochure\b"),
+    ("name_badge", r"\b(name\s*badge|lanyard|name\s*tag)\b"),
+    ("letter", r"\bletter\b"),
+    ("phone", r"\b(phone|smartphone|cellphone)\b"),
+    ("gun", r"\b(gun|pistol|rifle|weapon)\b"),
+    ("car", r"\b(car|vehicle|limousine|suv)\b"),
+    ("ring", r"\b(ring|engagement\s*ring|wedding\s*ring)\b"),
+    ("necklace", r"\b(necklace|pendant|jewel)\b"),
+    ("document", r"\b(document|contract|deed|papers?)\b"),
+    ("photograph", r"\b(photo|photograph|picture\s*frame)\b"),
+    ("key", r"\b(key|key\s*card)\b"),
+    ("bag", r"\b(bag|purse|briefcase|suitcase)\b"),
+]
+
+
+def _extract_prop_description(prop_name: str, context: str) -> str:
+    """Extract a short description of the prop from its context."""
+    # Try to find the prop in context and grab surrounding words
+    pattern = rf"(\w[\w\s]{{0,30}}?\b{re.escape(prop_name)}\b[\w\s]{{0,30}})"
+    match = re.search(pattern, context, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()[:80]
+    return prop_name
+
+
+def _extract_location_key(text: str) -> str:
+    """Extract the setting/environment portion from a visual prompt."""
     if not text:
         return ""
-    # Take text up to first comma or period, or first 80 chars
     for sep in (",", ".", "，", "。", ";", "；"):
         idx = text.find(sep)
         if 10 < idx < 100:
@@ -109,7 +226,12 @@ def _normalise_key(text: str) -> str:
 
 
 class SceneDesigner:
-    """Generates reference images for unique scene locations in a drama series."""
+    """Generates reference images for scene locations and key props.
+
+    After storyboard decomposition, call ``design_scenes()`` and
+    ``design_props()`` to generate visual references that ensure
+    consistency when the same location or prop appears across multiple shots.
+    """
 
     def __init__(
         self,
@@ -121,8 +243,19 @@ class SceneDesigner:
 
     def _ensure_generator(self) -> Any:
         if self._img_gen is None:
-            from videoclaw.generation.image import EvolinkImageGenerator
-            self._img_gen = EvolinkImageGenerator()
+            try:
+                from videoclaw.config import get_config
+                cfg = get_config()
+                if cfg.byteplus_api_key:
+                    from videoclaw.generation.byteplus_image import BytePlusImageGenerator
+                    self._img_gen = BytePlusImageGenerator()
+                    logger.info("Using BytePlus Seedream for scene/prop images")
+                else:
+                    raise ValueError("No BytePlus API key")
+            except Exception:
+                from videoclaw.generation.image import EvolinkImageGenerator
+                self._img_gen = EvolinkImageGenerator()
+                logger.info("Using Evolink for scene/prop images (BytePlus unavailable)")
         return self._img_gen
 
     async def design_scenes(
@@ -134,7 +267,8 @@ class SceneDesigner:
         """Extract unique locations and generate reference images.
 
         Returns the list of :class:`SceneLocation` objects with paths populated.
-        Also stores them in ``series.metadata["locations"]``.
+        Also stores them in ``series.metadata["locations"]`` and updates
+        the ConsistencyManifest's ``scene_references``.
         """
         from videoclaw.drama.locale import get_locale
 
@@ -144,7 +278,6 @@ class SceneDesigner:
         locale = get_locale(series.language)
         style_line = locale.character_image_style.format(style=style)
 
-        # Extract locations from all episodes
         locations = extract_locations(series.episodes)
         if not locations:
             logger.info("No unique locations extracted from episodes")
@@ -172,17 +305,89 @@ class SceneDesigner:
                 prompt,
                 output_dir=scene_dir,
                 filename=filename,
-                size="16:9",  # wide establishing shot
+                size="16:9",
             )
             loc.reference_image = str(path)
+            loc.reference_image_url = getattr(gen, "last_image_url", None)
 
-        # Persist to series metadata
+        # Persist to series metadata and consistency manifest
         series.metadata["locations"] = [loc.to_dict() for loc in locations]
+        if series.consistency_manifest:
+            for loc in locations:
+                if loc.reference_image:
+                    series.consistency_manifest.scene_references[loc.name] = loc.reference_image
         self._drama_mgr.save(series)
 
         logger.info("Scene designs saved for series %s (%d locations)",
                      series.series_id, len(locations))
         return locations
 
+    async def design_props(
+        self,
+        series: DramaSeries,
+        *,
+        force: bool = False,
+    ) -> list[PropAsset]:
+        """Extract key props and generate reference images.
+
+        Only generates images for props that appear in 2+ scenes (need
+        consistency). Stores results in ``series.metadata["props"]`` and
+        updates the ConsistencyManifest's ``prop_references``.
+        """
+        from videoclaw.drama.locale import get_locale
+
+        gen = self._ensure_generator()
+        prop_dir = self._prop_dir(series.series_id)
+        style = series.style or "cinematic"
+        locale = get_locale(series.language)
+        style_line = locale.character_image_style.format(style=style)
+
+        props = extract_props(series.episodes)
+        if not props:
+            logger.info("No recurring props found needing consistency images")
+            return []
+
+        logger.info("Extracted %d recurring props: %s",
+                     len(props), [p.name for p in props])
+
+        for prop in props:
+            if prop.reference_image and not force:
+                logger.info("Skipping prop %r (already has image)", prop.name)
+                continue
+
+            prompt = PROP_IMAGE_PROMPT.format(
+                description=prop.description,
+                style_line=style_line,
+            )
+
+            safe_name = re.sub(r"[^\w\-]", "_", prop.name).strip("_")[:50]
+            filename = f"prop_{safe_name}.png"
+
+            logger.info("Generating prop reference for %r (used in %d scenes)",
+                         prop.name, len(prop.scenes_used))
+            path = await gen.generate(
+                prompt,
+                output_dir=prop_dir,
+                filename=filename,
+                size="1:1",
+            )
+            prop.reference_image = str(path)
+            prop.reference_image_url = getattr(gen, "last_image_url", None)
+
+        # Persist to series metadata and consistency manifest
+        series.metadata["props"] = [p.to_dict() for p in props]
+        if series.consistency_manifest:
+            for prop in props:
+                if prop.reference_image:
+                    series.consistency_manifest.prop_references[prop.name] = prop.reference_image
+        self._drama_mgr.save(series)
+
+        logger.info("Prop designs saved for series %s (%d props)",
+                     series.series_id, len(props))
+        return props
+
     def _scene_dir(self, series_id: str) -> Path:
         return self._drama_mgr.base_dir / series_id / "scenes"
+
+    def _prop_dir(self, series_id: str) -> Path:
+        return self._drama_mgr.base_dir / series_id / "props"

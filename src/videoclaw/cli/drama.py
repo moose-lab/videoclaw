@@ -915,26 +915,44 @@ async def _design_scenes_async(series: DramaSeries, mgr: DramaManager, force: bo
 
     designer = SceneDesigner(drama_manager=mgr)
 
+    # --- Scene locations ---
     with console.status("[cyan]Generating scene reference images...", spinner="dots"):
         locations = await designer.design_scenes(series, force=force)
 
-    if not locations:
+    if locations:
+        table = Table(title="Scene Reference Images", show_header=True, header_style="bold magenta")
+        table.add_column("Location", style="cyan")
+        table.add_column("Description", style="white")
+        table.add_column("Reference Image", style="green")
+        for loc in locations:
+            table.add_row(
+                loc.name,
+                (loc.description[:50] + "...") if len(loc.description) > 50 else loc.description,
+                loc.reference_image or "[dim]none[/dim]",
+            )
+        console.print(table)
+    else:
         console.print("[yellow]No unique locations extracted from scenes.[/yellow]")
-        return
 
-    table = Table(title="Scene Reference Images", show_header=True, header_style="bold magenta")
-    table.add_column("Location", style="cyan")
-    table.add_column("Description", style="white")
-    table.add_column("Reference Image", style="green")
-    for loc in locations:
-        table.add_row(
-            loc.name,
-            (loc.description[:50] + "...") if len(loc.description) > 50 else loc.description,
-            loc.reference_image or "[dim]none[/dim]",
-        )
-    console.print(table)
+    # --- Props / items ---
+    with console.status("[cyan]Analyzing props for consistency...", spinner="dots"):
+        props = await designer.design_props(series, force=force)
 
-    console.print(f"\n[bold green]Scene designs complete: {len(locations)} locations[/bold green]")
+    if props:
+        ptable = Table(title="Prop Reference Images", show_header=True, header_style="bold magenta")
+        ptable.add_column("Prop", style="cyan")
+        ptable.add_column("Used In", style="white")
+        ptable.add_column("Reference Image", style="green")
+        for prop in props:
+            ptable.add_row(
+                prop.name,
+                ", ".join(prop.scenes_used[:3]),
+                prop.reference_image or "[dim]none[/dim]",
+            )
+        console.print(ptable)
+
+    total = len(locations) + len(props)
+    console.print(f"\n[bold green]Asset design complete: {len(locations)} locations, {len(props)} props[/bold green]")
 
 
 @drama_app.command("assign-voices")
