@@ -336,8 +336,9 @@ class PromptEnhancer:
         has_subtitle = bool(dialogue) or (bool(narration) and narration_type != "title_card")
 
         # --- Character name card (first close-up/medium-close appearance) ---
-        # Position: lower-third overlay beside the character, NOT at bottom
-        # center where subtitles go. This prevents name card / subtitle overlap.
+        # 名牌永远紧贴角色身旁，竖排文字，不与底部字幕冲突。
+        # Position: vertically written text placed RIGHT NEXT TO the character,
+        # never at the bottom center where subtitles go.
         intro_scales = {ShotScale.CLOSE_UP, ShotScale.MEDIUM_CLOSE}
         if scene.shot_scale in intro_scales:
             # Determine focal character for name card
@@ -351,18 +352,13 @@ class PromptEnhancer:
             if focal and focal not in self._chars_introduced:
                 char = char_map[focal]
                 name_card = self._format_name_card(char)
-                if has_subtitle:
-                    # Name card positioned in lower-third beside character,
-                    # ABOVE the subtitle line to avoid overlap
-                    directives.append(
-                        f'[Show name card in lower-third beside character: {name_card}. '
-                        f'Position ABOVE the subtitle line, do NOT overlap with bottom subtitle]'
-                    )
-                else:
-                    # No subtitle conflict — can use standard bottom position
-                    directives.append(
-                        f'[Show name card in lower-third beside character: {name_card}]'
-                    )
+                directives.append(
+                    f'[Show character name card VERTICALLY written, placed right next to '
+                    f'the character\'s body (not at bottom). '
+                    f'Text reads top-to-bottom: {name_card}. '
+                    f'The name card must stay close to the character, never overlap with '
+                    f'the bottom subtitle area]'
+                )
                 self._chars_introduced.add(focal)
 
         # --- Narration (voiceover or title card) ---
