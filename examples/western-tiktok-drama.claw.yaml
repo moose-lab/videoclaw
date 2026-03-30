@@ -1,0 +1,57 @@
+name: western-tiktok-drama
+description: Western photorealistic TikTok short drama (Seedance 2.0, 9:16 vertical, English)
+version: "1.0"
+
+defaults:
+  duration: 60
+  style: photorealistic
+  aspect_ratio: "9:16"
+  strategy: seedance-2.0
+
+variables:
+  lang: en
+  resolution: "720x1280"
+  shot_duration: 5
+  model_id: seedance-2.0
+  genre: drama
+
+# Workflow metadata for `claw info` and agent bootstrapping
+workflow:
+  description: |
+    Western TikTok drama pipeline: import script → design characters/scenes →
+    generate video → audit → regen loop. Optimized for vertical (9:16) format,
+    English dialogue with Edge TTS, and Seedance 2.0 video generation.
+  steps:
+    - "claw drama import <script.docx> --lang en --title 'My Drama'"
+    - "claw drama design-characters <series_id>"
+    - "claw drama design-scenes <series_id>"
+    - "claw drama assign-voices <series_id>"
+    - "claw drama pipeline <series_id> --episode 1"
+
+pipeline:
+  import:
+    type: drama_import
+    params:
+      lang: "{{lang}}"
+
+  design:
+    type: drama_design
+    depends_on: [import]
+    params:
+      character_style: "3D CGI turnaround sheet"
+      scene_style: "photorealistic cinematic"
+
+  generate:
+    type: drama_run
+    depends_on: [design]
+    params:
+      model_id: "{{model_id}}"
+      resolution: "{{resolution}}"
+      shot_duration: "{{shot_duration}}"
+
+  audit:
+    type: drama_audit
+    depends_on: [generate]
+    params:
+      auto_regen: true
+      max_regen_attempts: 3

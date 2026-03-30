@@ -1,0 +1,64 @@
+name: chinese-ai-drama
+description: 中国AI短剧制作模板（Seedance 2.0，9:16竖屏，中文）
+version: "1.0"
+
+defaults:
+  duration: 60
+  style: photorealistic
+  aspect_ratio: "9:16"
+  strategy: seedance-2.0
+
+variables:
+  lang: zh
+  resolution: "720x1280"
+  shot_duration: 5
+  model_id: seedance-2.0
+  genre: drama
+
+workflow:
+  description: |
+    中国AI短剧制作流程：创建剧本 → 角色设计 → 场景设计 → 语音分配 →
+    视频生成 → 质量审计 → 重新生成。使用Seedance 2.0，9:16竖屏格式，
+    中文对话使用Edge TTS。
+  steps:
+    - "claw drama new '剧情概念' --lang zh --genre drama"
+    - "claw drama plan <series_id>"
+    - "claw drama script <series_id> --episode 1"
+    - "claw drama design-characters <series_id>"
+    - "claw drama design-scenes <series_id>"
+    - "claw drama pipeline <series_id> --episode 1"
+
+pipeline:
+  create:
+    type: drama_new
+    params:
+      lang: "{{lang}}"
+      genre: "{{genre}}"
+
+  plan:
+    type: drama_plan
+    depends_on: [create]
+
+  script:
+    type: drama_script
+    depends_on: [plan]
+
+  design:
+    type: drama_design
+    depends_on: [script]
+    params:
+      character_style: "3D CGI turnaround sheet"
+      scene_style: "cinematic"
+
+  generate:
+    type: drama_run
+    depends_on: [design]
+    params:
+      model_id: "{{model_id}}"
+      resolution: "{{resolution}}"
+
+  audit:
+    type: drama_audit
+    depends_on: [generate]
+    params:
+      auto_regen: true

@@ -18,6 +18,13 @@ from videoclaw.drama.models import (
     VoiceProfile,
     recommend_voice_style,
 )
+from videoclaw.drama.locale import (
+    DramaLocale,
+    get_locale,
+    get_locale_info,
+    list_locales,
+    register_locale,
+)
 from videoclaw.drama.prompt_enhancer import PromptEnhancer
 from videoclaw.drama.runner import build_episode_dag
 
@@ -27,6 +34,7 @@ __all__ = [
     "Character",
     "DialogueLine",
     "DramaGenre",
+    "DramaLocale",
     "DramaManager",
     "DramaScene",
     "DramaSeries",
@@ -39,5 +47,9 @@ __all__ = [
     "VoiceProfile",
     "PromptEnhancer",
     "build_episode_dag",
+    "get_locale",
+    "get_locale_info",
+    "list_locales",
     "recommend_voice_style",
+    "register_locale",
 ]

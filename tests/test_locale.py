@@ -67,10 +67,10 @@ def test_zh_locale_genres():
     assert DramaGenre.ANCIENT_XIANXIA in locale.genres
 
 
-def test_fallback_to_zh():
-    """Unknown language codes fall back to Chinese locale."""
+def test_fallback_to_en():
+    """Unknown language codes fall back to English locale."""
     locale = get_locale("fr")
-    assert locale.code == "zh"
+    assert locale.code == "en"
 
 
 def test_list_locales():

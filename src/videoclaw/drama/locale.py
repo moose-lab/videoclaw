@@ -80,29 +80,51 @@ class DramaLocale:
 
 _LOCALES: dict[str, DramaLocale] = {}
 
+_DEFAULT_FALLBACK = "en"
+
 
 def register_locale(locale: DramaLocale) -> None:
-    """Register a locale in the global registry."""
+    """Register a locale in the global registry.
+
+    Can be called at import time (for built-in locales) or at runtime
+    (for user-defined locales).  Re-registering the same code replaces
+    the previous locale.
+    """
     _LOCALES[locale.code] = locale
 
 
 def get_locale(language: str) -> DramaLocale:
-    """Look up locale by language code, falling back to ``"zh"``."""
-    locale = _LOCALES.get(language)
-    if locale is not None:
+    """Look up locale by language code.
+
+    Fallback order: exact match → ``"en"`` → first registered locale.
+    """
+    if locale := _LOCALES.get(language):
         return locale
-    # Fallback to Chinese
-    zh = _LOCALES.get("zh")
-    if zh is not None:
-        return zh
+    if fallback := _LOCALES.get(_DEFAULT_FALLBACK):
+        return fallback
+    if _LOCALES:
+        return next(iter(_LOCALES.values()))
     raise ValueError(
-        f"No locale registered for {language!r} and no 'zh' fallback available"
+        f"No locale registered for {language!r} and no fallback available. "
+        f"Register one via register_locale()."
     )
 
 
 def list_locales() -> list[str]:
     """Return all registered locale codes."""
-    return list(_LOCALES.keys())
+    return sorted(_LOCALES.keys())
+
+
+def get_locale_info() -> list[dict[str, str]]:
+    """Return metadata about registered locales (for ``claw info``)."""
+    return [
+        {
+            "code": loc.code,
+            "genres": [g.value for g in loc.genres],
+            "voices": len(loc.voice_profiles),
+        }
+        for loc in _LOCALES.values()
+    ]
 
 
 # ---------------------------------------------------------------------------
