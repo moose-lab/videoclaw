@@ -3,13 +3,13 @@
 from videoclaw.publishers.base import Publisher, PublishRequest, PublishResult, PublishStatus
 
 __all__ = [
-    # Base types
-    "Publisher",
+    # Platform implementations
+    "BilibiliPublisher",
     "PublishRequest",
     "PublishResult",
     "PublishStatus",
-    # Platform implementations
-    "BilibiliPublisher",
+    # Base types
+    "Publisher",
     "YouTubePublisher",
 ]
 

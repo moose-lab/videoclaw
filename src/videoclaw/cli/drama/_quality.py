@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Optional
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 
@@ -14,12 +14,11 @@ if TYPE_CHECKING:
 from rich.panel import Panel
 
 from videoclaw.cli._app import (
-    drama_app,
     configure_logging,
+    drama_app,
     show_banner,
 )
 from videoclaw.cli._output import get_console, get_output
-
 
 # ---------------------------------------------------------------------------
 # claw drama audit
@@ -27,13 +26,33 @@ from videoclaw.cli._output import get_console, get_output
 
 @drama_app.command("audit")
 def drama_audit(
-    target: Annotated[Optional[str], typer.Argument(
+    target: Annotated[str | None, typer.Argument(
         help="Series ID (series-aware mode) or omit for standalone mode."
     )] = None,
-    clip_dir: Annotated[str, typer.Option("--clip-dir", "-c", help="Directory containing generated MP4 clips.")] = "",
-    scenes_json: Annotated[str, typer.Option("--scenes", "-s", help="Path to scenes JSON (standalone mode).")] = "",
-    episode: Annotated[int, typer.Option("--episode", "-e", help="Episode number.")] = 1,
-    output: Annotated[str, typer.Option("--output", "-o", help="Write JSON audit report to this file.")] = "",
+    clip_dir: Annotated[
+        str,
+        typer.Option(
+            "--clip-dir", "-c",
+            help="Directory containing generated MP4 clips.",
+        ),
+    ] = "",
+    scenes_json: Annotated[
+        str,
+        typer.Option(
+            "--scenes", "-s",
+            help="Path to scenes JSON (standalone mode).",
+        ),
+    ] = "",
+    episode: Annotated[
+        int, typer.Option("--episode", "-e", help="Episode number.")
+    ] = 1,
+    output: Annotated[
+        str,
+        typer.Option(
+            "--output", "-o",
+            help="Write JSON audit report to this file.",
+        ),
+    ] = "",
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Run Claude Vision audit on generated video clips.
@@ -68,6 +87,7 @@ def drama_audit(
     out._command = "drama.audit"
 
     import json as _json
+
     from videoclaw.drama.vision_auditor import VisionAuditor
 
     # Determine mode: series-aware if target looks like a series_id (not a path)
@@ -109,7 +129,10 @@ def drama_audit(
         mgr = DramaManager()
         series = mgr.load(series_id)
         if series is None:
-            console.print(f"[red]Series {series_id!r} not found. Use 'claw drama list' to see available series.[/red]")
+            console.print(
+                f"[red]Series {series_id!r} not found."
+                " Use 'claw drama list' to see available series.[/red]"
+            )
             out.set_error(f"series {series_id!r} not found")
             out.emit()
             raise typer.Exit(code=1)
@@ -152,7 +175,11 @@ def drama_audit(
         # target may be a legacy positional clip_dir (backward compat)
         effective_clip_dir = clip_dir or (target if target and Path(target).is_dir() else "")
         if not effective_clip_dir:
-            console.print("[red]Provide a series_id as argument (series-aware mode) or --clip-dir (standalone mode).[/red]")
+            console.print(
+                "[red]Provide a series_id as argument"
+                " (series-aware mode) or --clip-dir"
+                " (standalone mode).[/red]"
+            )
             raise typer.Exit(code=1)
 
         clip_path = Path(effective_clip_dir)
@@ -185,7 +212,10 @@ def drama_audit(
             raise typer.Exit(code=1)
 
         scenes = [DramaScene.from_dict(s) for s in scenes_data]
-        console.print(f"[bold]Standalone audit:[/bold] {len(scenes)} scenes in [cyan]{effective_clip_dir}[/cyan]")
+        console.print(
+            f"[bold]Standalone audit:[/bold] {len(scenes)} scenes"
+            f" in [cyan]{effective_clip_dir}[/cyan]"
+        )
 
         auditor = VisionAuditor()
 
@@ -204,9 +234,23 @@ def drama_audit(
 def drama_audit_regen(
     series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
     episode: Annotated[int, typer.Option("--episode", "-e", help="Episode number.")] = 1,
-    clip_dir: Annotated[str, typer.Option("--clip-dir", "-c", help="Directory containing generated MP4 clips.")] = "",
-    max_rounds: Annotated[int, typer.Option("--max-rounds", "-n", help="Maximum audit-regen iterations.")] = 3,
-    recompose: Annotated[bool, typer.Option("--recompose", help="Re-compose after final round.")] = True,
+    clip_dir: Annotated[
+        str,
+        typer.Option(
+            "--clip-dir", "-c",
+            help="Directory containing generated MP4 clips.",
+        ),
+    ] = "",
+    max_rounds: Annotated[
+        int,
+        typer.Option(
+            "--max-rounds", "-n", help="Maximum audit-regen iterations."
+        ),
+    ] = 3,
+    recompose: Annotated[
+        bool,
+        typer.Option("--recompose", help="Re-compose after final round."),
+    ] = True,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Run vision audit -> regenerate failing scenes -> re-audit loop.
@@ -406,12 +450,27 @@ async def _drama_audit_regen_async(
 def drama_pipeline(
     series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
     episode: Annotated[int, typer.Option("--episode", "-e", help="Episode number.")] = 1,
-    skip_design: Annotated[bool, typer.Option("--skip-design", help="Skip character design (already done).")] = False,
-    skip_refresh: Annotated[bool, typer.Option("--skip-refresh", help="Skip URL refresh (URLs still valid).")] = False,
-    skip_run: Annotated[bool, typer.Option("--skip-run", help="Skip video generation.")] = False,
-    skip_audit: Annotated[bool, typer.Option("--skip-audit", help="Skip audit-regen loop.")] = False,
-    audit_rounds: Annotated[int, typer.Option("--audit-rounds", "-n", help="Max audit-regen iterations.")] = 3,
-    concurrency: Annotated[int, typer.Option("--concurrency", "-c", help="Max parallel tasks.")] = 4,
+    skip_design: Annotated[
+        bool,
+        typer.Option("--skip-design", help="Skip character design (already done)."),
+    ] = False,
+    skip_refresh: Annotated[
+        bool,
+        typer.Option("--skip-refresh", help="Skip URL refresh (URLs still valid)."),
+    ] = False,
+    skip_run: Annotated[
+        bool, typer.Option("--skip-run", help="Skip video generation.")
+    ] = False,
+    skip_audit: Annotated[
+        bool, typer.Option("--skip-audit", help="Skip audit-regen loop.")
+    ] = False,
+    audit_rounds: Annotated[
+        int,
+        typer.Option("--audit-rounds", "-n", help="Max audit-regen iterations."),
+    ] = 3,
+    concurrency: Annotated[
+        int, typer.Option("--concurrency", "-c", help="Max parallel tasks.")
+    ] = 4,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Run the full production pipeline: design -> refresh -> generate -> audit.
@@ -458,7 +517,10 @@ def drama_pipeline(
         raise typer.Exit(code=1)
 
     if not ep.scenes:
-        console.print("[yellow]Episode has no scenes. Run `claw drama script` or `claw drama import` first.[/yellow]")
+        console.print(
+            "[yellow]Episode has no scenes."
+            " Run `claw drama script` or `claw drama import` first.[/yellow]"
+        )
         out.set_error("Episode has no scenes.")
         out.emit()
         raise typer.Exit(code=1)
@@ -531,7 +593,8 @@ async def _drama_pipeline_async(
 
         chars_with_img = sum(1 for c in series.characters if c.reference_image)
         console.print(
-            f"  [green]{chars_with_img}/{len(series.characters)} characters have reference images[/green]"
+            f"  [green]{chars_with_img}/{len(series.characters)}"
+            " characters have reference images[/green]"
         )
         result["stages"]["design_characters"] = {"characters": chars_with_img}
     else:

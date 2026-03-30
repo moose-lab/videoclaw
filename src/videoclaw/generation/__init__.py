@@ -18,25 +18,25 @@ audio : TTS, voice casting, and audio post-processing (subpackage).
 __all__ = [
     # Base
     "BaseImageGenerator",
+    "BytePlusImageEditor",
+    "BytePlusImageGenerator",
     # Image generators
     "EvolinkImageGenerator",
-    "BytePlusImageGenerator",
-    "BytePlusImageEditor",
     "GeminiImageGenerator",
-    # Video
-    "VideoGenerator",
+    "RenderProfile",
     # Script
     "Script",
-    "ScriptSection",
     "ScriptGenerator",
+    "ScriptSection",
     # Storyboard
     "StoryboardGenerator",
-    # Composition & rendering
-    "VideoComposer",
-    "RenderProfile",
-    "VideoRenderer",
     # Subtitles
     "SubtitleGenerator",
+    # Composition & rendering
+    "VideoComposer",
+    # Video
+    "VideoGenerator",
+    "VideoRenderer",
     "generate_srt",
 ]
 

@@ -334,7 +334,11 @@ class VisionAuditor:
             scene_id=scene.scene_id,
             description=scene.description or "",
             time_of_day=scene.time_of_day or "unspecified",
-            characters=", ".join(scene.characters_present) if scene.characters_present else "none specified",
+            characters=(
+                ", ".join(scene.characters_present)
+                if scene.characters_present
+                else "none specified"
+            ),
             dialogue=(scene.dialogue[:80] + "…" if len(scene.dialogue) > 80 else scene.dialogue),
             shot_role=scene.shot_role or "normal",
             emotion=scene.emotion or "",

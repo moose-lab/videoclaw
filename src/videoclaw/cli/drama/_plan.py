@@ -14,11 +14,10 @@ if TYPE_CHECKING:
 from rich.table import Table
 
 from videoclaw.cli._app import (
-    drama_app,
     configure_logging,
+    drama_app,
 )
 from videoclaw.cli._output import get_console, get_output
-
 
 # ---------------------------------------------------------------------------
 # claw drama plan
@@ -181,7 +180,7 @@ async def _drama_script_async(series: DramaSeries, ep: Episode, mgr: DramaManage
     mgr.save(series)
 
     # Shot-scale color mapping
-    _SCALE_COLOR = {
+    _scale_color = {
         "close_up": "red",
         "medium_close": "yellow",
         "medium": "yellow",
@@ -204,7 +203,7 @@ async def _drama_script_async(series: DramaSeries, ep: Episode, mgr: DramaManage
     total_duration = 0.0
     for scene in ep.scenes:
         scale_str = scene.shot_scale.value if scene.shot_scale else "-"
-        scale_color = _SCALE_COLOR.get(scale_str, "white")
+        scale_color = _scale_color.get(scale_str, "white")
         dialogue_text = (scene.dialogue or scene.narration or "")[:28]
         if len(scene.dialogue or scene.narration or "") > 28:
             dialogue_text += ".."

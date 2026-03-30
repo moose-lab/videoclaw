@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from videoclaw.utils.ffmpeg import run_ffmpeg, check_ffmpeg
+from videoclaw.utils.ffmpeg import check_ffmpeg, run_ffmpeg
 
 logger = logging.getLogger(__name__)
 
@@ -299,7 +299,8 @@ class VideoComposer:
         filters: list[str] = []
         prev_label = "0:v"
         for i in range(1, n):
-            trans = transitions[i - 1] if transitions[i - 1] in _SUPPORTED_TRANSITIONS else "dissolve"
+            raw_trans = transitions[i - 1]
+            trans = raw_trans if raw_trans in _SUPPORTED_TRANSITIONS else "dissolve"
             out_label = f"v{i}" if i < n - 1 else "outv"
             filters.append(
                 f"[{prev_label}][{i}:v]xfade=transition={trans}"

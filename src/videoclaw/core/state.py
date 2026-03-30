@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from dataclasses import dataclass, field, fields, asdict
+from dataclasses import asdict, dataclass, field, fields
 from enum import StrEnum
 from pathlib import Path
 from typing import Any

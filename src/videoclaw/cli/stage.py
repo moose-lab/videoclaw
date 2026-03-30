@@ -21,7 +21,7 @@ import asyncio
 import json
 import sys
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
@@ -46,14 +46,45 @@ _MAX_JSON_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
 
 @app.command()
 def video(
-    prompt: Annotated[str, typer.Argument(help="Generation prompt for the video clip.", callback=validate_prompt)],
-    duration: Annotated[float, typer.Option("--duration", "-d", help="Clip duration in seconds.")] = 5.0,
-    aspect_ratio: Annotated[str, typer.Option("--aspect-ratio", "-a", help="Aspect ratio.", callback=validate_aspect_ratio)] = "16:9",
-    model: Annotated[Optional[str], typer.Option("--model", "-m", help="Video model id.")] = None,
-    strategy: Annotated[str, typer.Option("--strategy", help="Routing strategy: quality/cost/speed/auto.", callback=validate_strategy)] = "auto",
-    reference_image: Annotated[Optional[str], typer.Option("--ref-image", "-r", help="Reference image path or URL.")] = None,
-    output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output file path.")] = None,
-    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable debug logging.")] = False,
+    prompt: Annotated[
+        str,
+        typer.Argument(
+            help="Generation prompt for the video clip.",
+            callback=validate_prompt,
+        ),
+    ],
+    duration: Annotated[
+        float, typer.Option("--duration", "-d", help="Clip duration in seconds.")
+    ] = 5.0,
+    aspect_ratio: Annotated[
+        str,
+        typer.Option(
+            "--aspect-ratio", "-a",
+            help="Aspect ratio.",
+            callback=validate_aspect_ratio,
+        ),
+    ] = "16:9",
+    model: Annotated[
+        str | None, typer.Option("--model", "-m", help="Video model id.")
+    ] = None,
+    strategy: Annotated[
+        str,
+        typer.Option(
+            "--strategy",
+            help="Routing strategy: quality/cost/speed/auto.",
+            callback=validate_strategy,
+        ),
+    ] = "auto",
+    reference_image: Annotated[
+        str | None,
+        typer.Option("--ref-image", "-r", help="Reference image path or URL."),
+    ] = None,
+    output: Annotated[
+        str | None, typer.Option("--output", "-o", help="Output file path.")
+    ] = None,
+    verbose: Annotated[
+        bool, typer.Option("--verbose", "-v", help="Enable debug logging.")
+    ] = False,
 ) -> None:
     """Generate a single video clip from a text prompt.
 
@@ -130,7 +161,10 @@ async def _video_async(
             extra["image_paths"] = [{"path": reference_image, "role": "reference_image"}]
 
     console.print(f"[cyan]Generating video:[/cyan] {prompt[:80]}")
-    console.print(f"  Model: {effective_model}  |  Duration: {duration}s  |  Aspect: {aspect_ratio}")
+    console.print(
+        f"  Model: {effective_model}  |  Duration: {duration}s"
+        f"  |  Aspect: {aspect_ratio}"
+    )
 
     with console.status("[cyan]Generating...", spinner="dots"):
         result = await generator.generate_shot(
@@ -165,11 +199,33 @@ async def _video_async(
 
 @app.command()
 def image(
-    prompt: Annotated[str, typer.Argument(help="Generation prompt for the image.", callback=validate_prompt)],
-    provider: Annotated[str, typer.Option("--provider", "-p", help="Image provider: gemini / evolink / byteplus.")] = "gemini",
-    size: Annotated[str, typer.Option("--size", "-s", help="Image aspect ratio (e.g. 3:4, 1:1, 16:9).")] = "3:4",
-    output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output file path.")] = None,
-    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable debug logging.")] = False,
+    prompt: Annotated[
+        str,
+        typer.Argument(
+            help="Generation prompt for the image.",
+            callback=validate_prompt,
+        ),
+    ],
+    provider: Annotated[
+        str,
+        typer.Option(
+            "--provider", "-p",
+            help="Image provider: gemini / evolink / byteplus.",
+        ),
+    ] = "gemini",
+    size: Annotated[
+        str,
+        typer.Option(
+            "--size", "-s",
+            help="Image aspect ratio (e.g. 3:4, 1:1, 16:9).",
+        ),
+    ] = "3:4",
+    output: Annotated[
+        str | None, typer.Option("--output", "-o", help="Output file path.")
+    ] = None,
+    verbose: Annotated[
+        bool, typer.Option("--verbose", "-v", help="Enable debug logging.")
+    ] = False,
 ) -> None:
     """Generate a single image from a text prompt.
 
@@ -219,7 +275,10 @@ async def _image_async(
             gen = BytePlusImageGenerator()
             image_path = await gen.generate(prompt=prompt, aspect_ratio=size, output_dir=Path("."))
         else:
-            console.print(f"[red]Unknown provider {provider!r}. Valid: gemini, evolink, byteplus[/red]")
+            console.print(
+                f"[red]Unknown provider {provider!r}."
+                " Valid: gemini, evolink, byteplus[/red]"
+            )
             out.set_error(f"Unknown provider: {provider}")
             out.emit()
             raise typer.Exit(code=1)
@@ -249,10 +308,25 @@ async def _image_async(
 
 @app.command()
 def tts(
-    text: Annotated[Optional[str], typer.Argument(help="Text to synthesize (omit to read from stdin).")] = None,
-    voice: Annotated[Optional[str], typer.Option("--voice", help="TTS voice ID.")] = None,
-    language: Annotated[str, typer.Option("--lang", "-l", help="Language (zh/en).", callback=validate_language)] = "zh",
-    output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output audio file path.")] = None,
+    text: Annotated[
+        str | None,
+        typer.Argument(help="Text to synthesize (omit to read from stdin)."),
+    ] = None,
+    voice: Annotated[
+        str | None, typer.Option("--voice", help="TTS voice ID.")
+    ] = None,
+    language: Annotated[
+        str,
+        typer.Option(
+            "--lang", "-l",
+            help="Language (zh/en).",
+            callback=validate_language,
+        ),
+    ] = "zh",
+    output: Annotated[
+        str | None,
+        typer.Option("--output", "-o", help="Output audio file path."),
+    ] = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable debug logging.")] = False,
 ) -> None:
     """Synthesize speech from text.
@@ -331,11 +405,32 @@ async def _tts_async(
 
 @app.command()
 def storyboard(
-    prompt: Annotated[str, typer.Argument(help="Creative prompt or script text to decompose.", callback=validate_prompt)],
-    duration: Annotated[float, typer.Option("--duration", "-d", help="Target total duration in seconds.")] = 60.0,
-    style: Annotated[str, typer.Option("--style", "-s", help="Visual style hint.")] = "cinematic",
-    aspect_ratio: Annotated[str, typer.Option("--aspect-ratio", "-a", help="Aspect ratio.", callback=validate_aspect_ratio)] = "16:9",
-    output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output JSON file for shots.")] = None,
+    prompt: Annotated[
+        str,
+        typer.Argument(
+            help="Creative prompt or script text to decompose.",
+            callback=validate_prompt,
+        ),
+    ],
+    duration: Annotated[
+        float,
+        typer.Option("--duration", "-d", help="Target total duration in seconds."),
+    ] = 60.0,
+    style: Annotated[
+        str, typer.Option("--style", "-s", help="Visual style hint.")
+    ] = "cinematic",
+    aspect_ratio: Annotated[
+        str,
+        typer.Option(
+            "--aspect-ratio", "-a",
+            help="Aspect ratio.",
+            callback=validate_aspect_ratio,
+        ),
+    ] = "16:9",
+    output: Annotated[
+        str | None,
+        typer.Option("--output", "-o", help="Output JSON file for shots."),
+    ] = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable debug logging.")] = False,
 ) -> None:
     """Decompose a prompt or script into a shot-by-shot storyboard.
@@ -451,9 +546,20 @@ async def _storyboard_async(
 @app.command()
 def compose(
     videos: Annotated[list[str], typer.Argument(help="Video files to compose together.")],
-    transition: Annotated[str, typer.Option("--transition", "-t", help="Transition type: dissolve / cut / fade.")] = "dissolve",
-    transition_duration: Annotated[float, typer.Option("--transition-duration", help="Transition duration in seconds.")] = 0.5,
-    output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output file path.")] = None,
+    transition: Annotated[
+        str,
+        typer.Option(
+            "--transition", "-t",
+            help="Transition type: dissolve / cut / fade.",
+        ),
+    ] = "dissolve",
+    transition_duration: Annotated[
+        float,
+        typer.Option(
+            "--transition-duration", help="Transition duration in seconds."
+        ),
+    ] = 0.5,
+    output: Annotated[str | None, typer.Option("--output", "-o", help="Output file path.")] = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable debug logging.")] = False,
 ) -> None:
     """Compose multiple video clips into a single video.
@@ -499,7 +605,11 @@ def compose(
 
 
 async def _compose_async(
-    *, video_paths: list[Path], transition: str, transition_duration: float, output_path: str | None,
+    *,
+    video_paths: list[Path],
+    transition: str,
+    transition_duration: float,
+    output_path: str | None,
 ) -> None:
     console = get_console()
     out = get_output()
@@ -537,13 +647,38 @@ async def _compose_async(
 @app.command()
 def render(
     input_file: Annotated[str, typer.Argument(help="Input video file to render.")],
-    output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output file path.")] = None,
-    resolution: Annotated[Optional[str], typer.Option("--resolution", "-r", help="Output resolution (e.g. 1920x1080, 1080p, or aspect ratio like 9:16).")] = None,
-    codec: Annotated[str, typer.Option("--codec", help="Video codec.")] = "libx264",
-    bitrate: Annotated[str, typer.Option("--bitrate", help="Video bitrate.")] = "8M",
-    audio_bitrate: Annotated[str, typer.Option("--audio-bitrate", help="Audio bitrate.")] = "192k",
-    preset: Annotated[str, typer.Option("--preset", help="Encoding preset (ultrafast/fast/medium/slow).")] = "medium",
-    crf: Annotated[int, typer.Option("--crf", help="Constant rate factor (0-51, lower = better quality).")] = 23,
+    output: Annotated[str | None, typer.Option("--output", "-o", help="Output file path.")] = None,
+    resolution: Annotated[
+        str | None,
+        typer.Option(
+            "--resolution", "-r",
+            help="Output resolution (e.g. 1920x1080, 1080p,"
+            " or aspect ratio like 9:16).",
+        ),
+    ] = None,
+    codec: Annotated[
+        str, typer.Option("--codec", help="Video codec.")
+    ] = "libx264",
+    bitrate: Annotated[
+        str, typer.Option("--bitrate", help="Video bitrate.")
+    ] = "8M",
+    audio_bitrate: Annotated[
+        str, typer.Option("--audio-bitrate", help="Audio bitrate.")
+    ] = "192k",
+    preset: Annotated[
+        str,
+        typer.Option(
+            "--preset",
+            help="Encoding preset (ultrafast/fast/medium/slow).",
+        ),
+    ] = "medium",
+    crf: Annotated[
+        int,
+        typer.Option(
+            "--crf",
+            help="Constant rate factor (0-51, lower = better quality).",
+        ),
+    ] = 23,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable debug logging.")] = False,
 ) -> None:
     """Render/encode a video file with specified parameters.
@@ -597,9 +732,12 @@ async def _render_async(
     console = get_console()
     out = get_output()
 
-    from videoclaw.generation.render import VideoRenderer, _ASPECT_TO_RENDER_RESOLUTION
+    from videoclaw.generation.render import _ASPECT_TO_RENDER_RESOLUTION, VideoRenderer
 
-    out_path = Path(output_path) if output_path else input_path.with_name(f"{input_path.stem}_rendered.mp4")
+    out_path = (
+        Path(output_path) if output_path
+        else input_path.with_name(f"{input_path.stem}_rendered.mp4")
+    )
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Parse resolution
@@ -651,9 +789,22 @@ async def _render_async(
 @app.command()
 def subtitle(
     input_file: Annotated[str, typer.Argument(help="Scene data JSON file.")],
-    format: Annotated[str, typer.Option("--format", "-f", help="Subtitle format: srt / ass.")] = "srt",
-    language: Annotated[str, typer.Option("--lang", "-l", help="Language (zh/en).", callback=validate_language)] = "zh",
-    output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output subtitle file path.")] = None,
+    format: Annotated[
+        str,
+        typer.Option("--format", "-f", help="Subtitle format: srt / ass."),
+    ] = "srt",
+    language: Annotated[
+        str,
+        typer.Option(
+            "--lang", "-l",
+            help="Language (zh/en).",
+            callback=validate_language,
+        ),
+    ] = "zh",
+    output: Annotated[
+        str | None,
+        typer.Option("--output", "-o", help="Output subtitle file path."),
+    ] = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable debug logging.")] = False,
 ) -> None:
     """Generate subtitles from scene data JSON.
@@ -682,7 +833,10 @@ def subtitle(
     # Guard against excessively large JSON files (DoS prevention)
     file_size = input_path.stat().st_size
     if file_size > _MAX_JSON_FILE_SIZE:
-        console.print(f"[red]JSON file too large: {file_size / 1024 / 1024:.0f} MB (max 100 MB)[/red]")
+        size_mb = file_size / 1024 / 1024
+        console.print(
+            f"[red]JSON file too large: {size_mb:.0f} MB (max 100 MB)[/red]"
+        )
         out.set_error(f"JSON file too large: {file_size} bytes")
         out.emit()
         raise typer.Exit(code=1)

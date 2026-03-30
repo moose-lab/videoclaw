@@ -294,7 +294,10 @@ class LLMClient:
         # to avoid Cloudflare 524 timeout on long generations.
         use_stream = "thinking" in resolved_model or self._is_evolink_model(resolved_model)
 
-        logger.debug("[llm] chat call to %s (%d messages, stream=%s)", resolved_model, len(messages), use_stream)
+        logger.debug(
+            "[llm] chat call to %s (%d messages, stream=%s)",
+            resolved_model, len(messages), use_stream,
+        )
 
         if use_stream:
             kwargs["stream"] = True
@@ -314,7 +317,10 @@ class LLMClient:
             if not content and reasoning_chunks:
                 # Fallback: extract JSON from reasoning output
                 reasoning_text = "".join(reasoning_chunks)
-                logger.warning("[llm] Streaming content empty, extracting from reasoning (%d chars)", len(reasoning_text))
+                logger.warning(
+                    "[llm] Streaming content empty, extracting from reasoning (%d chars)",
+                    len(reasoning_text),
+                )
                 # Try to find JSON in reasoning output
                 import re
                 json_match = re.search(r"```(?:json)?\s*\n([\s\S]*?)\n```", reasoning_text)
@@ -322,7 +328,10 @@ class LLMClient:
                     content = json_match.group(1).strip()
                 elif reasoning_text.strip().startswith("{"):
                     content = reasoning_text.strip()
-            logger.debug("[llm] Streamed %d content chunks, %d reasoning chunks", len(chunks), len(reasoning_chunks))
+            logger.debug(
+                "[llm] Streamed %d content chunks, %d reasoning chunks",
+                len(chunks), len(reasoning_chunks),
+            )
         else:
             response = await litellm.acompletion(**kwargs)
             if hasattr(response, "usage") and response.usage is not None:

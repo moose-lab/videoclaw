@@ -12,7 +12,6 @@ from videoclaw.cli._app import app
 from videoclaw.cli._output import get_console, get_output
 from videoclaw.config import get_config
 
-
 # Structured command catalog — single source of truth for discoverability.
 _COMMANDS = {
     "core": [
@@ -22,22 +21,22 @@ _COMMANDS = {
         {"command": "claw version", "description": "Print version"},
     ],
     "drama": [
-        {"command": "claw drama new", "description": "Create series from concept (LLM writes script)"},
+        {"command": "claw drama new", "description": "Create series from concept"},
         {"command": "claw drama import", "description": "Import complete script (.docx/.txt)"},
         {"command": "claw drama list", "description": "List all drama series"},
         {"command": "claw drama show <id>", "description": "Show series details"},
         {"command": "claw drama plan <id>", "description": "Plan episodes via LLM"},
         {"command": "claw drama script <id>", "description": "Script an episode (scene breakdown)"},
-        {"command": "claw drama design-characters <id>", "description": "Generate character turnaround sheets"},
+        {"command": "claw drama design-characters <id>", "description": "Generate turnarounds"},
         {"command": "claw drama refresh-urls <id>", "description": "Refresh expired image URLs"},
-        {"command": "claw drama design-scenes <id>", "description": "Generate scene/prop reference images"},
+        {"command": "claw drama design-scenes <id>", "description": "Generate scene/prop refs"},
         {"command": "claw drama assign-voices <id>", "description": "Assign TTS voice profiles"},
         {"command": "claw drama preview-prompts <id>", "description": "Preview Seedance prompts"},
         {"command": "claw drama run <id>", "description": "Run video generation pipeline"},
         {"command": "claw drama regen-shot <id>", "description": "Regenerate specific scene(s)"},
         {"command": "claw drama audit <id>", "description": "Vision QA on generated clips"},
         {"command": "claw drama audit-regen <id>", "description": "Audit → regen loop"},
-        {"command": "claw drama pipeline <id>", "description": "Full pipeline: design → generate → audit"},
+        {"command": "claw drama pipeline <id>", "description": "Full pipeline: design→gen→audit"},
     ],
     "stage": [
         {"command": "claw video <prompt>", "description": "Generate a single video clip"},
@@ -124,7 +123,8 @@ def info() -> None:
     console.print(
         Panel(
             f"[bold]Version:[/bold]     {videoclaw.__version__}\n"
-            f"[bold]Models:[/bold]      {len(model_names)} registered ({', '.join(model_names[:5]) or 'none'})\n"
+            f"[bold]Models:[/bold]      {len(model_names)} registered"
+            f" ({', '.join(model_names[:5]) or 'none'})\n"
             f"[bold]Series:[/bold]      {len(series_ids)} drama series\n"
             f"[bold]Video model:[/bold] {cfg.default_video_model}\n"
             f"[bold]LLM:[/bold]         {cfg.default_llm}\n"
@@ -146,8 +146,14 @@ def info() -> None:
             table.add_row(cmd["command"], cmd["description"])
         console.print(table)
 
-    console.print("\n[bold]Global flags:[/bold] --json (structured output), --verbose (debug logs)")
-    console.print("[bold]Tip:[/bold] Use [cyan]claw --json <command>[/cyan] for agent-friendly JSON output.\n")
+    console.print(
+        "\n[bold]Global flags:[/bold]"
+        " --json (structured output), --verbose (debug logs)"
+    )
+    console.print(
+        "[bold]Tip:[/bold] Use [cyan]claw --json <command>[/cyan]"
+        " for agent-friendly JSON output.\n"
+    )
 
     # --- JSON result ---
     out.set_result({

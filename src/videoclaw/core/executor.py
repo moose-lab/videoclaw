@@ -4,16 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any, Callable, Coroutine
+from typing import Any
 
 from videoclaw.config import get_config
 from videoclaw.core.events import (
-    EventBus,
+    PROJECT_COMPLETED,
     TASK_COMPLETED,
     TASK_FAILED,
     TASK_STARTED,
-    PROJECT_COMPLETED,
+    EventBus,
+)
+from videoclaw.core.events import (
     event_bus as default_event_bus,
 )
 from videoclaw.core.planner import DAG, NodeStatus, TaskNode, TaskType
@@ -321,15 +324,21 @@ class DAGExecutor:
                     char_count = len(dialogue)
                     if char_count > max_subtitle_chars_zh:
                         warnings.append(
-                            f"Scene {scene_id}: dialogue {char_count} chars > {max_subtitle_chars_zh} "
-                            f"char subtitle limit — may be hard to read on 9:16"
+                            f"Scene {scene_id}: dialogue"
+                            f" {char_count} chars"
+                            f" > {max_subtitle_chars_zh}"
+                            " char subtitle limit"
+                            " — may be hard to read on 9:16"
                         )
                 else:
                     word_count = len(dialogue.split())
                     if word_count > max_subtitle_words_en:
                         warnings.append(
-                            f"Scene {scene_id}: dialogue {word_count} words > {max_subtitle_words_en} "
-                            f"word subtitle limit — consider splitting"
+                            f"Scene {scene_id}: dialogue"
+                            f" {word_count} words"
+                            f" > {max_subtitle_words_en}"
+                            " word subtitle limit"
+                            " — consider splitting"
                         )
 
             # --- Time-of-day coverage ---
@@ -493,6 +502,8 @@ class DAGExecutor:
             # --- Drama mode: multi-role voice pipeline ---
             from videoclaw.drama.models import (
                 AudioSegment as DramaAudioSegment,
+            )
+            from videoclaw.drama.models import (
                 DialogueLine,
                 EpisodeAudioManifest,
                 LineType,
@@ -621,6 +632,8 @@ class DAGExecutor:
 
         from videoclaw.drama.models import (
             AudioSegment as DramaAudioSegment,
+        )
+        from videoclaw.drama.models import (
             DialogueLine,
             LineType,
             VoiceProfile,
@@ -941,7 +954,7 @@ class DAGExecutor:
         import shutil
         from pathlib import Path
 
-        from videoclaw.generation.render import VideoRenderer, _ASPECT_TO_RENDER_RESOLUTION
+        from videoclaw.generation.render import _ASPECT_TO_RENDER_RESOLUTION, VideoRenderer
 
         project_dir = Path(self._config.projects_dir) / state.project_id
         composed = state.assets.get("composed_video")

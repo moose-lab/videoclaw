@@ -17,7 +17,14 @@ from videoclaw.core.events import event_bus
 from videoclaw.core.executor import DAGExecutor
 from videoclaw.core.planner import DAG, TaskNode, TaskType
 from videoclaw.core.state import ProjectState, Shot, ShotStatus, StateManager
-from videoclaw.drama.models import DramaManager, DramaScene, DramaSeries, DramaStatus, Episode, EpisodeStatus
+from videoclaw.drama.models import (
+    DramaManager,
+    DramaScene,
+    DramaSeries,
+    DramaStatus,
+    Episode,
+    EpisodeStatus,
+)
 from videoclaw.drama.prompt_enhancer import PromptEnhancer
 
 logger = logging.getLogger(__name__)
@@ -431,7 +438,7 @@ def _build_drama_dag(
     dag.add_node(music_node)
 
     # -- 7. Compose: waits for all video clips + subtitle + music --
-    compose_deps = video_node_ids + ["subtitle_gen", "music"]
+    compose_deps = [*video_node_ids, "subtitle_gen", "music"]
     compose_node = TaskNode(
         node_id="compose",
         task_type=TaskType.COMPOSE,

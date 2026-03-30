@@ -14,7 +14,7 @@ import uuid
 from typing import Any
 
 from videoclaw.config import get_config
-from videoclaw.core.events import event_bus, TASK_STARTED, TASK_COMPLETED
+from videoclaw.core.events import TASK_COMPLETED, TASK_STARTED, event_bus
 from videoclaw.core.state import Shot, ShotStatus
 from videoclaw.generation.script import Script
 from videoclaw.models.llm.litellm_wrapper import LLMClient

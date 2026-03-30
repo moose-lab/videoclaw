@@ -110,8 +110,13 @@ class SubtitleGenerator:
             character = scene.get("speaking_character", "")
 
             # Resolve duration: prefer manifest, fall back to scene field
-            manifest_dur = _get_scene_duration_from_manifest(scene_id, audio_manifest)
-            duration = manifest_dur if manifest_dur is not None else float(scene.get("duration_seconds", 5.0))
+            manifest_dur = _get_scene_duration_from_manifest(
+                scene_id, audio_manifest,
+            )
+            duration = (
+                manifest_dur if manifest_dur is not None
+                else float(scene.get("duration_seconds", 5.0))
+            )
 
             text = dialogue
             if not text and include_narration:
@@ -204,15 +209,20 @@ class SubtitleGenerator:
             f"PlayResY: 1920\n"
             f"\n"
             f"[V4+ Styles]\n"
-            f"Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
-            f"Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
-            f"Alignment, MarginL, MarginR, MarginV, Encoding\n"
+            "Format: Name, Fontname, Fontsize, PrimaryColour,"
+            " SecondaryColour, OutlineColour, BackColour, "
+            "Bold, Italic, Underline, StrikeOut,"
+            " ScaleX, ScaleY, Spacing, Angle,"
+            " BorderStyle, Outline, Shadow, "
+            "Alignment, MarginL, MarginR, MarginV, Encoding\n"
             f"Style: Default,{font_name},{font_size},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,"
             f"0,0,0,0,100,100,0,0,1,2,1,2,10,10,30,1\n"
-            f"Style: Narration,{font_name},{font_size - 2},&H00CCCCCC,&H000000FF,&H00000000,&H80000000,"
-            f"0,1,0,0,100,100,0,0,1,2,1,8,10,10,30,1\n"
-            f"Style: TitleCard,{font_name},{font_size + 12},&H00FFFFFF,&H000000FF,&H00000000,&HA0000000,"
-            f"1,0,0,0,100,100,2,0,1,3,2,5,10,10,10,1\n"
+            f"Style: Narration,{font_name},{font_size - 2},"
+            f"&H00CCCCCC,&H000000FF,&H00000000,&H80000000,"
+            "0,1,0,0,100,100,0,0,1,2,1,8,10,10,30,1\n"
+            f"Style: TitleCard,{font_name},{font_size + 12},"
+            f"&H00FFFFFF,&H000000FF,&H00000000,&HA0000000,"
+            "1,0,0,0,100,100,2,0,1,3,2,5,10,10,10,1\n"
         )
 
         if char_style_lines:
@@ -235,8 +245,13 @@ class SubtitleGenerator:
             character = scene.get("speaking_character", "")
 
             # Resolve duration
-            manifest_dur = _get_scene_duration_from_manifest(scene_id, audio_manifest)
-            duration = manifest_dur if manifest_dur is not None else float(scene.get("duration_seconds", 5.0))
+            manifest_dur = _get_scene_duration_from_manifest(
+                scene_id, audio_manifest,
+            )
+            duration = (
+                manifest_dur if manifest_dur is not None
+                else float(scene.get("duration_seconds", 5.0))
+            )
 
             start = current_time
             end = current_time + duration
@@ -247,9 +262,13 @@ class SubtitleGenerator:
             # Dialogue line
             if dialogue:
                 style = char_styles.get(character, "Default")
-                text = self.split_long_text(dialogue, max_chars=max_chars, line_break="\\N", strategy=split_strategy)
+                text = self.split_long_text(
+                    dialogue, max_chars=max_chars,
+                    line_break="\\N", strategy=split_strategy,
+                )
                 events.append(
-                    f"Dialogue: 0,{start_ts},{end_ts},{style},{character},0,0,0,,{text}"
+                    f"Dialogue: 0,{start_ts},{end_ts},"
+                    f"{style},{character},0,0,0,,{text}"
                 )
 
             # Narration line
@@ -259,12 +278,19 @@ class SubtitleGenerator:
                 narration_type = scene.get("narration_type", "voiceover")
                 if narration_type == "title_card":
                     # Title card: always render — centered, large, bold
-                    text = self.split_long_text(narration, max_chars=max_chars, line_break="\\N", strategy=split_strategy)
+                    text = self.split_long_text(
+                        narration, max_chars=max_chars,
+                        line_break="\\N", strategy=split_strategy,
+                    )
                     events.append(
-                        f"Dialogue: 0,{start_ts},{end_ts},TitleCard,,0,0,0,,{text}"
+                        f"Dialogue: 0,{start_ts},{end_ts},"
+                        f"TitleCard,,0,0,0,,{text}"
                     )
                 elif include_narration or not dialogue:
-                    text = self.split_long_text(narration, max_chars=max_chars, line_break="\\N", strategy=split_strategy)
+                    text = self.split_long_text(
+                        narration, max_chars=max_chars,
+                        line_break="\\N", strategy=split_strategy,
+                    )
                     events.append(
                         f"Dialogue: 0,{start_ts},{end_ts},Narration,,0,0,0,,{text}"
                     )

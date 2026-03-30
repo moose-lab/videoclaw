@@ -732,7 +732,7 @@ class SeedanceVideoAdapter:
             )
             content = [
                 c for c in content
-                if not (c.get("role") in ("first_frame", "last_frame"))
+                if c.get("role") not in ("first_frame", "last_frame")
             ]
 
         if ref_image_count > 0:

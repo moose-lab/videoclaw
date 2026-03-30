@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import json
 import uuid
-from dataclasses import dataclass, field, fields, asdict
+from dataclasses import asdict, dataclass, field, fields
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from videoclaw.config import get_config
 from videoclaw.utils import _now_iso
-
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -789,7 +788,7 @@ class DramaSeries:
     script_locked: bool = False
     """When True, the script content is frozen — no creative modifications allowed."""
     script_source: str = "generated"
-    """Origin of the script: 'generated' (LLM-created) or 'imported' (user-provided complete script)."""
+    """Origin: 'generated' (LLM-created) or 'imported' (user-provided)."""
     consistency_manifest: ConsistencyManifest | None = None
     """Pre-built consistency constraints for multi-clip coherence."""
     pending_modifications: list[ScriptModification] = field(default_factory=list)
@@ -877,7 +876,10 @@ class DramaManager:
         series.touch()
         path = self._series_path(series.series_id)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(series.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
+        path.write_text(
+            json.dumps(series.to_dict(), indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
         return path
 
     def load(self, series_id: str) -> DramaSeries:

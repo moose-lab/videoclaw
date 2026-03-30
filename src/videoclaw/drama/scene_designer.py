@@ -45,7 +45,7 @@ Style: {style_line}\
 class SceneLocation:
     """A unique location extracted from episode scenes."""
 
-    __slots__ = ("name", "description", "reference_image", "reference_image_url")
+    __slots__ = ("description", "name", "reference_image", "reference_image_url")
 
     def __init__(
         self,
@@ -80,7 +80,7 @@ class SceneLocation:
 class PropAsset:
     """A key prop or item that needs visual consistency across shots."""
 
-    __slots__ = ("name", "description", "scenes_used", "reference_image", "reference_image_url")
+    __slots__ = ("description", "name", "reference_image", "reference_image_url", "scenes_used")
 
     def __init__(
         self,

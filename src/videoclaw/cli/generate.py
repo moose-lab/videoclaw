@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.panel import Panel
@@ -31,17 +31,52 @@ from videoclaw.config import get_config
 
 @app.command()
 def generate(
-    prompt: Annotated[str, typer.Argument(help="Creative prompt for the video.", callback=validate_prompt)],
-    duration: Annotated[int, typer.Option("--duration", "-d", help="Target duration in seconds.")] = 30,
-    style: Annotated[Optional[str], typer.Option("--style", "-s", help="Visual style hint.")] = None,
-    aspect_ratio: Annotated[str, typer.Option("--aspect-ratio", "-a", help="Aspect ratio.", callback=validate_aspect_ratio)] = "16:9",
-    strategy: Annotated[str, typer.Option("--strategy", help="Routing strategy: quality / cost / speed / auto.", callback=validate_strategy)] = "auto",
-    output: Annotated[Optional[str], typer.Option("--output", "-o", help="Output file path.")] = None,
-    budget: Annotated[Optional[float], typer.Option("--budget", "-b", help="Maximum budget in USD.")] = None,
-    model: Annotated[Optional[str], typer.Option("--model", "-m", help="Preferred model id.")] = None,
-    concurrency: Annotated[int, typer.Option("--concurrency", "-c", help="Max parallel tasks.")] = 4,
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Build DAG and show plan without executing.")] = False,
-    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable debug logging.")] = False,
+    prompt: Annotated[
+        str,
+        typer.Argument(help="Creative prompt for the video.", callback=validate_prompt),
+    ],
+    duration: Annotated[
+        int, typer.Option("--duration", "-d", help="Target duration in seconds.")
+    ] = 30,
+    style: Annotated[
+        str | None, typer.Option("--style", "-s", help="Visual style hint.")
+    ] = None,
+    aspect_ratio: Annotated[
+        str,
+        typer.Option(
+            "--aspect-ratio", "-a",
+            help="Aspect ratio.",
+            callback=validate_aspect_ratio,
+        ),
+    ] = "16:9",
+    strategy: Annotated[
+        str,
+        typer.Option(
+            "--strategy",
+            help="Routing strategy: quality / cost / speed / auto.",
+            callback=validate_strategy,
+        ),
+    ] = "auto",
+    output: Annotated[
+        str | None, typer.Option("--output", "-o", help="Output file path.")
+    ] = None,
+    budget: Annotated[
+        float | None,
+        typer.Option("--budget", "-b", help="Maximum budget in USD."),
+    ] = None,
+    model: Annotated[
+        str | None, typer.Option("--model", "-m", help="Preferred model id.")
+    ] = None,
+    concurrency: Annotated[
+        int, typer.Option("--concurrency", "-c", help="Max parallel tasks.")
+    ] = 4,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Build DAG and show plan without executing."),
+    ] = False,
+    verbose: Annotated[
+        bool, typer.Option("--verbose", "-v", help="Enable debug logging.")
+    ] = False,
 ) -> None:
     """Generate a video from a text prompt.
 
@@ -88,8 +123,8 @@ async def _generate_async(
     dry_run: bool,
 ) -> None:
     """Async orchestration behind ``claw generate``."""
-    from videoclaw.core.state import StateManager
     from videoclaw.core.planner import build_dag
+    from videoclaw.core.state import StateManager
     from videoclaw.cost.tracker import CostTracker
 
     console = get_console()
@@ -190,8 +225,8 @@ async def _generate_async(
     # ---- 5. Execute DAG --------------------------------------------------
     console.print("\n[bold cyan]Phase 2: Execution[/bold cyan]")
 
+    from videoclaw.core.events import TASK_COMPLETED, event_bus
     from videoclaw.core.executor import DAGExecutor
-    from videoclaw.core.events import event_bus, TASK_COMPLETED
 
     executor = DAGExecutor(dag=dag, state=state, max_concurrency=max_concurrency)
     with Progress(
@@ -210,7 +245,10 @@ async def _generate_async(
             nonlocal completed_count
             completed_count += 1
             task_type = event_data.get("task_type", "unknown")
-            progress.update(task, description=f"Completed {task_type} ({completed_count}/{total_nodes})")
+            progress.update(
+                task,
+                description=f"Completed {task_type} ({completed_count}/{total_nodes})",
+            )
             progress.advance(task)
 
         event_bus.subscribe(TASK_COMPLETED, on_task_completed)

@@ -108,6 +108,7 @@ class CostTracker:
         self.project_id = project_id
         self.budget_usd = budget_usd
         self._records: list[CostRecord] = []
+        self._background_tasks: set[asyncio.Task] = set()  # prevent GC of fire-and-forget tasks
 
     # -- Mutation -----------------------------------------------------------
 
@@ -127,7 +128,7 @@ class CostTracker:
         # Fire-and-forget event emission.
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(
+            task = loop.create_task(
                 event_bus.emit(
                     COST_UPDATED,
                     {
@@ -137,6 +138,8 @@ class CostTracker:
                     },
                 )
             )
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
         except RuntimeError:
             # No running event loop -- skip event emission.
             pass
@@ -298,7 +301,11 @@ class CostTracker:
                 f"${r.compute_cost_usd:.4f}",
                 f"${r.total_usd:.4f}",
                 f"{r.duration_seconds:.1f}s",
-                f"{r.input_tokens + r.output_tokens:,}" if r.input_tokens + r.output_tokens else "-",
+                (
+                    f"{r.input_tokens + r.output_tokens:,}"
+                    if r.input_tokens + r.output_tokens
+                    else "-"
+                ),
             )
 
         # Totals row.

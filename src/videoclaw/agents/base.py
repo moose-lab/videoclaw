@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
 
-class AgentRole(str, Enum):
+class AgentRole(StrEnum):
     DIRECTOR = "director"
     SCRIPTWRITER = "scriptwriter"
     CAMERAMAN = "cameraman"
@@ -16,7 +16,7 @@ class AgentRole(str, Enum):
     PUBLISHER = "publisher"
 
 
-class ReviewVerdict(str, Enum):
+class ReviewVerdict(StrEnum):
     APPROVED = "approved"
     RETRY = "retry"
     MODIFY = "modify"

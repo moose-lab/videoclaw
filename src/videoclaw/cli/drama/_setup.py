@@ -3,16 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
-
 from rich.panel import Panel
 from rich.table import Table
 
 from videoclaw.cli._app import (
-    drama_app,
     configure_logging,
+    drama_app,
     show_banner,
     validate_aspect_ratio,
     validate_language,
@@ -20,24 +19,67 @@ from videoclaw.cli._app import (
 )
 from videoclaw.cli._output import get_console, get_output
 
-
 # ---------------------------------------------------------------------------
 # claw drama new
 # ---------------------------------------------------------------------------
 
 @drama_app.command("new")
 def drama_new(
-    synopsis: Annotated[str, typer.Argument(help="High-level story concept for the drama series.", callback=validate_prompt)],
-    title: Annotated[Optional[str], typer.Option("--title", "-t", help="Series title.")] = None,
-    genre: Annotated[str, typer.Option("--genre", "-g", help="Genre.")] = "drama",
-    episodes: Annotated[int, typer.Option("--episodes", "-n", help="Number of episodes.")] = 5,
-    duration: Annotated[float, typer.Option("--duration", "-d", help="Target seconds per episode.")] = 60.0,
-    style: Annotated[str, typer.Option("--style", "-s", help="Visual style.")] = "cinematic",
-    language: Annotated[str, typer.Option("--lang", "-l", help="Script language (zh/en).", callback=validate_language)] = "zh",
-    aspect_ratio: Annotated[str, typer.Option("--aspect-ratio", "-a", help="Aspect ratio.", callback=validate_aspect_ratio)] = "9:16",
-    model: Annotated[str, typer.Option("--model", "-m", help="Video model id.")] = "seedance-2.0",
-    plan: Annotated[bool, typer.Option("--plan/--no-plan", help="Immediately plan episodes via LLM.")] = False,
-    design_characters: Annotated[bool, typer.Option("--design-characters", help="Generate character reference images after planning.")] = False,
+    synopsis: Annotated[
+        str,
+        typer.Argument(
+            help="High-level story concept for the drama series.",
+            callback=validate_prompt,
+        ),
+    ],
+    title: Annotated[
+        str | None, typer.Option("--title", "-t", help="Series title.")
+    ] = None,
+    genre: Annotated[
+        str, typer.Option("--genre", "-g", help="Genre.")
+    ] = "drama",
+    episodes: Annotated[
+        int, typer.Option("--episodes", "-n", help="Number of episodes.")
+    ] = 5,
+    duration: Annotated[
+        float,
+        typer.Option("--duration", "-d", help="Target seconds per episode."),
+    ] = 60.0,
+    style: Annotated[
+        str, typer.Option("--style", "-s", help="Visual style.")
+    ] = "cinematic",
+    language: Annotated[
+        str,
+        typer.Option(
+            "--lang", "-l",
+            help="Script language (zh/en).",
+            callback=validate_language,
+        ),
+    ] = "zh",
+    aspect_ratio: Annotated[
+        str,
+        typer.Option(
+            "--aspect-ratio", "-a",
+            help="Aspect ratio.",
+            callback=validate_aspect_ratio,
+        ),
+    ] = "9:16",
+    model: Annotated[
+        str, typer.Option("--model", "-m", help="Video model id.")
+    ] = "seedance-2.0",
+    plan: Annotated[
+        bool,
+        typer.Option(
+            "--plan/--no-plan", help="Immediately plan episodes via LLM."
+        ),
+    ] = False,
+    design_characters: Annotated[
+        bool,
+        typer.Option(
+            "--design-characters",
+            help="Generate character reference images after planning.",
+        ),
+    ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Create a new AI short drama series from a concept.
@@ -114,13 +156,41 @@ def drama_new(
 
 @drama_app.command("import")
 def drama_import(
-    script_file: Annotated[str, typer.Argument(help="Path to complete script file (.docx or .txt).")],
-    title: Annotated[Optional[str], typer.Option("--title", "-t", help="Series title.")] = None,
-    genre: Annotated[str, typer.Option("--genre", "-g", help="Genre.")] = "drama",
-    language: Annotated[str, typer.Option("--lang", "-l", help="Script language (zh/en).", callback=validate_language)] = "en",
-    style: Annotated[str, typer.Option("--style", "-s", help="Visual style.")] = "cinematic",
-    aspect_ratio: Annotated[str, typer.Option("--aspect-ratio", "-a", help="Aspect ratio.", callback=validate_aspect_ratio)] = "9:16",
-    model: Annotated[str, typer.Option("--model", "-m", help="Video model (default: seedance-2.0).")] = "seedance-2.0",
+    script_file: Annotated[
+        str,
+        typer.Argument(help="Path to complete script file (.docx or .txt)."),
+    ],
+    title: Annotated[
+        str | None, typer.Option("--title", "-t", help="Series title.")
+    ] = None,
+    genre: Annotated[
+        str, typer.Option("--genre", "-g", help="Genre.")
+    ] = "drama",
+    language: Annotated[
+        str,
+        typer.Option(
+            "--lang", "-l",
+            help="Script language (zh/en).",
+            callback=validate_language,
+        ),
+    ] = "en",
+    style: Annotated[
+        str, typer.Option("--style", "-s", help="Visual style.")
+    ] = "cinematic",
+    aspect_ratio: Annotated[
+        str,
+        typer.Option(
+            "--aspect-ratio", "-a",
+            help="Aspect ratio.",
+            callback=validate_aspect_ratio,
+        ),
+    ] = "9:16",
+    model: Annotated[
+        str,
+        typer.Option(
+            "--model", "-m", help="Video model (default: seedance-2.0)."
+        ),
+    ] = "seedance-2.0",
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Import a complete script and decompose into storyboard shots.
@@ -264,14 +334,24 @@ async def _drama_import_async(
             f"[bold]Episodes:[/bold]      {len(series.episodes)}\n"
             f"[bold]Total Scenes:[/bold]  {sum(len(ep.scenes) for ep in series.episodes)}\n"
             f"[bold]Model:[/bold]         {series.model_id}\n"
-            f"[bold]Consistency:[/bold]   {'verified' if series.consistency_manifest and series.consistency_manifest.verified else 'pending (run design-characters first)'}",
+            f"[bold]Consistency:[/bold]   "
+            + (
+                "verified"
+                if series.consistency_manifest
+                and series.consistency_manifest.verified
+                else "pending (run design-characters first)"
+            ),
             title="[bold green]Script Imported[/bold green]",
             border_style="green",
         )
     )
 
     if series.characters:
-        char_table = Table(title="Characters (from script)", show_header=True, header_style="bold magenta")
+        char_table = Table(
+            title="Characters (from script)",
+            show_header=True,
+            header_style="bold magenta",
+        )
         char_table.add_column("Name", style="cyan")
         char_table.add_column("Description", style="white", max_width=50)
         char_table.add_column("Voice", style="dim")
@@ -300,7 +380,10 @@ async def _drama_import_async(
                 ", ".join(scene.characters_present[:3]),
             )
         console.print(ep_table)
-        console.print(f"  Total duration: {ep.duration_seconds:.0f}s / {len(ep.scenes)} shots")
+        console.print(
+            f"  Total duration: {ep.duration_seconds:.0f}s"
+            f" / {len(ep.scenes)} shots"
+        )
 
     if series.pending_modifications:
         console.print(

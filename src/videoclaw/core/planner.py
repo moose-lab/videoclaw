@@ -9,7 +9,6 @@ from typing import Any
 
 from videoclaw.core.state import ProjectState
 
-
 # ---------------------------------------------------------------------------
 # Task types
 # ---------------------------------------------------------------------------
@@ -215,7 +214,7 @@ def build_dag(project_state: ProjectState) -> DAG:
     dag.add_node(music_node)
 
     # 6. Compose -- waits for all video clips + audio tracks
-    compose_deps = video_node_ids + ["tts", "music"]
+    compose_deps = [*video_node_ids, "tts", "music"]
     compose_node = TaskNode(
         node_id="compose",
         task_type=TaskType.COMPOSE,

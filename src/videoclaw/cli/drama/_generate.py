@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import TYPE_CHECKING, Annotated, Optional
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 
@@ -22,13 +22,12 @@ from rich.progress import (
 )
 
 from videoclaw.cli._app import (
-    drama_app,
     configure_logging,
+    drama_app,
     show_banner,
 )
 from videoclaw.cli._output import get_console, get_output
 from videoclaw.config import get_config
-
 
 # ---------------------------------------------------------------------------
 # claw drama preview-prompts
@@ -38,7 +37,10 @@ from videoclaw.config import get_config
 def drama_preview_prompts(
     series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
     episode: Annotated[int, typer.Option("--episode", "-e", help="Episode number.")] = 1,
-    scene: Annotated[Optional[str], typer.Option("--scene", "-s", help="Show only this scene ID.")] = None,
+    scene: Annotated[
+        str | None,
+        typer.Option("--scene", "-s", help="Show only this scene ID."),
+    ] = None,
     output: Annotated[str, typer.Option("--output", "-o", help="Write prompts to JSON file.")] = "",
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
@@ -120,7 +122,11 @@ def drama_preview_prompts(
         if sc.characters_present:
             console.print(f"[dim]Characters: {', '.join(sc.characters_present)}[/dim]")
         if sc.dialogue:
-            console.print(f'[dim]Dialogue: "{sc.dialogue[:80]}{"…" if len(sc.dialogue) > 80 else ""}"[/dim]')
+            dlg_trunc = sc.dialogue[:80]
+            ellipsis = "\u2026" if len(sc.dialogue) > 80 else ""
+            console.print(
+                f'[dim]Dialogue: "{dlg_trunc}{ellipsis}"[/dim]'
+            )
         console.print(f"\n[green]{sc.visual_prompt}[/green]")
 
     if output:
@@ -146,14 +152,39 @@ def drama_preview_prompts(
 @drama_app.command("run")
 def drama_run(
     series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
-    episode: Annotated[Optional[int], typer.Option("--episode", "-e", help="Run a specific episode number.")] = None,
-    start: Annotated[int, typer.Option("--start", help="Start from episode number.")] = 1,
-    end: Annotated[Optional[int], typer.Option("--end", help="End at episode number.")] = None,
-    budget: Annotated[Optional[float], typer.Option("--budget", "-b", help="Max budget in USD.")] = None,
-    concurrency: Annotated[int, typer.Option("--concurrency", "-c", help="Max parallel tasks.")] = 4,
-    refresh_urls: Annotated[bool, typer.Option("--refresh-urls/--no-refresh-urls", help="Auto-validate and refresh expired character reference URLs before generation.")] = True,
-    max_shots: Annotated[Optional[int], typer.Option("--max-shots", help="Limit video/TTS generation to the first N shots (useful for test runs).")] = None,
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Show execution plan without running.")] = False,
+    episode: Annotated[
+        int | None,
+        typer.Option("--episode", "-e", help="Run a specific episode number."),
+    ] = None,
+    start: Annotated[
+        int, typer.Option("--start", help="Start from episode number.")
+    ] = 1,
+    end: Annotated[
+        int | None, typer.Option("--end", help="End at episode number.")
+    ] = None,
+    budget: Annotated[
+        float | None, typer.Option("--budget", "-b", help="Max budget in USD.")
+    ] = None,
+    concurrency: Annotated[
+        int, typer.Option("--concurrency", "-c", help="Max parallel tasks.")
+    ] = 4,
+    refresh_urls: Annotated[
+        bool,
+        typer.Option(
+            "--refresh-urls/--no-refresh-urls",
+            help="Auto-validate and refresh expired character reference URLs before generation.",
+        ),
+    ] = True,
+    max_shots: Annotated[
+        int | None,
+        typer.Option(
+            "--max-shots",
+            help="Limit video/TTS generation to the first N shots (useful for test runs).",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Show execution plan without running.")
+    ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Run the generation pipeline for drama episodes.
@@ -230,7 +261,10 @@ def drama_run(
         return
 
     try:
-        asyncio.run(_drama_run_async(series, mgr, start, end, budget, concurrency, refresh_urls, max_shots=max_shots))
+        asyncio.run(_drama_run_async(
+            series, mgr, start, end, budget,
+            concurrency, refresh_urls, max_shots=max_shots,
+        ))
     except typer.Exit:
         raise
     except Exception as exc:
@@ -314,7 +348,10 @@ async def _drama_run_async(
             progress.update(task, completed=len(ep.scenes) + 4)
 
         status_style = "green" if ep.status == "completed" else "red"
-        console.print(f"  Status: [{status_style}]{ep.status}[/{status_style}]  Cost: ${ep.cost:.4f}")
+        console.print(
+            f"  Status: [{status_style}]{ep.status}[/{status_style}]"
+            f"  Cost: ${ep.cost:.4f}"
+        )
 
         if series.cost_total >= effective_budget:
             console.print(
@@ -341,9 +378,24 @@ async def _drama_run_async(
 @drama_app.command("regen-shot")
 def drama_regen_shot(
     series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
-    scene: Annotated[str, typer.Option("--scene", "-s", help="Scene ID(s) to regenerate, comma-separated (e.g. ep01_s01,ep01_s03,ep01_s05).")],
-    episode: Annotated[int, typer.Option("--episode", "-e", help="Episode number.")] = 1,
-    recompose: Annotated[bool, typer.Option("--recompose", help="Re-compose and re-render the full episode after regenerating.")] = False,
+    scene: Annotated[
+        str,
+        typer.Option(
+            "--scene", "-s",
+            help="Scene ID(s) to regenerate, comma-separated"
+            " (e.g. ep01_s01,ep01_s03,ep01_s05).",
+        ),
+    ],
+    episode: Annotated[
+        int, typer.Option("--episode", "-e", help="Episode number.")
+    ] = 1,
+    recompose: Annotated[
+        bool,
+        typer.Option(
+            "--recompose",
+            help="Re-compose and re-render the full episode after regenerating.",
+        ),
+    ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Regenerate one or more scene's video and audio assets.
@@ -472,7 +524,8 @@ async def _drama_regen_shot_async(
     all_ok = all(s == "completed" for _, s in results)
     status_style = "green" if all_ok else "red"
     scenes_summary = "\n".join(
-        f"  {sid}: [{'green' if s == 'completed' else 'red'}]{s}[/{'green' if s == 'completed' else 'red'}]"
+        f"  {sid}: [{'green' if s == 'completed' else 'red'}]"
+        f"{s}[/{'green' if s == 'completed' else 'red'}]"
         for sid, s in results
     )
     console.print(

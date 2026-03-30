@@ -20,6 +20,7 @@ from videoclaw.models.llm.litellm_wrapper import LLMClient
 router = APIRouter()
 logger = logging.getLogger(__name__)
 _state_mgr = StateManager()
+_background_tasks: set[asyncio.Task[Any]] = set()
 
 
 class GenerateRequest(BaseModel):
@@ -44,7 +45,7 @@ class GenerateResponse(BaseModel):
 @router.post("/flow", response_model=GenerateResponse)
 async def run_flow(body: FlowRunRequest) -> GenerateResponse:
     """Execute a ClawFlow pipeline from an inline YAML definition."""
-    from videoclaw.flow.parser import parse_flow, FlowValidationError
+    from videoclaw.flow.parser import FlowValidationError, parse_flow
     from videoclaw.flow.runner import FlowRunner
 
     try:
@@ -61,7 +62,9 @@ async def run_flow(body: FlowRunRequest) -> GenerateResponse:
         except Exception:
             logger.exception("Flow failed for project %s", ps.project_id)
 
-    asyncio.create_task(_run_flow_bg())
+    task = asyncio.create_task(_run_flow_bg())
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
     return GenerateResponse(
         project_id=ps.project_id,
@@ -77,7 +80,9 @@ async def start_generation(body: GenerateRequest) -> GenerateResponse:
     ps = _state_mgr.create_project(prompt=body.prompt)
 
     # Launch the pipeline in background
-    asyncio.create_task(_run_pipeline(ps, body, cfg))
+    task = asyncio.create_task(_run_pipeline(ps, body, cfg))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
     return GenerateResponse(
         project_id=ps.project_id,

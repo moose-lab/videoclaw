@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 
-from videoclaw.core.events import EventBus, event_bus as default_event_bus
+from videoclaw.core.events import EventBus
+from videoclaw.core.events import event_bus as default_event_bus
 from videoclaw.core.executor import DAGExecutor, NodeHandler
 from videoclaw.core.planner import DAG, TaskNode, TaskType
 from videoclaw.core.state import ProjectState, StateManager

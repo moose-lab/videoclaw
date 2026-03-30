@@ -9,15 +9,14 @@ quality rules, and genre mappings.  Pipeline components call
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 from videoclaw.drama.models import (
     DramaGenre,
     LineType,
     VoiceProfile,
 )
-
 
 # ---------------------------------------------------------------------------
 # Subtitle configuration
@@ -142,12 +141,16 @@ def _register_zh_locale() -> None:
         EPISODE_SCRIPT_PROMPT,
         SERIES_OUTLINE_PROMPT,
     )
+    from videoclaw.drama.quality import validate_chinese_quality
     from videoclaw.generation.audio.voice_caster import (
         DIALOGUE_EXTRACTION_PROMPT as ZH_DIALOGUE_EXTRACTION_PROMPT,
+    )
+    from videoclaw.generation.audio.voice_caster import (
         GENRE_ANALYSIS_PROMPT as ZH_GENRE_ANALYSIS_PROMPT,
+    )
+    from videoclaw.generation.audio.voice_caster import (
         VOICE_CASTING_PROMPT as ZH_VOICE_CASTING_PROMPT,
     )
-    from videoclaw.drama.quality import validate_chinese_quality
 
     zh_subtitle_config = SubtitleConfig(
         font_name="Microsoft YaHei",
@@ -329,7 +332,8 @@ Given a concept, produce a complete series outline with character profiles and p
 - The logline is the north star: every episode must deliver a beat that pays it off.
 
 ## Western Character Archetypes (with Hidden-Identity Contrast)
-- Protagonists need a "contrast identity" — the gap between surface persona and true self IS the show:
+- Protagonists need a "contrast identity" — the gap between surface
+  persona and true self IS the show:
   * Underdog / secret billionaire
   * Quiet neighbor / former special-forces operative
   * Mousy assistant / ruthless heiress
@@ -339,7 +343,8 @@ Given a concept, produce a complete series outline with character profiles and p
   a catchphrase, a recurring gesture, a visual motif.
 - Relationships must form a TRIANGLE OF TENSION — at minimum one love-rival, one power-rival,
   or one secret-keeper triangle.
-- Antagonists need comprehensible motives — pure evil is boring; wounded pride or desperation is compelling.
+- Antagonists need comprehensible motives — pure evil is boring;
+  wounded pride or desperation is compelling.
 
 ## 5-Act Micro-Episode Structure (for 30-90s episodes)
 - Act 1 — HOOK (0-5s): Scroll-stopping image or line of dialogue. Zero setup.
@@ -351,18 +356,22 @@ Given a concept, produce a complete series outline with character profiles and p
 ## Payoff Beats Every 15 Seconds
 - Every 15 seconds must deliver a PAYOFF BEAT — a reversal, reveal, confrontation, or declaration.
 - Beat types: rotate to prevent fatigue:
-  Intelligence / out-thinking the villain -> Emotional eruption -> Identity reveal -> Demonstration of power
+  Intelligence/out-thinking villain -> Emotional eruption ->
+  Identity reveal -> Demonstration of power
 - Episode 1 is beat-dense (one every 10s); later episodes may breathe more to build depth.
 
 ## Emotional Rhythm Curve
-- Each episode follows: Hook(0-5s) -> Build(5-15s) -> Escalate(15-35s) -> Peak(35-50s) -> Hook-next(50-60s)
+- Each episode follows: Hook(0-5s) -> Build(5-15s) ->
+  Escalate(15-35s) -> Peak(35-50s) -> Hook-next(50-60s)
 - Episode-to-episode contrast: tense -> tender -> shocking -> sweet -> devastating
-- Overall series arc: emotional intensity RISES through the penultimate episode, which is the darkest
+- Overall series arc: emotional intensity RISES through the
+  penultimate episode, which is the darkest
   moment before the finale's catharsis.
 
 ## Cliffhanger Ladder
 - Each episode's cliffhanger must be STRONGER than the previous one.
-- Cliffhanger progression: Curiosity ("Who is she?") -> Dread ("What will he do?") -> Shock ("Impossible!")
+- Cliffhanger progression: Curiosity ("Who is she?") ->
+  Dread ("What will he do?") -> Shock ("Impossible!")
 - Never use "unresolved = cliffhanger" laziness — every cliffhanger must carry emotional weight.
 
 # Output Rules
@@ -378,8 +387,10 @@ Output JSON schema:
   "characters": [
     {
       "name": "<Character name>",
-      "description": "<English: surface identity / hidden identity, personality contrast, core motivation, triangle-of-tension role, signature moment>",
-      "visual_prompt": "<ENGLISH ONLY — PURE appearance: age, gender, body type, face features, hair style/color, clothing, accessories, distinctive marks. Do NOT include camera angles, lighting, or background.>",
+      "description": "<English: surface/hidden identity, personality,
+        core motivation, triangle-of-tension role, signature moment>",
+      "visual_prompt": "<ENGLISH ONLY — appearance: age, gender, body,
+        face, hair, clothing, accessories. No camera/lighting/BG.>",
       "voice_style": "<warm | authoritative | playful | dramatic | calm>"
     }
   ],
@@ -388,7 +399,7 @@ Output JSON schema:
       "number": <int>,
       "title": "<Episode title in English — 3-7 words, contains suspense or emotional keyword>",
       "synopsis": "<English: 2-3 sentences, mark each payoff beat and its type>",
-      "opening_hook": "<English: one sentence describing the first 3 seconds' visual or emotional hook>",
+      "opening_hook": "<English: first 3 seconds' visual/emotional hook>",
       "duration_seconds": <float>
     }
   ]
@@ -408,9 +419,11 @@ TikTok / YouTube Shorts / Instagram Reels (9:16 vertical video, 30-90 seconds).
 # Vertical Composition Rules (9:16)
 - Subjects' faces belong in the upper third — that is the viewer's eye anchor on a phone screen.
 - Single tight close-ups outperform group wide shots — detail beats spectacle on vertical.
-- Shot distribution: close_up + medium_close >= 50% of all scenes (real data: 59% in professional scripts).
+- Shot distribution: close_up + medium_close >= 50% of all scenes
+  (real data: 59% in professional scripts).
 - wide / extreme_wide <= 15% of scenes — use only for scene-setting or contrast.
-- Avoid lateral camera moves (pan_left / pan_right) — ineffective on vertical; prefer dolly_in and crane_up.
+- Avoid lateral camera moves (pan_left / pan_right) — ineffective
+  on vertical; prefer dolly_in and crane_up.
 
 # Shot Scale vs. Narrative Beat
 - establishing -> wide / extreme_wide: scene opening, location change, scale reveal
@@ -446,27 +459,33 @@ TikTok / YouTube Shorts / Instagram Reels (9:16 vertical video, 30-90 seconds).
   Each shot = one Seedance video generation call.
 - Each shot duration_seconds MUST be between 5 and 15 seconds (video model hard limit).
 - ALL scene duration_seconds MUST NOT exceed the target episode maximum duration.
-- Merge fine-grained actions into composite shots — e.g. "character speaks, then reacts" = 1 shot, not 2.
+- Merge fine-grained actions into composite shots —
+  e.g. "character speaks, then reacts" = 1 shot, not 2.
   A single shot can contain multiple beats: dialogue + reaction + camera movement.
-- Rhythm template: Hook(0-5s) -> Build(5-15s) -> Escalate(15-35s) -> Peak(35-50s) -> Cliffhanger(50-60s)
+- Rhythm template: Hook(0-5s) -> Build(5-15s) ->
+  Escalate(15-35s) -> Peak(35-50s) -> Cliffhanger(50-60s)
 - Climax scenes: 5-6s (fast cuts). Setup/dialogue scenes: 8-12s each.
 - First scene = visual hook or pickup from previous episode's cliffhanger.
 - Last scene = MUST manufacture a cliffhanger.
 
 # Dialogue and Voice-Over
-- Total spoken words ~100-170 for a 60s episode (real data benchmark: ~98 words/min dialogue + ~19% V.O.).
+- Total spoken words ~100-170 for a 60s episode
+  (benchmark: ~98 words/min dialogue + ~19% V.O.).
 - Dialogue must be punchy — short sentences, natural American English, emotional power.
   Single line <= 25 words. No exposition dumps.
-- Voice-over (V.O.) <= 20% of total spoken words — used for flashback, internal thought, or story setup.
+- Voice-over (V.O.) <= 20% of total spoken words —
+  used for flashback, internal thought, or story setup.
 - Not every scene needs dialogue — a wordless close-up of a trembling hand can be more powerful.
 - speaking_character must match a name in characters_present.
 
 # Inner Monologue (VO / Internal Thought)
 - Inner monologue is a Western staple: first-person internal narration spoken by the character.
 - Mark as dialogue_line_type: "inner_monologue"
-- Trigger cues: character stares into distance / frozen moment / ironic counterpoint to action on screen
+- Trigger cues: character stares into distance / frozen moment /
+  ironic counterpoint to action on screen
 - Rendered as VO with light reverb to signal "brain voice" — distinct from dialogue AND narrator.
-- Typical markers in script notes: "(VO)", "(INTERNAL)", "(THINKS)" — include these in dialogue text.
+- Typical markers in script notes: "(VO)", "(INTERNAL)", "(THINKS)"
+  — include these in dialogue text.
 
 # TikTok Platform Audience Constraints (LOWER priority than script fidelity)
 - Priority order: script requirements > platform aesthetics. If the script explicitly
@@ -486,11 +505,13 @@ TikTok / YouTube Shorts / Instagram Reels (9:16 vertical video, 30-90 seconds).
   REPEAT the SAME character appearance keywords in EVERY scene for cross-shot consistency.
 - Action: Use PRESENT TENSE verbs ("walks", "turns", "stares") — activates the motion engine.
   Include physics-aware detail: "fabric catching air", "weight shifting", "fingers trembling".
-- Camera: Already handled by shot_scale + camera_movement fields — do NOT duplicate in visual_prompt.
+- Camera: Already handled by shot_scale + camera_movement fields
+  — do NOT duplicate in visual_prompt.
 - Style: ONE strong visual anchor (e.g. "Fincher-style overcast palette" or "golden hour backlight")
   plus lighting description (soft key, dramatic shadows, cold blue moonlight, neon glow).
 - Keep visual_prompt to 60-120 words (Seedance sweet spot). Never exceed 200 words.
-- Include sound cue words when relevant ("metallic clink", "muffled reverb") — triggers native audio.
+- Include sound cue words when relevant
+  ("metallic clink", "muffled reverb") — triggers native audio.
 - Be concrete and sensory — never use abstract or emotional adjectives alone.
 
 # Output Rules
@@ -506,19 +527,19 @@ Output JSON schema:
     {
       "scene_id": "<e.g. ep01_s01>",
       "description": "<English scene description: who, where, what, emotional state>",
-      "visual_prompt": "<ENGLISH ONLY — [setting] + [character full appearance] + [action/expression] + [lighting/mood]. Be specific and visual.>",
-      "camera_movement": "<static | pan_left | pan_right | dolly_in | tracking | crane_up | handheld>",
+      "visual_prompt": "<EN — [setting]+[character]+[action]+[lighting]>",
+      "camera_movement": "<static|pan_left|pan_right|dolly_in|tracking|crane_up|handheld>",
       "duration_seconds": <float>,
       "dialogue": "<English character line — punchy, natural, max 25 words. Empty string if none.>",
-      "dialogue_line_type": "<dialogue | inner_monologue — spoken exchange is 'dialogue'; character's internal thought is 'inner_monologue'; leave empty if no dialogue>",
+      "dialogue_line_type": "<dialogue|inner_monologue — leave empty if no dialogue>",
       "narration": "<English narrator voice-over. Empty string if none.>",
-      "speaking_character": "<Character name — must be in characters_present. Empty string if none.>",
+      "speaking_character": "<Character name — must be in characters_present>",
       "shot_scale": "<close_up | medium_close | medium | wide | extreme_wide>",
       "shot_type": "<establishing | reaction | action | detail | pov>",
       "emotion": "<precise term from emotion vocabulary above>",
       "characters_present": ["<list of character names visible in this scene>"],
       "transition": "<cut | dissolve | fade_in | fade_out | wipe | match_cut | jump_cut>",
-      "sfx": "<key sound effect for this shot, e.g. door slam, heartbeat pulse. Empty string if none.>"
+      "sfx": "<key sound effect, e.g. door slam. Empty if none.>"
     }
   ],
   "voice_over": {
@@ -531,7 +552,8 @@ Output JSON schema:
     "mood": "<tense | romantic | mysterious | triumphant | melancholy | epic>",
     "tempo": <BPM int>
   },
-  "cliffhanger": "<English cliffhanger — one sentence that makes NOT watching the next episode feel impossible>"
+  "cliffhanger": "<English cliffhanger — one sentence making next
+    episode feel unmissable>"
 }
 """
 
@@ -559,7 +581,8 @@ Output JSON schema:
 
 EN_VOICE_CASTING_PROMPT: str = """\
 You are a professional short-drama voice director specialising in English-language TTS casting.
-Based on the episode's character profiles and genre, assign the most suitable voice configuration to each character.
+Based on the episode's character profiles and genre, assign the most
+suitable voice configuration to each character.
 
 Available voice_id options:
 - en-US-JennyNeural: Warm, friendly female
@@ -602,7 +625,8 @@ Classify each line of scene text into one of the following types:
 
 - narration: Narrator voice-over describing the scene
 - dialogue: Spoken lines by a character
-- inner_monologue: Internal thought (markers: "VO", "(V.O.)", "(O.S.)", internal first-person thought)
+- inner_monologue: Internal thought (markers: "VO", "(V.O.)",
+  "(O.S.)", internal first-person thought)
 
 For each line, annotate the speaking character, line type, and emotion hint.
 If a scene contains neither dialogue nor narration, skip it.

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.panel import Panel
 from rich.table import Table
 
-from videoclaw.cli._app import template_app, resolve_templates_dir
+from videoclaw.cli._app import resolve_templates_dir, template_app
 from videoclaw.cli._output import get_console, get_output
 
 
@@ -67,7 +67,10 @@ def template_list() -> None:
 @template_app.command("use")
 def template_use(
     name: Annotated[str, typer.Argument(help="Template name (without extension).")],
-    prompt: Annotated[Optional[str], typer.Option("--prompt", "-p", help="Override the default prompt.")] = None,
+    prompt: Annotated[
+        str | None,
+        typer.Option("--prompt", "-p", help="Override the default prompt."),
+    ] = None,
 ) -> None:
     """Generate a video using a predefined flow template."""
     console = get_console()

@@ -13,7 +13,6 @@ import logging
 import time
 from collections.abc import AsyncIterator
 
-
 from videoclaw.models.protocol import (
     ExecutionMode,
     GenerationRequest,

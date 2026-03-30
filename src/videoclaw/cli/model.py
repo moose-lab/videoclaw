@@ -28,7 +28,10 @@ def model_list() -> None:
     models = registry.list_models()
     if not models:
         console.print("[yellow]No model adapters registered.[/yellow]")
-        console.print("Adapters are auto-discovered via the [cyan]videoclaw.adapters[/cyan] entry-point group.")
+        console.print(
+            "Adapters are auto-discovered via the"
+            " [cyan]videoclaw.adapters[/cyan] entry-point group."
+        )
         out.set_result({"models": []})
         out.emit()
         return

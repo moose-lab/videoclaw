@@ -73,6 +73,7 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]  # Chinese characters are intentional
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

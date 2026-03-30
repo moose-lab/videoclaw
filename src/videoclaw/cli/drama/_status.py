@@ -11,7 +11,6 @@ from rich.table import Table
 from videoclaw.cli._app import drama_app
 from videoclaw.cli._output import get_console, get_output
 
-
 # ---------------------------------------------------------------------------
 # claw drama list
 # ---------------------------------------------------------------------------

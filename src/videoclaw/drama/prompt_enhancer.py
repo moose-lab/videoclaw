@@ -124,7 +124,10 @@ _CLIFFHANGER_MODIFIERS = (
 # Scene continuity hints for adjacent shots
 # ---------------------------------------------------------------------------
 
-_CONTINUITY_PREFIX = "Continuing seamlessly from the previous shot — same location, same lighting, consistent character positions."
+_CONTINUITY_PREFIX = (
+    "Continuing seamlessly from the previous shot"
+    " — same location, same lighting, consistent character positions."
+)
 
 
 # ---------------------------------------------------------------------------

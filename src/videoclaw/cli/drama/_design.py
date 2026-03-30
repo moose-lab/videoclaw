@@ -1,4 +1,4 @@
-"""``claw drama design-characters``, ``refresh-urls``, ``design-scenes``, ``assign-voices`` commands."""
+"""``design-characters``, ``refresh-urls``, ``design-scenes``, ``assign-voices``."""
 
 from __future__ import annotations
 
@@ -14,11 +14,10 @@ from rich.panel import Panel
 from rich.table import Table
 
 from videoclaw.cli._app import (
-    drama_app,
     configure_logging,
+    drama_app,
 )
 from videoclaw.cli._output import get_console, get_output
-
 
 # ---------------------------------------------------------------------------
 # claw drama design-characters
@@ -27,7 +26,9 @@ from videoclaw.cli._output import get_console, get_output
 @drama_app.command("design-characters")
 def drama_design_characters(
     series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
-    force: Annotated[bool, typer.Option("--force", "-f", help="Regenerate existing images.")] = False,
+    force: Annotated[
+        bool, typer.Option("--force", "-f", help="Regenerate existing images.")
+    ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Generate reference images for characters in a drama series."""
@@ -107,7 +108,10 @@ async def _design_characters_async(series: DramaSeries, mgr: DramaManager, force
 @drama_app.command("refresh-urls")
 def drama_refresh_urls(
     series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
-    force: Annotated[bool, typer.Option("--force", "-f", help="Force refresh all URLs, even valid ones.")] = False,
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Force refresh all URLs, even valid ones."),
+    ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Refresh character reference image HTTPS URLs.
@@ -136,7 +140,10 @@ def drama_refresh_urls(
         raise typer.Exit(code=1)
 
     if not series.characters:
-        console.print("[yellow]No characters found. Run `claw drama design-characters` first.[/yellow]")
+        console.print(
+            "[yellow]No characters found."
+            " Run `claw drama design-characters` first.[/yellow]"
+        )
         out.set_error("No characters found.")
         out.emit()
         raise typer.Exit(code=1)
@@ -203,7 +210,9 @@ async def _refresh_urls_async(
 @drama_app.command("design-scenes")
 def drama_design_scenes(
     series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
-    force: Annotated[bool, typer.Option("--force", "-f", help="Regenerate existing images.")] = False,
+    force: Annotated[
+        bool, typer.Option("--force", "-f", help="Regenerate existing images.")
+    ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Generate reference images for unique scene locations in a drama series."""
@@ -293,7 +302,10 @@ async def _design_scenes_async(series: DramaSeries, mgr: DramaManager, force: bo
             )
         console.print(ptable)
 
-    console.print(f"\n[bold green]Asset design complete: {len(locations)} locations, {len(props)} props[/bold green]")
+    console.print(
+        f"\n[bold green]Asset design complete:"
+        f" {len(locations)} locations, {len(props)} props[/bold green]"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -303,7 +315,10 @@ async def _design_scenes_async(series: DramaSeries, mgr: DramaManager, force: bo
 @drama_app.command("assign-voices")
 def drama_assign_voices(
     series_id: Annotated[str, typer.Argument(help="Drama series ID.")],
-    force: Annotated[bool, typer.Option("--force", "-f", help="Re-assign voices even if already set.")] = False,
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Re-assign voices even if already set."),
+    ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Assign TTS voice profiles to all characters in a drama series."""
@@ -360,7 +375,10 @@ def drama_assign_voices(
         })
 
     console.print(table)
-    console.print(f"\n[bold green]Voices assigned for {len(series.characters)} characters in {series_id}[/bold green]")
+    console.print(
+        f"\n[bold green]Voices assigned for"
+        f" {len(series.characters)} characters in {series_id}[/bold green]"
+    )
 
     out.set_result({"series_id": series_id, "voices": voices_data})
     out.emit()

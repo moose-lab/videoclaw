@@ -13,12 +13,12 @@ from typing import Any
 
 from videoclaw.config import get_config
 from videoclaw.drama.models import (
+    NARRATOR_PRESETS,
     DialogueLine,
     DramaGenre,
     DramaSeries,
     Episode,
     LineType,
-    NARRATOR_PRESETS,
     VoiceProfile,
 )
 from videoclaw.models.llm.litellm_wrapper import LLMClient
@@ -153,7 +153,10 @@ class VoiceCaster:
 
         raw = await llm.chat(
             messages=[
-                {"role": "system", "content": locale.genre_analysis_prompt or GENRE_ANALYSIS_PROMPT},
+                {
+                    "role": "system",
+                    "content": locale.genre_analysis_prompt or GENRE_ANALYSIS_PROMPT,
+                },
                 {"role": "user", "content": user_message},
             ],
         )
@@ -288,7 +291,10 @@ class VoiceCaster:
 
             raw = await llm.chat(
                 messages=[
-                    {"role": "system", "content": locale.dialogue_extraction_prompt or DIALOGUE_EXTRACTION_PROMPT},
+                    {
+                        "role": "system",
+                        "content": locale.dialogue_extraction_prompt or DIALOGUE_EXTRACTION_PROMPT,
+                    },
                     {"role": "user", "content": f"{user_prefix}\n{scene_text}"},
                 ],
             )

@@ -14,7 +14,7 @@ import uuid
 from typing import Any
 
 from videoclaw.config import get_config
-from videoclaw.core.events import event_bus, TASK_STARTED, TASK_COMPLETED
+from videoclaw.core.events import TASK_COMPLETED, TASK_STARTED, event_bus
 from videoclaw.core.state import ProjectState, Shot, ShotStatus
 from videoclaw.models.llm.litellm_wrapper import LLMClient
 
@@ -52,7 +52,9 @@ Output JSON schema:
       "description": "<detailed visual description for AI generation>",
       "duration": <seconds as float>,
       "visual_style": "<e.g. cinematic, anime, photorealistic, watercolor>",
-      "camera_movement": "<static | pan_left | pan_right | tilt_up | tilt_down | dolly_in | dolly_out | zoom_in | zoom_out | tracking | crane_up | crane_down | handheld>"
+      "camera_movement": "<static|pan_left|pan_right|tilt_up|
+        tilt_down|dolly_in|dolly_out|zoom_in|zoom_out|
+        tracking|crane_up|crane_down|handheld>"
     }
   ],
   "voice_over": {

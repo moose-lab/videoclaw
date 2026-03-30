@@ -117,7 +117,11 @@ def config_check() -> None:
         dir_ok = cfg.projects_dir.exists() and os.access(cfg.projects_dir, os.W_OK)
     except Exception:
         dir_ok = False
-    table.add_row("Projects directory writable", status_icon(dir_ok), str(cfg.projects_dir.resolve()))
+    table.add_row(
+        "Projects directory writable",
+        status_icon(dir_ok),
+        str(cfg.projects_dir.resolve()),
+    )
     checks["projects_dir"] = {"ok": dir_ok}
 
     # FFmpeg
@@ -156,7 +160,11 @@ def config_check() -> None:
 
     # Image generation key (for character/scene references)
     img_ok = bool(cfg.google_api_key or cfg.evolink_api_key or cfg.byteplus_api_key)
-    table.add_row("Image generation API key", status_icon(img_ok), "needed for character/scene references")
+    table.add_row(
+        "Image generation API key",
+        status_icon(img_ok),
+        "needed for character/scene references",
+    )
     checks["image_api_key"] = {"ok": img_ok}
 
     console.print(table)
@@ -165,7 +173,11 @@ def config_check() -> None:
     if all_ok:
         console.print("\n[bold green]All checks passed. Ready for video generation.[/bold green]")
     else:
-        console.print("\n[yellow]Some checks failed. Set missing API keys via environment variables (VIDEOCLAW_*) or .env file.[/yellow]")
+        console.print(
+            "\n[yellow]Some checks failed. Set missing API keys"
+            " via environment variables (VIDEOCLAW_*)"
+            " or .env file.[/yellow]"
+        )
 
     out.set_result({"checks": checks, "all_ok": all_ok})
     out.emit()

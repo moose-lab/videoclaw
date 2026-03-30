@@ -6,22 +6,21 @@ The entry point ``claw = "videoclaw.cli:app"`` in ``pyproject.toml``
 resolves to the ``app`` instance exported here.
 """
 
-from videoclaw.cli._app import app  # noqa: F401
-
-# Import command modules to trigger Typer command registration.
-import videoclaw.cli.generate  # noqa: F401
-import videoclaw.cli.doctor  # noqa: F401
-import videoclaw.cli.info  # noqa: F401
-import videoclaw.cli.model  # noqa: F401
-import videoclaw.cli.project  # noqa: F401
-import videoclaw.cli.template  # noqa: F401
-import videoclaw.cli.flow  # noqa: F401
-import videoclaw.cli.drama  # noqa: F401
-import videoclaw.cli.config_cmd  # noqa: F401
-import videoclaw.cli.stage  # noqa: F401
-
 # Version command (lightweight, lives here directly).
 import videoclaw
+import videoclaw.cli.config_cmd
+import videoclaw.cli.doctor
+import videoclaw.cli.drama
+import videoclaw.cli.flow
+
+# Import command modules to trigger Typer command registration.
+import videoclaw.cli.generate
+import videoclaw.cli.info
+import videoclaw.cli.model
+import videoclaw.cli.project
+import videoclaw.cli.stage
+import videoclaw.cli.template
+from videoclaw.cli._app import app
 from videoclaw.cli._output import get_console, get_output
 
 

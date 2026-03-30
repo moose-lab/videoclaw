@@ -18,13 +18,13 @@ from typing import Any
 import httpx
 
 from videoclaw.models.adapters.base import BaseCloudVideoAdapter
-from videoclaw.utils import resolve_credential
 from videoclaw.models.protocol import (
     GenerationRequest,
     GenerationResult,
     ModelCapability,
     ProgressEvent,
 )
+from videoclaw.utils import resolve_credential
 
 logger = logging.getLogger(__name__)
 

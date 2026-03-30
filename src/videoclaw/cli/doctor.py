@@ -15,7 +15,6 @@ from videoclaw.cli._output import get_console, get_output
 from videoclaw.config import get_config
 
 
-
 @app.command()
 def doctor() -> None:
     """Run system health checks and report status."""

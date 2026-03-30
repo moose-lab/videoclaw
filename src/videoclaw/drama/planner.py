@@ -16,8 +16,9 @@ import json
 import logging
 import math
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from videoclaw.config import get_config
 from videoclaw.drama.models import (
@@ -41,7 +42,9 @@ logger = logging.getLogger(__name__)
 
 _CJK_RE = re.compile(r'[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7ff]')
 
-def _min_duration_for_dialogue(dialogue: str, max_cjk_cps: float = 3.5, max_en_wps: float = 2.5) -> float:
+def _min_duration_for_dialogue(
+    dialogue: str, max_cjk_cps: float = 3.5, max_en_wps: float = 2.5,
+) -> float:
     """Return the minimum shot duration (seconds) needed for natural speech pacing.
 
     Chinese (CJK-dominant) text uses chars-per-second; English uses words-per-second.
@@ -196,7 +199,7 @@ Output JSON schema:
     {
       "name": "<中文角色名>",
       "description": "<中文：表面身份/隐藏身份、性格反差、核心动机、与其他角色的三角关系、记忆点>",
-      "visual_prompt": "<ENGLISH ONLY — PURE appearance: age, gender, body type, face features, hair style/color, clothing, accessories, distinctive marks. Do NOT include camera angles, lighting, or background.>",
+      "visual_prompt": "<EN — age, gender, body, face, hair, clothing. No camera/BG.>",
       "voice_style": "<warm | authoritative | playful | dramatic | calm>"
     }
   ],
@@ -325,23 +328,23 @@ Output JSON schema:
     {
       "scene_id": "<e.g. ep01_s01>",
       "description": "<中文场景描述：谁在哪里做什么，情绪状态>",
-      "visual_prompt": "<ENGLISH ONLY — [setting] + [character full appearance] + [action/expression] + [lighting/mood]. Be specific and visual.>",
-      "camera_movement": "<static | pan_left | pan_right | dolly_in | tracking | crane_up | handheld>",
+      "visual_prompt": "<EN — [setting]+[character]+[action]+[lighting]>",
+      "camera_movement": "<static|pan_left|pan_right|dolly_in|tracking|crane_up|handheld>",
       "duration_seconds": <float, 5-15>,
       "dialogue": "<中文角色对白，短句口语化，无则留空>",
-      "dialogue_line_type": "<dialogue | inner_monologue — 角色间对白为dialogue，内心独白(第一人称OS/心理活动)为inner_monologue，无对白则留空>",
+      "dialogue_line_type": "<dialogue|inner_monologue — 对白/内心独白，无则留空>",
       "narration": "<中文旁白，无则留空>",
-      "narration_type": "<voiceover | title_card — 语音旁白为voiceover，纯视觉文字(时间跳转/地点标注)为title_card，默认voiceover>",
-      "speaking_character": "<说话角色名，必须在 characters_present 中，无则留空>",
-      "shot_scale": "<close_up | medium_close | medium | wide | extreme_wide>",
-      "shot_type": "<establishing | reaction | action | detail | pov>",
+      "narration_type": "<voiceover|title_card — 语音旁白/纯视觉文字，默认voiceover>",
+      "speaking_character": "<说话角色名，必须在characters_present中，无则留空>",
+      "shot_scale": "<close_up|medium_close|medium|wide|extreme_wide>",
+      "shot_type": "<establishing|reaction|action|detail|pov>",
       "emotion": "<从情绪词表中选择精确词汇>",
       "characters_present": ["<本场景出镜的角色名列表>"],
-      "transition": "<cut | dissolve | fade_in | fade_out | wipe | match_cut | jump_cut>",
-      "sfx": "<此镜头关键音效，如：门声、脚步声、雷鸣。无则留空>",
-      "time_of_day": "<morning|day|evening|night|unspecified — 从场景语境推断，保持同场景内一致>",
-      "scene_group": "<A|B|C|... — 剧本位置区块标签，同一物理地点的镜头应相同，如 A=泳池边 B=水下 C=走廊>",
-      "shot_role": "<hook|normal|cliffhanger — 第一个镜头=hook，最后一个镜头=cliffhanger，其余=normal>"
+      "transition": "<cut|dissolve|fade_in|fade_out|wipe|match_cut|jump_cut>",
+      "sfx": "<此镜头关键音效，如：门声、脚步声。无则留空>",
+      "time_of_day": "<morning|day|evening|night|unspecified — 从场景推断>",
+      "scene_group": "<A|B|C|... — 同一物理地点镜头相同>",
+      "shot_role": "<hook|normal|cliffhanger>"
     }
   ],
   "voice_over": {
@@ -449,7 +452,7 @@ If you notice any of the following gaps, report them in the "detected_gaps" arra
           "dialogue": "<EXACT dialogue from script, original language>",
           "dialogue_line_type": "<dialogue|inner_monologue>",
           "narration": "<narration text if any, otherwise empty>",
-          "narration_type": "<voiceover|title_card — spoken narration is voiceover, visual-only text (time jumps, location cards) is title_card, default voiceover>",
+          "narration_type": "<voiceover|title_card — spoken=voiceover, visual-only=title_card>",
           "speaking_character": "<character name from script>",
           "shot_scale": "<close_up|medium_close|medium|wide|extreme_wide>",
           "shot_type": "<establishing|reaction|action|detail|pov>",
@@ -458,8 +461,8 @@ If you notice any of the following gaps, report them in the "detected_gaps" arra
           "transition": "<cut|dissolve|fade_in|fade_out|match_cut>",
           "sfx": "<sound effects implied by the script>",
           "time_of_day": "<morning|day|evening|night|unspecified — infer from script context>",
-          "scene_group": "<A|B|C|... — location block label, e.g. A=poolside B=underwater C=corridor>",
-          "shot_role": "<hook|normal|cliffhanger — first shot=hook, last shot=cliffhanger, rest=normal>"
+          "scene_group": "<A|B|C|... — location block label>",
+          "shot_role": "<hook|normal|cliffhanger>"
         }
       ]
     }
@@ -505,7 +508,11 @@ class DramaPlanner:
 
         Populates the series with characters and episode synopses.
         """
-        logger.info("Planning series: %r (%d episodes)", series.title or series.synopsis[:40], series.total_episodes)
+        logger.info(
+            "Planning series: %r (%d episodes)",
+            series.title or series.synopsis[:40],
+            series.total_episodes,
+        )
         series.status = DramaStatus.PLANNING
 
         llm = self._ensure_llm()
@@ -677,7 +684,9 @@ class DramaPlanner:
         series: DramaSeries,
         script_text: str,
         *,
-        confirm_callback: Callable[[list[ScriptModification]], list[ScriptModification]] | None = None,
+        confirm_callback: (
+            Callable[[list[ScriptModification]], list[ScriptModification]] | None
+        ) = None,
     ) -> DramaSeries:
         """Import a complete, finalized script and decompose it into shots.
 
@@ -867,7 +876,9 @@ class DramaPlanner:
         series: DramaSeries,
         operation: str,
         *,
-        confirm_callback: Callable[[list[ScriptModification]], list[ScriptModification]] | None = None,
+        confirm_callback: (
+            Callable[[list[ScriptModification]], list[ScriptModification]] | None
+        ) = None,
     ) -> bool:
         """Check if a modification is allowed on a locked script.
 

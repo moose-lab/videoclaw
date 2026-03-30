@@ -11,10 +11,14 @@ from __future__ import annotations
 import io
 import logging
 from pathlib import Path
-from typing import NamedTuple, Protocol, runtime_checkable
+from typing import ClassVar, NamedTuple, Protocol, runtime_checkable
 
 from videoclaw.drama.models import (
-    AudioSegment, AudioType, DialogueLine, LineType, VoiceProfile,
+    AudioSegment,
+    AudioType,
+    DialogueLine,
+    LineType,
+    VoiceProfile,
 )
 
 logger = logging.getLogger(__name__)
@@ -96,13 +100,13 @@ EMOTION_VOICE_MAP: dict[str, EmotionParams] = {
     # --- romance group → happy ---
     "sweet":     EmotionParams("happy",      0.0,   2,  0.0,  breathiness=0.1),
     "flirty":    EmotionParams("happy",      0.08,  2,  0.1),
-    "blissful":  EmotionParams("happy",     -0.05,  1, -0.05, pause_before_ms=100, breathiness=0.15),
+    "blissful":  EmotionParams("happy", -0.05, 1, -0.05, pause_before_ms=100, breathiness=0.15),
     "intimate":  EmotionParams("happy",     -0.10,  0, -0.15, pause_before_ms=200, breathiness=0.4),
     # --- fear group → fearful ---
     "fear":      EmotionParams("fearful",    0.05,  1,  0.0,  pause_before_ms=100, breathiness=0.1),
     "panic":     EmotionParams("fearful",    0.15,  3,  0.2),
     "horror":    EmotionParams("fearful",   -0.05,  2,  0.15, pause_before_ms=600, breathiness=0.4),
-    "uneasy":    EmotionParams("fearful",    0.0,   0, -0.05, pause_before_ms=150, breathiness=0.05),
+    "uneasy":    EmotionParams("fearful", 0.0, 0, -0.05, pause_before_ms=150, breathiness=0.05),
     # --- triumph group → happy ---
     "triumphant": EmotionParams("happy",     0.08, -1,  0.25),
     "smug":      EmotionParams("happy",      0.05,  0,  0.1,  pause_before_ms=200),
@@ -267,7 +271,7 @@ class EdgeTTSProvider:
     """
 
     # Curated subset of high-quality neural voices
-    AVAILABLE_VOICES: dict[str, list[str]] = {
+    AVAILABLE_VOICES: ClassVar[dict[str, list[str]]] = {
         "zh": [
             "zh-CN-XiaoxiaoNeural",
             "zh-CN-YunxiNeural",
@@ -296,7 +300,7 @@ class EdgeTTSProvider:
         ],
     }
 
-    DEFAULT_VOICES: dict[str, str] = {
+    DEFAULT_VOICES: ClassVar[dict[str, str]] = {
         "zh": "zh-CN-XiaoxiaoNeural",
         "en": "en-US-JennyNeural",
         "ja": "ja-JP-NanamiNeural",
@@ -375,7 +379,7 @@ class WaveSpeedTTSProvider:
     RESULT_URL = f"{API_BASE}/predictions/{{request_id}}/result"
 
     # Defaults per language when no voice_id is specified
-    DEFAULT_VOICES: dict[str, str] = {
+    DEFAULT_VOICES: ClassVar[dict[str, str]] = {
         "zh": "Friendly_Person",
         "en": "Friendly_Person",
         "ja": "Calm_Woman",
@@ -388,8 +392,9 @@ class WaveSpeedTTSProvider:
         timeout: float = 120.0,
         poll_interval: float = 2.0,
     ) -> None:
-        from videoclaw.config import get_config
         import os
+
+        from videoclaw.config import get_config
 
         self._api_key = (
             api_key
@@ -621,7 +626,7 @@ class TTSManager:
         return output_path
 
     # Map LineType → AudioType
-    _LINE_TYPE_TO_AUDIO_TYPE: dict[LineType, AudioType] = {
+    _LINE_TYPE_TO_AUDIO_TYPE: ClassVar[dict[LineType, AudioType]] = {
         LineType.NARRATION: AudioType.NARRATION,
         LineType.DIALOGUE: AudioType.DIALOGUE,
         LineType.INNER_MONOLOGUE: AudioType.INNER_MONOLOGUE,

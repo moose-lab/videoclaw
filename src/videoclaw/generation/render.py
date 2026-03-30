@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from videoclaw.utils.ffmpeg import run_ffmpeg, check_ffmpeg
+from videoclaw.utils.ffmpeg import check_ffmpeg, run_ffmpeg
 
 logger = logging.getLogger(__name__)
 
@@ -164,12 +164,24 @@ class VideoRenderer:
                 filter_str = ""
                 if resolution is not None:
                     w, h = resolution
-                    filter_str += f"[0:v]scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2[scaled];[scaled][1:v]overlay=W-w-10:10[outv]"
+                    filter_str += (
+                        f"[0:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                        f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2[scaled];"
+                        "[scaled][1:v]overlay=W-w-10:10[outv]"
+                    )
                 else:
                     filter_str += "[0:v][1:v]overlay=W-w-10:10[outv]"
-                cmd.extend(["-filter_complex", filter_str, "-map", "[outv]", "-map", "0:a?"])
+                cmd.extend([
+                    "-filter_complex", filter_str,
+                    "-map", "[outv]", "-map", "0:a?",
+                ])
             else:
-                cmd.extend(["-vf", ";".join(video_filters) if len(video_filters) == 1 else ",".join(video_filters)])
+                vf_str = (
+                    ";".join(video_filters)
+                    if len(video_filters) == 1
+                    else ",".join(video_filters)
+                )
+                cmd.extend(["-vf", vf_str])
         # No video filters and no watermark: just pass through
 
         # --- Codec and encoding ---

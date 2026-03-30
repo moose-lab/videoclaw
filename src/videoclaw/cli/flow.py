@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.panel import Panel
@@ -17,7 +17,7 @@ from rich.progress import (
 )
 from rich.table import Table
 
-from videoclaw.cli._app import flow_app, configure_logging, show_banner
+from videoclaw.cli._app import configure_logging, flow_app, show_banner
 from videoclaw.cli._output import get_console, get_output
 from videoclaw.config import get_config
 
@@ -25,9 +25,17 @@ from videoclaw.config import get_config
 @flow_app.command("run")
 def flow_run(
     path: Annotated[str, typer.Argument(help="Path to a ClawFlow YAML file.")],
-    prompt: Annotated[Optional[str], typer.Option("--prompt", "-p", help="Override the script prompt.")] = None,
-    budget: Annotated[Optional[float], typer.Option("--budget", "-b", help="Maximum budget in USD.")] = None,
-    concurrency: Annotated[int, typer.Option("--concurrency", "-c", help="Max parallel tasks.")] = 4,
+    prompt: Annotated[
+        str | None,
+        typer.Option("--prompt", "-p", help="Override the script prompt."),
+    ] = None,
+    budget: Annotated[
+        float | None,
+        typer.Option("--budget", "-b", help="Maximum budget in USD."),
+    ] = None,
+    concurrency: Annotated[
+        int, typer.Option("--concurrency", "-c", help="Max parallel tasks.")
+    ] = 4,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Execute a video pipeline defined in a ClawFlow YAML file."""
@@ -37,9 +45,9 @@ def flow_run(
     out = get_output()
     out._command = "flow.run"
 
-    from videoclaw.flow.parser import load_flow, FlowValidationError
-    from videoclaw.flow.runner import FlowRunner
     from videoclaw.core.state import StateManager
+    from videoclaw.flow.parser import FlowValidationError, load_flow
+    from videoclaw.flow.runner import FlowRunner
 
     try:
         flow = load_flow(path)
@@ -121,7 +129,7 @@ def flow_validate(
     out = get_output()
     out._command = "flow.validate"
 
-    from videoclaw.flow.parser import load_flow, FlowValidationError
+    from videoclaw.flow.parser import FlowValidationError, load_flow
 
     try:
         flow = load_flow(path)

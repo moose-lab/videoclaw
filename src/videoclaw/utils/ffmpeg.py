@@ -40,7 +40,7 @@ async def check_ffmpeg() -> bool:
             if proc.returncode != 0:
                 logger.warning("%s returned exit code %d", binary, proc.returncode)
                 return False
-        except (OSError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, OSError) as exc:
             logger.warning("Failed to run %s: %s", binary, exc)
             return False
 
@@ -173,7 +173,7 @@ async def run_ffmpeg(
     RuntimeError
         If FFmpeg exits with a non-zero code or the timeout is exceeded.
     """
-    cmd = ["ffmpeg"] + args
+    cmd = ["ffmpeg", *args]
     logger.debug("Running: %s", " ".join(cmd))
 
     proc = await asyncio.create_subprocess_exec(
@@ -183,8 +183,8 @@ async def run_ffmpeg(
     )
 
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except asyncio.TimeoutError:
+        _stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except TimeoutError:
         proc.kill()
         await proc.wait()
         raise RuntimeError(

@@ -10,19 +10,19 @@ llm : LLM client wrappers for text generation.
 """
 
 __all__ = [
-    # Protocol & types
-    "ModelCapability",
     "ExecutionMode",
     "GenerationRequest",
     "GenerationResult",
-    "ProgressEvent",
-    "VideoModelAdapter",
+    # Protocol & types
+    "ModelCapability",
     # Registry
     "ModelRegistry",
-    "get_registry",
     # Router
     "ModelRouter",
+    "ProgressEvent",
     "RoutingStrategy",
+    "VideoModelAdapter",
+    "get_registry",
 ]
 
 
