@@ -37,6 +37,7 @@ _COMMANDS = {
         {"command": "claw drama audit <id>", "description": "Vision QA on generated clips"},
         {"command": "claw drama audit-regen <id>", "description": "Audit → regen loop"},
         {"command": "claw drama pipeline <id>", "description": "Full pipeline: design→gen→audit"},
+        {"command": "claw drama export <id>", "description": "Export assets to deliverables dir"},
     ],
     "stage": [
         {"command": "claw video <prompt>", "description": "Generate a single video clip"},

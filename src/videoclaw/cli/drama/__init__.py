@@ -6,6 +6,7 @@ registration on the shared :data:`drama_app` Typer sub-app.
 """
 
 import videoclaw.cli.drama._design
+import videoclaw.cli.drama._export
 import videoclaw.cli.drama._generate
 import videoclaw.cli.drama._plan
 import videoclaw.cli.drama._quality
