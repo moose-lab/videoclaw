@@ -349,12 +349,15 @@ def validate_dialogue_pacing(
     *,
     max_cjk_cps: float = 3.5,
     max_en_wps: float = 2.5,
+    seedance_max_duration: float = 15.0,
 ) -> list[str]:
     """Warn when dialogue is too dense for comfortable speech at natural pace.
 
     Rules:
     - CJK (Chinese/Japanese/Korean): ≤3.5 characters/second
     - English / other: ≤2.5 words/second
+    - Hard warning when dialogue requires more than Seedance's max duration
+      (15s) even at the maximum comfortable pacing.
 
     Returns warning strings (not hard violations — never blocks generation).
     """
@@ -369,17 +372,34 @@ def validate_dialogue_pacing(
         sid = scene.get("scene_id", "?")
 
         if _CJK_RE.search(dialogue):
-            ratio = len(dialogue) / dur
-            if ratio > max_cjk_cps:
+            char_count = len(dialogue)
+            min_duration = char_count / max_cjk_cps
+            ratio = char_count / dur
+            if min_duration > seedance_max_duration:
+                warnings.append(
+                    f"⚠️ Episode {episode_num} {sid}: "
+                    f"dialogue {char_count}字 needs {min_duration:.1f}s at {max_cjk_cps}字/s "
+                    f"but Seedance max is {seedance_max_duration}s — "
+                    f"dialogue WILL be rushed (consider splitting shot or trimming)"
+                )
+            elif ratio > max_cjk_cps:
                 warnings.append(
                     f"Episode {episode_num} {sid}: "
-                    f"dialogue {len(dialogue)}字 / {dur}s = {ratio:.1f}字/s "
+                    f"dialogue {char_count}字 / {dur}s = {ratio:.1f}字/s "
                     f"(max {max_cjk_cps}) — consider shorter dialogue or longer shot"
                 )
         else:
             word_count = len(dialogue.split())
+            min_duration = word_count / max_en_wps
             ratio = word_count / dur
-            if ratio > max_en_wps:
+            if min_duration > seedance_max_duration:
+                warnings.append(
+                    f"⚠️ Episode {episode_num} {sid}: "
+                    f"dialogue {word_count} words needs {min_duration:.1f}s at {max_en_wps}w/s "
+                    f"but Seedance max is {seedance_max_duration}s — "
+                    f"dialogue WILL be rushed (consider splitting shot or trimming)"
+                )
+            elif ratio > max_en_wps:
                 warnings.append(
                     f"Episode {episode_num} {sid}: "
                     f"dialogue {word_count} words / {dur}s = {ratio:.1f}w/s "

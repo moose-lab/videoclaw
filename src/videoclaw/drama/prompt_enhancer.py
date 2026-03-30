@@ -376,16 +376,33 @@ class PromptEnhancer:
 
         # --- Dialogue (spoken dialogue or inner monologue) ---
         if dialogue:
-            speaker = scene.speaking_character or "Character"
+            raw_speaker = scene.speaking_character or "Character"
             line_type = getattr(scene, "dialogue_line_type", "dialogue")
+
+            # Handle multi-speaker scenes: "GUEST 1, GUEST 2" or "Colton Black, Ivy Angel"
+            # Parse comma / " & " separated names and pick the primary speaker
+            speakers = [
+                s.strip()
+                for s in re.split(r"[,，]|\s*&\s*", raw_speaker)
+                if s.strip()
+            ]
+            # De-duplicate while preserving order
+            seen: set[str] = set()
+            unique_speakers: list[str] = []
+            for s in speakers:
+                if s not in seen:
+                    seen.add(s)
+                    unique_speakers.append(s)
+            primary_speaker = unique_speakers[0] if unique_speakers else "Character"
+
             if line_type == "inner_monologue":
                 directives.append(
-                    f'[{speaker} thinks (inner monologue): "{dialogue}". '
+                    f'[{primary_speaker} thinks (inner monologue): "{dialogue}". '
                     f'Show subtitle at bottom center of screen: "{dialogue}"]'
                 )
             else:
                 directives.append(
-                    f'[{speaker} speaks: "{dialogue}". '
+                    f'[{primary_speaker} speaks: "{dialogue}". '
                     f'Show subtitle at bottom center of screen: "{dialogue}"]'
                 )
 

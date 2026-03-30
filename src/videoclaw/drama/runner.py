@@ -130,7 +130,12 @@ def _ensure_consistency_manifest(series: DramaSeries) -> None:
         logger.info("Consistency manifest verified: all reference images present")
 
 
-def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, ProjectState]:
+def build_episode_dag(
+    episode: Episode,
+    series: DramaSeries,
+    *,
+    max_shots: int | None = None,
+) -> tuple[DAG, ProjectState]:
     """Convert an episode's scene prompts into a DAG + ProjectState.
 
     Returns a (dag, project_state) tuple ready for DAGExecutor.
@@ -141,6 +146,12 @@ def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, Proje
 
     When ``series.script_locked`` is True, the enhancer is limited to
     visual prompt optimization — no scene content is modified.
+
+    Parameters
+    ----------
+    max_shots : int | None
+        If set, only the first *max_shots* scenes will have video/tts DAG
+        nodes created. Useful for test runs (e.g. ``--max-shots 5``).
     """
     # --- Pre-generation consistency enforcement ---
     _ensure_consistency_manifest(series)
@@ -175,6 +186,12 @@ def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, Proje
             first_name = c.name.split()[0]
             if first_name != c.name:
                 char_url_map[first_name] = url
+
+    # Sync scene_blocks → scenes (inject block-level time_of_day, scene_group, etc.)
+    if episode.scene_blocks:
+        episode.sync_scenes_from_blocks()
+        logger.info("Synced %d scenes from %d scene_blocks",
+                     len(episode.scenes), len(episode.scene_blocks))
 
     # Enhance visual prompts before building shots
     # For locked scripts: enhancer only optimizes visual_prompt for Seedance,
@@ -262,7 +279,7 @@ def build_episode_dag(episode: Episode, series: DramaSeries) -> tuple[DAG, Proje
         # TODO: make configurable (strict mode raises, lenient mode warns)
 
     # Build drama-specific DAG with enriched params
-    dag = _build_drama_dag(state, episode, series)
+    dag = _build_drama_dag(state, episode, series, max_shots=max_shots)
 
     return dag, state
 
@@ -271,6 +288,8 @@ def _build_drama_dag(
     state: ProjectState,
     episode: Episode,
     series: DramaSeries,
+    *,
+    max_shots: int | None = None,
 ) -> DAG:
     """Build a drama-specific DAG with per-scene TTS and subtitle nodes.
 
@@ -324,8 +343,14 @@ def _build_drama_dag(
     dag.add_node(validate_node)
 
     # -- 3. Parallel video generation per shot (depends on scene_validate) --
+    # When max_shots is set, only create video/tts nodes for the first N scenes.
+    gen_pairs = list(zip(state.storyboard, episode.scenes))
+    if max_shots is not None and max_shots > 0:
+        gen_pairs = gen_pairs[:max_shots]
+        logger.info("max_shots=%d — limiting video/tts generation to first %d scenes",
+                     max_shots, len(gen_pairs))
     video_node_ids: list[str] = []
-    for shot, scene in zip(state.storyboard, episode.scenes):
+    for shot, scene in gen_pairs:
         vid_id = f"video_{shot.shot_id}"
         dag.add_node(TaskNode(
             node_id=vid_id,
@@ -353,7 +378,8 @@ def _build_drama_dag(
 
     scenes_data: list[dict] = []
     tts_node_ids: list[str] = []
-    for scene in episode.scenes:
+    tts_scenes = [scene for _, scene in gen_pairs]  # same subset as video
+    for scene in tts_scenes:
         voice = None
         if scene.speaking_character and scene.speaking_character in character_voices:
             voice = character_voices[scene.speaking_character].get("voice_id")
@@ -647,12 +673,23 @@ class DramaRunner:
         self.max_concurrency = max_concurrency
         self.auto_refresh_urls = auto_refresh_urls
 
-    async def run_episode(self, series: DramaSeries, episode: Episode) -> ProjectState:
+    async def run_episode(
+        self,
+        series: DramaSeries,
+        episode: Episode,
+        *,
+        max_shots: int | None = None,
+    ) -> ProjectState:
         """Execute a single episode through the full generation pipeline.
 
         When ``auto_refresh_urls`` is ``True`` (default), validates all
         character reference image URLs before starting generation. Expired
         URLs are automatically refreshed via :func:`ensure_fresh_urls`.
+
+        Parameters
+        ----------
+        max_shots : int | None
+            Limit video/tts generation to the first *max_shots* scenes.
         """
         logger.info("Running episode %d: %r", episode.number, episode.title)
         episode.status = EpisodeStatus.GENERATING
@@ -661,7 +698,7 @@ class DramaRunner:
         if self.auto_refresh_urls:
             await ensure_fresh_urls(series, drama_manager=self.drama_mgr)
 
-        dag, state = build_episode_dag(episode, series)
+        dag, state = build_episode_dag(episode, series, max_shots=max_shots)
         self.state_mgr.save(state)
 
         executor = DAGExecutor(
@@ -689,6 +726,8 @@ class DramaRunner:
         series: DramaSeries,
         start_episode: int = 1,
         end_episode: int | None = None,
+        *,
+        max_shots: int | None = None,
     ) -> DramaSeries:
         """Run a range of episodes sequentially.
 
@@ -752,7 +791,7 @@ class DramaRunner:
                 self.drama_mgr.save(series)
 
             try:
-                await self.run_episode(series, episode)
+                await self.run_episode(series, episode, max_shots=max_shots)
                 logger.info("Episode %d completed (cost=$%.4f)", episode.number, episode.cost)
                 # Extract cliffhanger for next episode
                 if episode.script:

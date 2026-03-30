@@ -1125,6 +1125,7 @@ def drama_run(
     budget: Annotated[Optional[float], typer.Option("--budget", "-b", help="Max budget in USD.")] = None,
     concurrency: Annotated[int, typer.Option("--concurrency", "-c", help="Max parallel tasks.")] = 4,
     refresh_urls: Annotated[bool, typer.Option("--refresh-urls/--no-refresh-urls", help="Auto-validate and refresh expired character reference URLs before generation.")] = True,
+    max_shots: Annotated[Optional[int], typer.Option("--max-shots", help="Limit video/TTS generation to the first N shots (useful for test runs).")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Show execution plan without running.")] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
@@ -1134,6 +1135,9 @@ def drama_run(
     Uses Seedance 2.0 by default (4-15s per clip). Each clip generates
     video + audio + dialogue in a single pass. Character consistency is
     enforced via Universal Reference and a pre-built ConsistencyManifest.
+
+    \b
+    Use --max-shots N to limit generation to the first N shots (e.g. for test runs).
     """
     configure_logging(verbose)
     show_banner()
@@ -1199,7 +1203,7 @@ def drama_run(
         return
 
     try:
-        asyncio.run(_drama_run_async(series, mgr, start, end, budget, concurrency, refresh_urls))
+        asyncio.run(_drama_run_async(series, mgr, start, end, budget, concurrency, refresh_urls, max_shots=max_shots))
     except typer.Exit:
         raise
     except Exception as exc:
@@ -1219,6 +1223,8 @@ async def _drama_run_async(
     series: DramaSeries, mgr: DramaManager, start: int, end: int | None,
     budget_usd: float | None = None, max_concurrency: int = 4,
     auto_refresh_urls: bool = True,
+    *,
+    max_shots: int | None = None,
 ) -> None:
     console = get_console()
 
@@ -1277,7 +1283,7 @@ async def _drama_run_async(
                 f"Episode {ep.number}...",
                 total=len(ep.scenes) + 4,
             )
-            state = await runner.run_episode(series, ep)
+            state = await runner.run_episode(series, ep, max_shots=max_shots)
             progress.update(task, completed=len(ep.scenes) + 4)
 
         status_style = "green" if ep.status == "completed" else "red"
