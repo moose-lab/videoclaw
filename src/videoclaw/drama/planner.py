@@ -28,6 +28,7 @@ from videoclaw.drama.models import (
     DramaStatus,
     Episode,
     EpisodeStatus,
+    SceneBlock,
     ScriptModification,
 )
 from videoclaw.models.llm.litellm_wrapper import LLMClient
@@ -72,6 +73,62 @@ def _enforce_pacing(scenes: list[dict[str, Any]]) -> None:
                 s.get("scene_id", "?"), cur, target, floor,
             )
             s["duration_seconds"] = target
+
+
+# ---------------------------------------------------------------------------
+# SceneBlock grouping helper
+# ---------------------------------------------------------------------------
+
+def _group_scenes_into_blocks(
+    scenes: list[DramaScene],
+    episode_number: int,
+) -> list[SceneBlock]:
+    """Group a flat scene list into SceneBlocks by ``scene_group``.
+
+    Consecutive scenes sharing the same ``scene_group`` value (A, B, C, ...)
+    are merged into one block. If no ``scene_group`` is set, each scene
+    becomes its own block.
+
+    Block-level properties (time_of_day, characters_present, emotion,
+    description) are extracted from the **first** scene in each group.
+    """
+    if not scenes:
+        return []
+
+    blocks: list[SceneBlock] = []
+    current_group: str | None = None
+    current_shots: list[DramaScene] = []
+    first_scene: DramaScene | None = None
+
+    def _flush() -> None:
+        nonlocal current_shots, first_scene
+        if not current_shots or first_scene is None:
+            return
+        group_label = first_scene.scene_group or chr(ord("A") + len(blocks))
+        block = SceneBlock(
+            block_id=f"ep{episode_number:02d}_b{group_label}",
+            description=first_scene.description,
+            location="",  # not yet in DramaScene; can be inferred later
+            time_of_day=first_scene.time_of_day,
+            characters_present=list(first_scene.characters_present),
+            emotion=first_scene.emotion,
+            scene_group=group_label,
+            shots=list(current_shots),
+        )
+        blocks.append(block)
+        current_shots = []
+        first_scene = None
+
+    for scene in scenes:
+        group = scene.scene_group or ""
+        if group != current_group:
+            _flush()
+            current_group = group
+            first_scene = scene
+        current_shots.append(scene)
+
+    _flush()
+    return blocks
 
 
 # ---------------------------------------------------------------------------
@@ -582,7 +639,10 @@ class DramaPlanner:
         _enforce_pacing(scenes)
 
         episode.script = json.dumps(script_data, ensure_ascii=False)
-        episode.scenes = [DramaScene.from_dict(s) for s in scenes]
+        drama_scenes = [DramaScene.from_dict(s) for s in scenes]
+        episode.scenes = drama_scenes
+        # Build hierarchical scene_blocks from flat scenes
+        episode.scene_blocks = _group_scenes_into_blocks(drama_scenes, episode.number)
         return script_data
 
     # ------------------------------------------------------------------
@@ -728,6 +788,8 @@ class DramaPlanner:
                 status=EpisodeStatus.PENDING,
                 script=json.dumps(ep_data, ensure_ascii=False),
             )
+            # Build hierarchical scene_blocks from flat scenes
+            episode.scene_blocks = _group_scenes_into_blocks(scenes, episode.number)
             series.episodes.append(episode)
 
         series.total_episodes = len(series.episodes)

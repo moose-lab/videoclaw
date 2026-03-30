@@ -554,8 +554,66 @@ def assign_voice_profile(character: Character, language: str = "zh") -> Characte
 
 
 @dataclass
+class SceneBlock:
+    """A logical scene grouping multiple shots (分镜) with shared properties.
+
+    场景块：同一场景下的多个分镜号共享 location、time_of_day、characters、
+    剧集内容等属性。每个 shot (DramaScene) 对应一个独立画面。
+
+    层级结构::
+
+        Episode
+          └── SceneBlock (场景)
+                ├── block_id, description, location, time_of_day
+                ├── characters_present, emotion, scene_group
+                └── shots: list[DramaScene] (分镜号)
+    """
+
+    block_id: str = ""
+    description: str = ""         # 剧集内容（同场景下一致）
+    location: str = ""            # 场景地点
+    time_of_day: str = ""         # morning / day / evening / night
+    characters_present: list[str] = field(default_factory=list)
+    emotion: str = ""             # 场景整体情绪基调
+    scene_group: str = ""         # A / B / C — 剧本分场
+
+    shots: list[DramaScene] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "block_id": self.block_id,
+            "description": self.description,
+            "location": self.location,
+            "time_of_day": self.time_of_day,
+            "characters_present": list(self.characters_present),
+            "emotion": self.emotion,
+            "scene_group": self.scene_group,
+            "shots": [s.to_dict() for s in self.shots],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SceneBlock:
+        data = dict(data)
+        shots_raw = data.pop("shots", [])
+        known = {f.name for f in fields(cls) if f.name != "shots"}
+        filtered = {k: v for k, v in data.items() if k in known}
+        block = cls(**filtered)
+        block.shots = [DramaScene.from_dict(s) for s in shots_raw]
+        return block
+
+
+@dataclass
 class Episode:
-    """A single episode in a drama series."""
+    """A single episode in a drama series.
+
+    Supports two-level storyboard structure:
+
+    - **scene_blocks** (新): 场景块列表，每个块包含多个分镜号
+    - **scenes** (保留): 展平后的分镜列表，向后兼容 40+ 个下游引用
+
+    当 ``scene_blocks`` 有数据时，调用 ``sync_scenes_from_blocks()``
+    将块级属性注入到每个分镜并展平到 ``scenes``。
+    """
 
     episode_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     number: int = 1
@@ -567,12 +625,50 @@ class Episode:
     duration_seconds: float = 60.0
     script: str | None = None
     scenes: list[DramaScene] = field(default_factory=list)
+    scene_blocks: list[SceneBlock] = field(default_factory=list)
     cost: float = 0.0
 
+    def sync_scenes_from_blocks(self) -> None:
+        """Flatten ``scene_blocks`` into ``scenes``, injecting block-level context.
+
+        Each shot inherits its parent block's shared properties (time_of_day,
+        scene_group, characters_present, emotion, description) when the shot's
+        own value is empty. This ensures downstream code that reads
+        ``episode.scenes`` sees the full context without knowing about blocks.
+        """
+        if not self.scene_blocks:
+            return
+        self.scenes = []
+        for block in self.scene_blocks:
+            for shot in block.shots:
+                if not shot.time_of_day and block.time_of_day:
+                    shot.time_of_day = block.time_of_day
+                if not shot.scene_group and block.scene_group:
+                    shot.scene_group = block.scene_group
+                if not shot.characters_present and block.characters_present:
+                    shot.characters_present = list(block.characters_present)
+                if not shot.emotion and block.emotion:
+                    shot.emotion = block.emotion
+                if not shot.description and block.description:
+                    shot.description = block.description
+                self.scenes.append(shot)
+
     def to_dict(self) -> dict[str, Any]:
-        d = asdict(self)
-        d["status"] = self.status.value
-        d["scenes"] = [s.to_dict() for s in self.scenes]
+        d = {
+            "episode_id": self.episode_id,
+            "number": self.number,
+            "title": self.title,
+            "synopsis": self.synopsis,
+            "opening_hook": self.opening_hook,
+            "status": self.status.value,
+            "project_id": self.project_id,
+            "duration_seconds": self.duration_seconds,
+            "script": self.script,
+            "scenes": [s.to_dict() for s in self.scenes],
+            "cost": self.cost,
+        }
+        if self.scene_blocks:
+            d["scene_blocks"] = [b.to_dict() for b in self.scene_blocks]
         return d
 
     @classmethod
@@ -580,7 +676,14 @@ class Episode:
         data = dict(data)
         data["status"] = EpisodeStatus(data.get("status", "pending"))
         data["scenes"] = [DramaScene.from_dict(s) for s in data.get("scenes", [])]
-        return cls(**data)
+        # Load scene_blocks if present (new format)
+        blocks_raw = data.pop("scene_blocks", None)
+        known = {f.name for f in fields(cls)}
+        data = {k: v for k, v in data.items() if k in known}
+        ep = cls(**data)
+        if blocks_raw:
+            ep.scene_blocks = [SceneBlock.from_dict(b) for b in blocks_raw]
+        return ep
 
 
 @dataclass
