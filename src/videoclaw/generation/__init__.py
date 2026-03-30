@@ -3,7 +3,7 @@
 Submodules
 ----------
 base_image : Abstract base class for all image generators.
-image : Evolink-based image generation.
+evolink_image : Evolink Seedream 5.0 image generation.
 byteplus_image : BytePlus image generation and editing.
 gemini_image : Gemini-based image generation.
 video : Video clip generation from prompts/images.
@@ -45,7 +45,7 @@ def __getattr__(name: str):
     """Lazy imports to avoid heavy dependency loading at package import time."""
     _import_map = {
         "BaseImageGenerator": "videoclaw.generation.base_image",
-        "EvolinkImageGenerator": "videoclaw.generation.image",
+        "EvolinkImageGenerator": "videoclaw.generation.evolink_image",
         "BytePlusImageGenerator": "videoclaw.generation.byteplus_image",
         "BytePlusImageEditor": "videoclaw.generation.byteplus_image",
         "GeminiImageGenerator": "videoclaw.generation.gemini_image",

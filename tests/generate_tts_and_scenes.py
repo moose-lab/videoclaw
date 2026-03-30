@@ -64,7 +64,7 @@ async def generate_tts():
 
 async def generate_scene_images():
     """Generate 3 curated scene reference images (not per-visual_prompt)."""
-    from videoclaw.generation.image import EvolinkImageGenerator
+    from videoclaw.generation.evolink_image import EvolinkImageGenerator
 
     scene_dir = Path("projects/dramas/wind_chaser_ranch_001/scenes")
     scene_dir.mkdir(parents=True, exist_ok=True)

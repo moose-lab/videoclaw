@@ -214,7 +214,7 @@ async def _image_async(
             gen = GeminiImageGenerator()
             image_path = await gen.generate(prompt=prompt, aspect_ratio=size, output_dir=Path("."))
         elif provider == "evolink":
-            from videoclaw.generation.image import EvolinkImageGenerator
+            from videoclaw.generation.evolink_image import EvolinkImageGenerator
             gen = EvolinkImageGenerator()
             image_path = await gen.generate(prompt=prompt, aspect_ratio=size, output_dir=Path("."))
         elif provider == "byteplus":

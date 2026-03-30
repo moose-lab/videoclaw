@@ -184,7 +184,7 @@ class CharacterDesigner:
                 else:
                     raise ValueError("No BytePlus API key")
             except Exception:
-                from videoclaw.generation.image import EvolinkImageGenerator
+                from videoclaw.generation.evolink_image import EvolinkImageGenerator
                 self._img_gen = EvolinkImageGenerator()
                 logger.info("Using Evolink for character images (BytePlus unavailable)")
         return self._img_gen
