@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass, field, fields, asdict
-from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from videoclaw.config import get_config
+from videoclaw.utils import _now_iso
 
 
 # ---------------------------------------------------------------------------
@@ -97,10 +97,6 @@ class DramaGenre(StrEnum):
 # ---------------------------------------------------------------------------
 # Data models
 # ---------------------------------------------------------------------------
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
 
 @dataclass
 class Character:

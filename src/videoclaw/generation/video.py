@@ -13,7 +13,7 @@ import logging
 from typing import Any
 
 from videoclaw.core.events import event_bus, SHOT_GENERATED, TASK_STARTED, TASK_COMPLETED
-from videoclaw.core.state import Shot, ShotStatus
+from videoclaw.core.state import Shot
 from videoclaw.models.protocol import GenerationRequest, GenerationResult
 from videoclaw.models.router import ModelRouter, RoutingStrategy
 

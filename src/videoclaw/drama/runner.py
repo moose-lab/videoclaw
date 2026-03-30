@@ -13,12 +13,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from videoclaw.config import get_config
 from videoclaw.core.events import event_bus
 from videoclaw.core.executor import DAGExecutor
 from videoclaw.core.planner import DAG, TaskNode, TaskType
 from videoclaw.core.state import ProjectState, Shot, ShotStatus, StateManager
-from videoclaw.drama.models import DramaManager, DramaSeries, DramaStatus, Episode, EpisodeStatus
+from videoclaw.drama.models import DramaManager, DramaScene, DramaSeries, DramaStatus, Episode, EpisodeStatus
 from videoclaw.drama.prompt_enhancer import PromptEnhancer
 
 logger = logging.getLogger(__name__)

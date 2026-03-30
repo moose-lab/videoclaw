@@ -43,7 +43,7 @@ from videoclaw.drama.models import DramaScene, DramaSeries
 from videoclaw.models.llm.litellm_wrapper import LLMClient
 
 if TYPE_CHECKING:
-    from videoclaw.drama.models import DramaManager, Episode
+    from videoclaw.drama.models import DramaManager
 
 logger = logging.getLogger(__name__)
 

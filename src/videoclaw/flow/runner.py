@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from videoclaw.core.events import EventBus, event_bus as default_event_bus
 from videoclaw.core.executor import DAGExecutor, NodeHandler

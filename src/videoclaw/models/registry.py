@@ -14,8 +14,6 @@ from importlib.metadata import entry_points
 from typing import Any
 
 from videoclaw.models.protocol import (
-    ExecutionMode,
-    ModelCapability,
     VideoModelAdapter,
 )
 

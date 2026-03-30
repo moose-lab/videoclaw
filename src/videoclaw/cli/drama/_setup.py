@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Annotated, Optional
+from typing import Annotated, Optional
 
 import typer
-
-if TYPE_CHECKING:
-    from videoclaw.drama.models import DramaManager, DramaSeries
 
 from rich.panel import Panel
 from rich.table import Table
@@ -236,7 +233,7 @@ async def _drama_import_async(
             if mod.proposed_value:
                 console.print(f"     Proposed fix: {mod.proposed_value}")
 
-            if typer.confirm(f"     Approve this modification?", default=False):
+            if typer.confirm("     Approve this modification?", default=False):
                 mod.approved = True
                 approved.append(mod)
             else:

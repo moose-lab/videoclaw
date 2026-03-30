@@ -8,8 +8,6 @@ subtitle overlay, and a one-call ``render_final`` pipeline.
 from __future__ import annotations
 
 import logging
-import shutil
-import tempfile
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -500,5 +498,5 @@ class VideoComposer:
     async def _run_ffmpeg(cmd: list[str]) -> None:
         """Run an FFmpeg command, raising on failure."""
         logger.debug("FFmpeg command: %s", " ".join(cmd))
-        result = await run_ffmpeg(cmd[1:])  # run_ffmpeg prepends 'ffmpeg' or takes args
+        await run_ffmpeg(cmd[1:])  # run_ffmpeg prepends 'ffmpeg' or takes args
         # run_ffmpeg from utils already raises on error

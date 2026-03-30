@@ -310,7 +310,7 @@ async def _drama_run_async(
                 f"Episode {ep.number}...",
                 total=len(ep.scenes) + 4,
             )
-            state = await runner.run_episode(series, ep, max_shots=max_shots)
+            await runner.run_episode(series, ep, max_shots=max_shots)
             progress.update(task, completed=len(ep.scenes) + 4)
 
         status_style = "green" if ep.status == "completed" else "red"

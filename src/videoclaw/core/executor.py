@@ -727,7 +727,6 @@ class DAGExecutor:
             return {"status": "skipped"}
 
         # Aggregate per-scene audio segments into a manifest dict
-        from videoclaw.drama.models import AudioSegment as DramaAudioSegment
 
         all_segments: list[dict] = []
         for scene_data in scenes:
@@ -883,7 +882,7 @@ class DAGExecutor:
         audio_tracks: list[AudioTrack] = []
         raw_manifest = state.assets.get("audio_manifest")
         if raw_manifest:
-            from videoclaw.drama.models import AudioSegment as DramaAudioSegment, LineType
+            from videoclaw.drama.models import LineType
             manifest_data = _json.loads(raw_manifest)
             for seg in manifest_data.get("segments", []):
                 seg_path = seg.get("audio_path", "")

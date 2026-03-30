@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import shutil
 
-from rich.panel import Panel
 from rich.table import Table
 
 from videoclaw.cli._app import config_app, status_icon

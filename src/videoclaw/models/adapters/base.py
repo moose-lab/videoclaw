@@ -9,12 +9,10 @@ Concrete subclasses must implement ``generate`` and the protocol properties.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator
 
-import httpx
 
 from videoclaw.models.protocol import (
     ExecutionMode,

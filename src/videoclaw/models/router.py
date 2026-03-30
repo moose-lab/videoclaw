@@ -10,7 +10,6 @@ from __future__ import annotations
 import enum
 import logging
 from dataclasses import dataclass
-from typing import Any
 
 from videoclaw.models.protocol import (
     GenerationRequest,

@@ -327,13 +327,10 @@ class PromptEnhancer:
         they don't interfere with Seedance's scene composition.
         """
         directives: list[str] = []
-        has_subtitle = False  # Track if this scene has dialogue/narration subtitle
-
         # --- Check if this scene will have a subtitle ---
         dialogue = (scene.dialogue or "").strip()
         narration = (scene.narration or "").strip()
         narration_type = getattr(scene, "narration_type", "voiceover")
-        has_subtitle = bool(dialogue) or (bool(narration) and narration_type != "title_card")
 
         # --- Character name card (first close-up/medium-close appearance) ---
         # 名牌永远紧贴角色身旁，竖排文字，不与底部字幕冲突。

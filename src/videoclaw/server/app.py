@@ -10,7 +10,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from videoclaw.config import get_config
-from videoclaw.core.events import event_bus
 from videoclaw.server.routes import generation, projects, ws
 
 logger = logging.getLogger(__name__)

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-from videoclaw.core.state import ProjectState, ShotStatus
+from videoclaw.core.state import ProjectState
 
 
 # ---------------------------------------------------------------------------

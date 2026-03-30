@@ -178,7 +178,7 @@ def project_delete(
 
     # Ensure target is within projects directory (prevent symlink escape)
     if not str(project_dir).startswith(str(projects_root)):
-        console.print(f"[red]Project path escapes projects directory.[/red]")
+        console.print("[red]Project path escapes projects directory.[/red]")
         out.set_error("Project path escapes projects directory.")
         out.emit()
         raise typer.Exit(code=1)
@@ -200,7 +200,7 @@ def project_delete(
 
     # Final safety check: must be a directory, not a symlink
     if project_dir.is_symlink():
-        console.print(f"[red]Project directory is a symlink. Refusing to delete.[/red]")
+        console.print("[red]Project directory is a symlink. Refusing to delete.[/red]")
         out.set_error("Project directory is a symlink.")
         out.emit()
         raise typer.Exit(code=1)

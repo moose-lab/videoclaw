@@ -28,7 +28,6 @@ import typer
 from videoclaw.cli._app import (
     app,
     configure_logging,
-    show_banner,
     validate_aspect_ratio,
     validate_language,
     validate_prompt,
@@ -65,7 +64,6 @@ def video(
       claw video "product showcase" --ref-image product.png -o promo.mp4
     """
     configure_logging(verbose)
-    console = get_console()
     out = get_output()
     out._command = "video"
 
@@ -182,7 +180,6 @@ def image(
       claw image "product photo" --provider evolink -o product.png
     """
     configure_logging(verbose)
-    console = get_console()
     out = get_output()
     out._command = "image"
 
@@ -354,7 +351,6 @@ def storyboard(
       claw storyboard "Product unboxing sequence" -a 9:16 -o shots.json
     """
     configure_logging(verbose)
-    console = get_console()
     out = get_output()
     out._command = "storyboard"
 
@@ -378,7 +374,7 @@ async def _storyboard_async(
     from rich.table import Table
 
     from videoclaw.core.director import Director
-    from videoclaw.core.state import ProjectState, StateManager
+    from videoclaw.core.state import StateManager
 
     console = get_console()
     out = get_output()

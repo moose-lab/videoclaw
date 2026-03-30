@@ -18,7 +18,7 @@ from __future__ import annotations
 import io
 import json
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from rich.console import Console

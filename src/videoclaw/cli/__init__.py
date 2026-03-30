@@ -21,7 +21,6 @@ import videoclaw.cli.config_cmd  # noqa: F401
 import videoclaw.cli.stage  # noqa: F401
 
 # Version command (lightweight, lives here directly).
-import typer
 import videoclaw
 from videoclaw.cli._output import get_console, get_output
 

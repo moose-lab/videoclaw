@@ -13,10 +13,8 @@ from typing import Any
 
 from videoclaw.config import get_config
 from videoclaw.drama.models import (
-    Character,
     DialogueLine,
     DramaGenre,
-    DramaScene,
     DramaSeries,
     Episode,
     LineType,

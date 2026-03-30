@@ -12,14 +12,6 @@ if TYPE_CHECKING:
     from videoclaw.drama.models import DramaManager, DramaSeries, Episode
 
 from rich.panel import Panel
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TaskProgressColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
 
 from videoclaw.cli._app import (
     drama_app,

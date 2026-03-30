@@ -98,12 +98,6 @@ Return ONLY the JSON array -- no markdown fences, no commentary.
 # Default negative prompt
 # ---------------------------------------------------------------------------
 
-_DEFAULT_NEGATIVE_PROMPT: str = (
-    "blurry, low quality, distorted, watermark, text overlay, "
-    "deformed anatomy, bad hands, extra fingers, duplicate, "
-    "compression artifacts, noise, oversaturated"
-)
-
 # ---------------------------------------------------------------------------
 # Aspect ratio -> resolution mapping (shared with director; duplicated for
 # independence)
@@ -256,9 +250,6 @@ class StoryboardGenerator:
 
         shots: list[Shot] = []
         for entry in data:
-            negative = entry.get("negative_prompt", _DEFAULT_NEGATIVE_PROMPT)
-            # Embed negative prompt and metadata into the Shot's prompt field
-            # using a structured format the video adapter can parse.
             combined_prompt = entry.get("prompt", "")
 
             # Clamp duration to Seedance 2.0 range (5-15s)

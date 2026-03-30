@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json as _json
 import logging
 import re
 from pathlib import Path
@@ -220,9 +219,9 @@ class SubtitleGenerator:
             header += "\n".join(char_style_lines) + "\n"
 
         header += (
-            f"\n"
-            f"[Events]\n"
-            f"Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+            "\n"
+            "[Events]\n"
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
         )
 
         # Build dialogue events

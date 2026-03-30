@@ -88,7 +88,7 @@ async def _generate_async(
     dry_run: bool,
 ) -> None:
     """Async orchestration behind ``claw generate``."""
-    from videoclaw.core.state import StateManager, ProjectState
+    from videoclaw.core.state import StateManager
     from videoclaw.core.planner import build_dag
     from videoclaw.cost.tracker import CostTracker
 
@@ -118,7 +118,6 @@ async def _generate_async(
     console.print("\n[bold cyan]Phase 1: Planning[/bold cyan]")
 
     from videoclaw.core.director import Director
-    from videoclaw.core.state import Shot
 
     with console.status("[cyan]Director is planning shots...", spinner="dots"):
         director = Director()

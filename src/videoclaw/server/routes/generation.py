@@ -15,9 +15,7 @@ from videoclaw.core.events import event_bus
 from videoclaw.core.executor import DAGExecutor
 from videoclaw.core.planner import build_dag
 from videoclaw.core.state import ProjectState, StateManager
-from videoclaw.cost.tracker import CostTracker
 from videoclaw.models.llm.litellm_wrapper import LLMClient
-from videoclaw.models.registry import ModelRegistry
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

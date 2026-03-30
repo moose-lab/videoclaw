@@ -293,7 +293,6 @@ async def _design_scenes_async(series: DramaSeries, mgr: DramaManager, force: bo
             )
         console.print(ptable)
 
-    total = len(locations) + len(props)
     console.print(f"\n[bold green]Asset design complete: {len(locations)} locations, {len(props)} props[/bold green]")
 
 

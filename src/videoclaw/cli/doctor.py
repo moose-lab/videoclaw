@@ -14,7 +14,6 @@ from videoclaw.cli._app import app, show_banner, status_icon
 from videoclaw.cli._output import get_console, get_output
 from videoclaw.config import get_config
 
-import typer
 
 
 @app.command()
