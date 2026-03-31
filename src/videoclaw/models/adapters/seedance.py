@@ -130,7 +130,7 @@ _COST_PER_SECOND_USD = 0.05
 # Polling configuration
 _POLL_INTERVAL_S = 10.0
 _POLL_TIMEOUT_S = 6000.0  # 100 minutes max
-_HTTP_TIMEOUT_S = 30.0
+_HTTP_TIMEOUT_S = 120.0
 
 
 def _detect_mime_from_bytes(data: bytes) -> str:
