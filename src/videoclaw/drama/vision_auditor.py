@@ -647,6 +647,7 @@ class VisionAuditor:
         clip_dir: Path | None = None,
         drama_manager: DramaManager | None = None,
         persist_results: bool = True,
+        incremental: bool = False,
     ) -> EpisodeAuditReport:
         """Audit an episode from a :class:`DramaSeries` managed by :class:`DramaManager`.
 
@@ -672,6 +673,9 @@ class VisionAuditor:
             If provided, audit results are persisted back to the series state.
         persist_results:
             Whether to write audit results into ``DramaScene.audit_result``.
+        incremental:
+            When ``True``, skip scenes whose ``audit_result`` shows
+            ``passed=True`` and ``regen_required=False``.
         """
         from videoclaw.config import get_config
 
@@ -699,6 +703,22 @@ class VisionAuditor:
         )
 
         for scene in episode.scenes:
+            # Incremental: skip already-passed shots
+            if incremental and scene.audit_result:
+                prev = scene.audit_result
+                if prev.get("passed") and not prev.get("regen_required"):
+                    logger.info("  %s: incremental skip (already passed)", scene.scene_id)
+                    result = ShotAuditResult(
+                        shot_id=scene.scene_id,
+                        passed=True,
+                        fatals=prev.get("fatals", []),
+                        tolerables=prev.get("tolerables", []),
+                        clip_path=prev.get("clip_path", ""),
+                    )
+                    report.shot_results.append(result)
+                    report.passed_shots += 1
+                    continue
+
             # Resolve clip: video_asset_path > clip_dir > glob
             cp = resolve_clip(
                 scene.scene_id,

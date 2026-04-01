@@ -359,6 +359,7 @@ async def _drama_audit_regen_async(
             clip_dir=clip_dir,
             drama_manager=mgr,
             persist_results=True,
+            incremental=(round_num > 1),
         )
         console.print(report.summary())
 
