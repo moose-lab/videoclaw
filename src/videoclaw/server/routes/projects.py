@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from videoclaw.core.events import COST_UPDATED, event_bus
 from videoclaw.core.state import ProjectState, StateManager
 
 router = APIRouter()
@@ -90,6 +95,41 @@ async def get_project_cost(project_id: str) -> dict:
             for h in hints
         ],
     }
+
+
+@router.get("/{project_id}/cost/stream")
+async def stream_project_cost(project_id: str) -> StreamingResponse:
+    """SSE endpoint for real-time cost updates during generation.
+
+    Emits ``data: {...}`` events as costs accumulate. Connect with
+    ``EventSource`` from a browser or ``curl -N``.
+    """
+    queue: asyncio.Queue[dict] = asyncio.Queue()
+
+    async def _on_cost(event_type: str, data: dict) -> None:
+        if data.get("project_id") == project_id:
+            await queue.put(data)
+
+    event_bus.subscribe(COST_UPDATED, _on_cost)
+
+    async def _event_generator():
+        try:
+            while True:
+                try:
+                    data = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield f"data: {json.dumps(data, default=str)}\n\n"
+                except TimeoutError:
+                    yield ": keepalive\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            event_bus.unsubscribe(COST_UPDATED, _on_cost)
+
+    return StreamingResponse(
+        _event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.delete("/{project_id}")
