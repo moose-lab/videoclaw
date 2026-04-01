@@ -41,6 +41,7 @@ from typing import TYPE_CHECKING, Any
 
 from videoclaw.drama.models import DramaScene, DramaSeries
 from videoclaw.models.llm.litellm_wrapper import LLMClient
+from videoclaw.utils.ffmpeg import get_video_info
 
 if TYPE_CHECKING:
     from videoclaw.drama.models import DramaManager
@@ -109,6 +110,61 @@ Set passed=false and regen_required=true only for production-blocking issues:
 Subtitle spelling errors and minor tension issues → passed=true, regen_required=false.
 """
 
+# ---------------------------------------------------------------------------
+# V2 pragmatic grading thresholds & templates
+# ---------------------------------------------------------------------------
+
+_FATAL_THRESHOLD = 0.75
+_TOLERABLE_THRESHOLD = 0.85
+
+_AUDIT_SYSTEM_V2 = """\
+You are a pragmatic AI video quality auditor for Western live-action TikTok short dramas.
+You will see keyframes from a generated video clip.
+Your job: identify ONLY defects that would make a viewer swipe away.
+Accept minor imperfections — 80% of AI videos have 1-2 small defects; that is normal.
+
+Return ONLY valid JSON. No markdown, no explanation."""
+
+_AUDIT_USER_TEMPLATE_V2 = """\
+Scene spec:
+  scene_id: {scene_id}
+  description: {description}
+  time_of_day: {time_of_day}
+  expected_characters: {characters}
+  dialogue: {dialogue}
+  shot_role: {shot_role}
+  emotion: {emotion}
+  shot_scale: {shot_scale}
+
+The {frame_count} keyframes above are from this clip (first / mid / last).
+
+Check these 4 dimensions and classify each defect as "fatal" or "tolerable":
+
+1. ANATOMY — Extra fingers/limbs, facial collapse, body morphing visible on main characters.
+   - Fatal if: visible in close_up/medium shot on a main character.
+   - Tolerable if: in wide shot or on background character.
+
+2. CHARACTER PRESENCE — Are the expected characters ({characters}) in the frame?
+   - Fatal if: a main character is missing entirely.
+   - Tolerable if: a secondary character is unclear but present.
+
+3. SCENE MATCH — Does the scene match "{description}" and time_of_day="{time_of_day}"?
+   - Fatal if: completely wrong location or time_of_day.
+   - Tolerable if: minor detail differences.
+
+4. DRAMATIC TENSION (only for hook/cliffhanger shots, skip for normal):
+   - shot_role={shot_role}
+   - Fatal if: hook shot has zero conflict/tension; cliffhanger has full resolution.
+   - Tolerable if: tension exists but is weak.
+
+Return JSON:
+{{
+  "fatals": ["short description of each fatal defect"],
+  "tolerables": ["short description of each tolerable defect"]
+}}
+
+Empty lists = clean shot. Be pragmatic: if a viewer on a phone wouldn't notice it, skip it."""
+
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -124,6 +180,8 @@ class ShotAuditResult:
     checks: dict[str, Any] = field(default_factory=dict)
     clip_path: str = ""
     raw_response: str = ""
+    fatals: list[str] = field(default_factory=list)
+    tolerables: list[str] = field(default_factory=list)
 
     @classmethod
     def from_json(cls, data: dict[str, Any], shot_id: str, clip_path: str = "") -> ShotAuditResult:
@@ -135,6 +193,8 @@ class ShotAuditResult:
             issues=list(data.get("issues", [])),
             checks=dict(data.get("checks", {})),
             clip_path=clip_path,
+            fatals=list(data.get("fatals", [])),
+            tolerables=list(data.get("tolerables", [])),
         )
 
     @classmethod
@@ -156,6 +216,8 @@ class ShotAuditResult:
             "issues": self.issues,
             "checks": self.checks,
             "clip_path": self.clip_path,
+            "fatals": self.fatals,
+            "tolerables": self.tolerables,
         }
 
 
@@ -176,11 +238,13 @@ class EpisodeAuditReport:
         if self.regen_required:
             lines.append(f"Regen required: {', '.join(self.regen_required)}")
         for r in self.shot_results:
-            status = "PASS" if r.passed else "FAIL"
-            regen = " [REGEN]" if r.regen_required else ""
-            issues = f" — {'; '.join(r.issues)}" if r.issues else ""
-            clip = f" ({Path(r.clip_path).name})" if r.clip_path else " (clip not found)"
-            lines.append(f"  {r.shot_id}: {status}{regen}{clip}{issues}")
+            status = "PASS" if r.passed else "REGEN"
+            f_count = len(r.fatals) if r.fatals else 0
+            t_count = len(r.tolerables) if r.tolerables else 0
+            grade = f" (F:{f_count} T:{t_count})" if (f_count or t_count) else ""
+            clip = f" ({Path(r.clip_path).name})" if r.clip_path else ""
+            defects = f" — {'; '.join(r.fatals + r.tolerables)}" if (r.fatals or r.tolerables) else ""
+            lines.append(f"  {r.shot_id}: {status}{grade}{clip}{defects}")
         return "\n".join(lines)
 
     def to_dict(self) -> dict[str, Any]:
@@ -302,7 +366,7 @@ class VisionAuditor:
         return [start, mid, end][: self.frame_count]
 
     # ------------------------------------------------------------------
-    # Per-shot audit
+    # Per-shot audit — 3-layer pipeline (v2)
     # ------------------------------------------------------------------
 
     async def audit_shot(
@@ -312,7 +376,15 @@ class VisionAuditor:
         *,
         series: DramaSeries | None = None,
     ) -> ShotAuditResult:
-        """Audit a single clip against its scene specification."""
+        """Audit a single clip against its scene specification.
+
+        Three-layer pipeline:
+        - Layer 0: ffprobe metadata rules (duration check).
+        - Layer 1: SSIM temporal stability (frame_analyzer).
+        - Layer 2: Claude Vision LLM audit.
+
+        Each layer short-circuits on fatal — later layers are skipped.
+        """
         if not clip_path.exists():
             return ShotAuditResult.error_result(
                 scene.scene_id, f"clip not found: {clip_path}"
@@ -320,17 +392,99 @@ class VisionAuditor:
 
         logger.info("Auditing %s (%s)...", scene.scene_id, clip_path.name)
 
+        all_fatals: list[str] = []
+        all_tolerables: list[str] = []
+
+        # --- Layer 0: ffprobe metadata rules ---
+        try:
+            info = await get_video_info(clip_path)
+            duration = float(info.get("format", {}).get("duration", 0))
+            if duration <= 0.5:
+                all_fatals.append(f"clip duration too short ({duration:.2f}s)")
+        except Exception as exc:
+            logger.warning("Layer 0 ffprobe failed for %s: %s", scene.scene_id, exc)
+            all_fatals.append(f"ffprobe error: {exc}")
+
+        if all_fatals:
+            result = self._build_verdict(scene.scene_id, all_fatals, all_tolerables, clip_path=str(clip_path))
+            logger.info("  %s: Layer 0 short-circuit — %s", scene.scene_id, "; ".join(all_fatals))
+            return result
+
+        # --- Layer 1: temporal stability (SSIM) ---
+        l1_fatals, l1_tolerables = await self._layer1_temporal(clip_path)
+        all_fatals.extend(l1_fatals)
+        all_tolerables.extend(l1_tolerables)
+
+        if all_fatals:
+            result = self._build_verdict(scene.scene_id, all_fatals, all_tolerables, clip_path=str(clip_path))
+            logger.info("  %s: Layer 1 short-circuit — %s", scene.scene_id, "; ".join(all_fatals))
+            return result
+
+        # --- Layer 2: Claude Vision LLM ---
+        l2_fatals, l2_tolerables = await self._layer2_vision_llm(scene, clip_path)
+        all_fatals.extend(l2_fatals)
+        all_tolerables.extend(l2_tolerables)
+
+        result = self._build_verdict(scene.scene_id, all_fatals, all_tolerables, clip_path=str(clip_path))
+
+        status = "PASS" if result.passed else "REGEN"
+        logger.info("  %s: %s — F:%d T:%d", scene.scene_id, status,
+                    len(result.fatals), len(result.tolerables))
+        return result
+
+    # ------------------------------------------------------------------
+    # Layer helpers
+    # ------------------------------------------------------------------
+
+    async def _layer1_temporal(self, clip_path: Path) -> tuple[list[str], list[str]]:
+        """Layer 1: run frame_analyzer SSIM checks, return (fatals, tolerables)."""
+        from videoclaw.drama.frame_analyzer import (
+            extract_frames_as_arrays,
+            detect_temporal_breaks,
+        )
+
+        fatals: list[str] = []
+        tolerables: list[str] = []
+        try:
+            frames = extract_frames_as_arrays(clip_path, n=10)
+            breaks = detect_temporal_breaks(
+                frames,
+                fatal_threshold=_FATAL_THRESHOLD,
+                tolerable_threshold=_TOLERABLE_THRESHOLD,
+            )
+            for brk in breaks:
+                label = (
+                    f"temporal_break_f{brk.frame_pair[0]}_f{brk.frame_pair[1]}"
+                    f"_ssim{brk.ssim_score:.2f}"
+                )
+                if brk.severity == "fatal":
+                    fatals.append(label)
+                else:
+                    tolerables.append(label)
+        except Exception as exc:
+            logger.warning("Layer 1 frame analysis failed for %s: %s", clip_path.name, exc)
+            # Frame extraction failure is not fatal — fall through to Layer 2
+        return fatals, tolerables
+
+    async def _layer2_vision_llm(
+        self,
+        scene: DramaScene,
+        clip_path: Path,
+    ) -> tuple[list[str], list[str]]:
+        """Layer 2: Claude Vision audit with V2 pragmatic prompts, return (fatals, tolerables)."""
+        fatals: list[str] = []
+        tolerables: list[str] = []
+
         frames = self.extract_keyframes(clip_path)
         if not frames:
-            return ShotAuditResult.error_result(
-                scene.scene_id, "frame extraction produced no frames"
-            )
+            logger.warning("Layer 2: no frames extracted for %s", clip_path.name)
+            return fatals, tolerables
 
         content: list[dict[str, Any]] = [
             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
             for b64 in frames
         ]
-        content.append({"type": "text", "text": _AUDIT_USER_TEMPLATE.format(
+        content.append({"type": "text", "text": _AUDIT_USER_TEMPLATE_V2.format(
             scene_id=scene.scene_id,
             description=scene.description or "",
             time_of_day=scene.time_of_day or "unspecified",
@@ -339,14 +493,15 @@ class VisionAuditor:
                 if scene.characters_present
                 else "none specified"
             ),
-            dialogue=(scene.dialogue[:80] + "…" if len(scene.dialogue) > 80 else scene.dialogue),
+            dialogue=(scene.dialogue[:80] + "\u2026" if len(scene.dialogue) > 80 else scene.dialogue),
             shot_role=scene.shot_role or "normal",
             emotion=scene.emotion or "",
+            shot_scale=scene.shot_scale.value if scene.shot_scale else "unspecified",
             frame_count=len(frames),
         )})
 
         messages = [
-            {"role": "system", "content": _AUDIT_SYSTEM},
+            {"role": "system", "content": _AUDIT_SYSTEM_V2},
             {"role": "user", "content": content},
         ]
 
@@ -355,7 +510,7 @@ class VisionAuditor:
             raw = await llm.chat(messages, model=VISION_MODEL, temperature=0.1, max_tokens=1024)
         except Exception as exc:
             logger.error("Vision API error for %s: %s", scene.scene_id, exc)
-            return ShotAuditResult.error_result(scene.scene_id, str(exc))
+            return fatals, tolerables
 
         try:
             text = raw.strip()
@@ -364,18 +519,50 @@ class VisionAuditor:
             if text.endswith("```"):
                 text = text.rsplit("```", 1)[0]
             data = json.loads(text.strip())
-            result = ShotAuditResult.from_json(data, scene.scene_id, str(clip_path))
-            result.raw_response = raw
+            fatals = list(data.get("fatals", []))
+            tolerables = list(data.get("tolerables", []))
         except (json.JSONDecodeError, ValueError) as exc:
-            logger.error("Failed to parse audit JSON for %s: %s", scene.scene_id, exc)
-            result = ShotAuditResult.error_result(scene.scene_id, f"JSON parse error: {exc}")
-            result.raw_response = raw
+            logger.error("Failed to parse Layer 2 audit JSON for %s: %s", scene.scene_id, exc)
 
-        status = "PASS" if result.passed else "FAIL"
-        regen = " [REGEN NEEDED]" if result.regen_required else ""
-        logger.info("  %s: %s%s — %s", scene.scene_id, status, regen,
-                    "; ".join(result.issues) or "clean")
-        return result
+        return fatals, tolerables
+
+    def _build_verdict(
+        self,
+        shot_id: str,
+        fatals: list[str],
+        tolerables: list[str],
+        clip_path: str = "",
+    ) -> ShotAuditResult:
+        """Decision rule: fatal -> REGEN, <=2 tolerable -> PASS, >=3 tolerable -> REGEN."""
+        if fatals:
+            return ShotAuditResult(
+                shot_id=shot_id,
+                passed=False,
+                regen_required=True,
+                fatals=list(fatals),
+                tolerables=list(tolerables),
+                issues=fatals + tolerables,
+                clip_path=clip_path,
+            )
+        if len(tolerables) >= 3:
+            return ShotAuditResult(
+                shot_id=shot_id,
+                passed=False,
+                regen_required=True,
+                fatals=list(fatals),
+                tolerables=list(tolerables),
+                issues=tolerables,
+                clip_path=clip_path,
+            )
+        return ShotAuditResult(
+            shot_id=shot_id,
+            passed=True,
+            regen_required=False,
+            fatals=list(fatals),
+            tolerables=list(tolerables),
+            issues=tolerables if tolerables else [],
+            clip_path=clip_path,
+        )
 
     # ------------------------------------------------------------------
     # Episode-level audit (standalone mode)
@@ -387,6 +574,7 @@ class VisionAuditor:
         clip_dir: Path,
         *,
         series: DramaSeries | None = None,
+        incremental: bool = False,
     ) -> EpisodeAuditReport:
         """Audit all scenes by discovering clips in *clip_dir*.
 
@@ -401,6 +589,10 @@ class VisionAuditor:
             Directory to search for MP4 files.
         series:
             Optional series context for richer audit prompts.
+        incremental:
+            When ``True``, skip scenes whose ``audit_result`` already shows
+            ``passed=True`` and ``regen_required=False`` — carry them over
+            as PASS without re-auditing.
         """
         report = EpisodeAuditReport(
             series_id=series.series_id if series else "",
@@ -409,6 +601,23 @@ class VisionAuditor:
         )
 
         for scene in scenes:
+            # Incremental: skip previously passed scenes
+            if incremental and scene.audit_result:
+                ar = scene.audit_result
+                if ar.get("passed") and not ar.get("regen_required"):
+                    result = ShotAuditResult(
+                        shot_id=scene.scene_id,
+                        passed=True,
+                        regen_required=False,
+                        fatals=list(ar.get("fatals", [])),
+                        tolerables=list(ar.get("tolerables", [])),
+                        clip_path=ar.get("clip_path", ""),
+                    )
+                    report.shot_results.append(result)
+                    report.passed_shots += 1
+                    logger.info("  %s: incremental skip (already passed)", scene.scene_id)
+                    continue
+
             clip_path = resolve_clip(scene.scene_id, clip_dir, scene.video_asset_path)
             if clip_path is None:
                 logger.warning("No clip found for %s in %s — skipping", scene.scene_id, clip_dir)
