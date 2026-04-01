@@ -329,3 +329,79 @@ class TestTokenUsage:
         assert usage.prompt_tokens == 0
         assert usage.completion_tokens == 0
         assert usage.total_tokens == 0
+
+
+# ---------------------------------------------------------------------------
+# CSV Export
+# ---------------------------------------------------------------------------
+
+class TestCSVExport:
+    def test_export_csv_to_file(self, tmp_path):
+        tracker = CostTracker(project_id="csv_test")
+        tracker.record(_make_record(task_id="v1", task_type="video_gen", api_cost=0.50))
+        tracker.record(_make_record(task_id="l1", task_type="llm", api_cost=0.01,
+                                    input_tokens=500, output_tokens=200))
+
+        csv_path = tmp_path / "cost.csv"
+        result = tracker.export_csv(csv_path)
+        assert result == str(csv_path)
+        assert csv_path.exists()
+
+        import csv as _csv
+        with open(csv_path) as f:
+            reader = _csv.DictReader(f)
+            rows = list(reader)
+        assert len(rows) == 2
+        assert rows[0]["task_type"] == "video_gen"
+        assert rows[1]["task_type"] == "llm"
+        assert rows[1]["input_tokens"] == "500"
+
+    def test_export_csv_to_string(self):
+        tracker = CostTracker(project_id="csv_str")
+        tracker.record(_make_record(task_id="s1", api_cost=0.10))
+        csv_text = tracker.export_csv()
+        assert "timestamp" in csv_text
+        assert "s1" in csv_text
+        lines = csv_text.strip().split("\n")
+        assert len(lines) == 2  # header + 1 data row
+
+    def test_export_csv_empty(self):
+        tracker = CostTracker(project_id="empty")
+        csv_text = tracker.export_csv()
+        lines = csv_text.strip().split("\n")
+        assert len(lines) == 1  # header only
+
+
+# ---------------------------------------------------------------------------
+# Backward compatibility
+# ---------------------------------------------------------------------------
+
+class TestBackwardCompat:
+    def test_load_ledger_without_task_type(self, tmp_path):
+        """Ledgers from before task_type was added should still load."""
+        old_ledger = {
+            "project_id": "old_proj",
+            "budget_usd": None,
+            "total_usd": 0.25,
+            "record_count": 1,
+            "records": [{
+                "task_id": "t1",
+                "model_id": "seedance-2.0",
+                "execution_mode": "cloud",
+                "api_cost_usd": 0.25,
+                "compute_cost_usd": 0.0,
+                "duration_seconds": 10.0,
+                "task_type": "video_gen",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "video_seconds": 5.0,
+                "retries": 0,
+                "timestamp": "2026-03-15T10:00:00+00:00",
+            }],
+        }
+        ledger_path = tmp_path / "cost.json"
+        ledger_path.write_text(json.dumps(old_ledger))
+
+        tracker = CostTracker.load_ledger(ledger_path)
+        assert tracker._total_usd == pytest.approx(0.25)
+        assert tracker._records[0].task_type == "video_gen"
