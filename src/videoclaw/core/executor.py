@@ -538,6 +538,57 @@ class DAGExecutor:
         if image_urls:
             extra["image_urls"] = image_urls
 
+        # --- Build structured segments for interleaved content (if ref markers present) ---
+        if "[ref:" in shot.prompt:
+            from videoclaw.drama.prompt_segments import (
+                PromptSegmenter,
+                ReferenceMedia,
+                allocate_reference_slots,
+            )
+            from videoclaw.drama.prompt_enhancer import _to_ref_key
+
+            # Build available refs for slot allocation
+            all_available: dict[str, dict[str, str]] = {
+                "characters": {},
+                "scenes": node.params.get("scene_reference_urls", {}),
+                "props": node.params.get("prop_reference_urls", {}),
+            }
+            # Character refs: prefer URLs, fallback to paths
+            for char_name, url in reference_image_urls.items():
+                all_available["characters"][char_name] = url
+            if not all_available["characters"]:
+                for char_name, path in reference_images.items():
+                    all_available["characters"][char_name] = path
+
+            # Allocate slots by shot type
+            shot_scale = None
+            try:
+                from videoclaw.drama.models import ShotScale as _SS
+                shot_scale_raw = node.params.get("shot_scale")
+                if shot_scale_raw:
+                    shot_scale = _SS(shot_scale_raw)
+            except (ValueError, KeyError):
+                pass
+
+            speaking_char = node.params.get("speaking_character")
+            allocated = allocate_reference_slots(
+                shot_scale, all_available, speaking_character=speaking_char,
+            )
+
+            # Build ref_map for segmenter (key → ReferenceMedia)
+            ref_map = {_to_ref_key(r.key): r for r in allocated}
+
+            # Parse prompt into segments
+            segments = PromptSegmenter.parse(shot.prompt, ref_map)
+            extra["prompt_segments"] = segments
+            # Clear old-style refs since segments handle everything
+            extra.pop("image_urls", None)
+            extra.pop("image_paths", None)
+            logger.info(
+                "[video_gen] Using structured segments for shot %s (%d segments, %d refs)",
+                shot_id, len(segments), len(allocated),
+            )
+
         registry = get_registry()
         registry.discover()
 
