@@ -10,7 +10,7 @@ import asyncio
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from videoclaw.core.events import COST_UPDATED, event_bus
@@ -33,11 +33,14 @@ class CostRecord:
     api_cost_usd: float
     compute_cost_usd: float  # estimated local GPU electricity cost
     duration_seconds: float
+    task_type: str = "video_gen"  # e.g. "video_gen", "llm", "tts", "compose", "render"
     input_tokens: int = 0
     output_tokens: int = 0
     video_seconds: float = 0.0
     retries: int = 0
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
 
     @property
     def total_usd(self) -> float:
@@ -108,6 +111,7 @@ class CostTracker:
         self.project_id = project_id
         self.budget_usd = budget_usd
         self._records: list[CostRecord] = []
+        self._total_usd: float = 0.0  # O(1) running total accumulator
         self._background_tasks: set[asyncio.Task] = set()  # prevent GC of fire-and-forget tasks
 
     # -- Mutation -----------------------------------------------------------
@@ -119,11 +123,13 @@ class CostTracker:
         running the event is silently skipped (e.g. during unit tests).
         """
         self._records.append(cost)
+        self._total_usd += cost.total_usd
         logger.debug(
-            "Recorded cost for task=%s model=%s total=$%.4f",
+            "Recorded cost for task=%s model=%s total=$%.4f cumulative=$%.4f",
             cost.task_id,
             cost.model_id,
             cost.total_usd,
+            self._total_usd,
         )
         # Fire-and-forget event emission.
         try:
@@ -160,7 +166,7 @@ class CostTracker:
             else:
                 local_usd += total
             by_model[r.model_id] += total
-            by_task[r.task_id.rsplit("_", 1)[0]] += total  # strip shot suffix
+            by_task[r.task_type] += total
 
         return ProjectCostSummary(
             project_id=self.project_id,
@@ -345,4 +351,4 @@ class CostTracker:
     # -- Internals ----------------------------------------------------------
 
     def _running_total(self) -> float:
-        return sum(r.total_usd for r in self._records)
+        return self._total_usd

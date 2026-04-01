@@ -88,8 +88,12 @@ class ProjectState:
     script: str | None = None
     storyboard: list[Shot] = field(default_factory=list)
     assets: dict[str, str] = field(default_factory=dict)
-    cost_total: float = 0.0
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def cost_total(self) -> float:
+        """Aggregate cost computed from individual shot costs."""
+        return sum(s.cost for s in self.storyboard)
 
     def touch(self) -> None:
         """Bump ``updated_at`` to the current UTC time."""
@@ -107,7 +111,7 @@ class ProjectState:
             "script": self.script,
             "storyboard": [s.to_dict() for s in self.storyboard],
             "assets": self.assets,
-            "cost_total": self.cost_total,
+            "cost_total": self.cost_total,  # computed property, included for consumers
             "metadata": self.metadata,
         }
 
@@ -116,6 +120,8 @@ class ProjectState:
         data = dict(data)
         data["status"] = ProjectStatus(data.get("status", "planning"))
         data["storyboard"] = [Shot.from_dict(s) for s in data.get("storyboard", [])]
+        # cost_total is now a computed property — drop it from deserialized data
+        data.pop("cost_total", None)
         return cls(**data)
 
 
