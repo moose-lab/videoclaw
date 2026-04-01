@@ -363,6 +363,11 @@ async def _drama_audit_regen_async(
         )
         console.print(report.summary())
 
+        # Persist audit round to JSONL log (审计落档)
+        from videoclaw.config import get_config
+        series_dir = get_config().projects_dir / "dramas" / series.series_id
+        report.save_to_log(series_dir, round_num)
+
         regen_ids = report.regen_required
         round_record = {
             "round": round_num,

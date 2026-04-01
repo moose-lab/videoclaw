@@ -35,7 +35,9 @@ import json
 import logging
 import subprocess
 import tempfile
+from collections import Counter
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -256,6 +258,86 @@ class EpisodeAuditReport:
             "regen_required": self.regen_required,
             "shot_results": [r.to_dict() for r in self.shot_results],
         }
+
+    def save_to_log(self, series_dir: Path, round_num: int) -> None:
+        """Persist this audit report as one round in the series audit log.
+
+        Creates ``{series_dir}/audit_logs/ep{NN}_audit.jsonl`` if it doesn't
+        exist, then appends one JSON-Lines record for this round.
+        """
+        log_dir = series_dir / "audit_logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / f"ep{self.episode_number:02d}_audit.jsonl"
+        audit_log = AuditLog(log_path)
+        audit_log.append_round(self, round_num)
+
+
+# ---------------------------------------------------------------------------
+# AuditLog — JSON-Lines persistence for audit rounds
+# ---------------------------------------------------------------------------
+
+class AuditLog:
+    """Append-only JSON-Lines audit log.
+
+    Each line stores one audit round as a JSON object::
+
+        {"round": N, "timestamp": "ISO", "episode": N,
+         "results": [...], "summary": {"passed": N, "total": N, "regen_ids": [...]}}
+
+    Parameters
+    ----------
+    log_path:
+        Path to the ``.jsonl`` file.  Created on first write.
+    """
+
+    def __init__(self, log_path: Path) -> None:
+        self.log_path = log_path
+
+    def append_round(self, report: EpisodeAuditReport, round_num: int) -> None:
+        """Append one audit round record to the log file."""
+        record = {
+            "round": round_num,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "episode": report.episode_number,
+            "results": [r.to_dict() for r in report.shot_results],
+            "summary": {
+                "passed": report.passed_shots,
+                "total": report.total_shots,
+                "regen_ids": list(report.regen_required),
+            },
+        }
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.log_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    def read_all(self) -> list[dict]:
+        """Read all rounds from the log file.  Returns ``[]`` if file missing."""
+        if not self.log_path.exists():
+            return []
+        rounds: list[dict] = []
+        with self.log_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    rounds.append(json.loads(line))
+        return rounds
+
+    def get_frequent_defects(self, min_count: int = 3) -> list[str]:
+        """Return defect descriptions that appeared >= *min_count* times across all rounds.
+
+        Scans ``fatals`` and ``tolerables`` from every shot result in every round.
+        """
+        rounds = self.read_all()
+        if not rounds:
+            return []
+        counter: Counter[str] = Counter()
+        for rnd in rounds:
+            for result in rnd.get("results", []):
+                for defect in result.get("fatals", []):
+                    counter[defect] += 1
+                for defect in result.get("tolerables", []):
+                    counter[defect] += 1
+        return [defect for defect, count in counter.items() if count >= min_count]
 
 
 # ---------------------------------------------------------------------------
