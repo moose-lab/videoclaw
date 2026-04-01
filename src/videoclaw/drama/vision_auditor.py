@@ -41,6 +41,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from rich.console import Console
+from rich.table import Table
+
 from videoclaw.drama.models import DramaScene, DramaSeries
 from videoclaw.models.llm.litellm_wrapper import LLMClient
 from videoclaw.utils.ffmpeg import get_video_info
@@ -270,6 +273,53 @@ class EpisodeAuditReport:
         log_path = log_dir / f"ep{self.episode_number:02d}_audit.jsonl"
         audit_log = AuditLog(log_path)
         audit_log.append_round(self, round_num)
+
+
+# ---------------------------------------------------------------------------
+# Human preview breakpoint (人工预览断点)
+# ---------------------------------------------------------------------------
+
+
+async def preview_and_confirm(
+    report: EpisodeAuditReport,
+    series_dir: Path,
+) -> list[str]:
+    """Present passed/tolerable shots for optional human review.
+
+    Prints a summary table of all shots with their status and defects.
+    For shots with tolerables, shows the defect descriptions.
+    Prompts the user to enter scene IDs they want to force-regen (comma-separated),
+    or press Enter to accept all.
+
+    Returns list of additional scene_ids the user wants to regen.
+    """
+    console = Console()
+
+    table = Table(title=f"EP{report.episode_number:02d} Shot Review")
+    table.add_column("Shot ID", style="cyan")
+    table.add_column("Status", style="bold")
+    table.add_column("Fatals", justify="right")
+    table.add_column("Tolerables", justify="right")
+    table.add_column("Defects", style="dim")
+
+    for r in report.shot_results:
+        status = "[green]PASS[/green]" if r.passed else "[red]REGEN[/red]"
+        f_count = str(len(r.fatals)) if r.fatals else "0"
+        t_count = str(len(r.tolerables)) if r.tolerables else "0"
+        defects = "; ".join(r.fatals + r.tolerables) if (r.fatals or r.tolerables) else ""
+        table.add_row(r.shot_id, status, f_count, t_count, defects)
+
+    console.print(table)
+
+    user_input = input(
+        "\n[yellow]Enter scene IDs to force-regen (comma-separated), "
+        "or press Enter to accept:[/yellow] "
+    )
+
+    if not user_input.strip():
+        return []
+
+    return [sid.strip() for sid in user_input.split(",") if sid.strip()]
 
 
 # ---------------------------------------------------------------------------

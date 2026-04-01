@@ -251,6 +251,10 @@ def drama_audit_regen(
         bool,
         typer.Option("--recompose", help="Re-compose after final round."),
     ] = True,
+    preview: Annotated[
+        bool,
+        typer.Option("--preview/--no-preview", help="Interactive preview before regen."),
+    ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Run vision audit -> regenerate failing scenes -> re-audit loop.
@@ -318,7 +322,7 @@ def drama_audit_regen(
     try:
         result = asyncio.run(
             _drama_audit_regen_async(
-                series, mgr, ep, clip_path, max_rounds, recompose,
+                series, mgr, ep, clip_path, max_rounds, recompose, preview,
             )
         )
     except Exception as exc:
@@ -337,6 +341,7 @@ async def _drama_audit_regen_async(
     clip_dir: Path | None,
     max_rounds: int,
     recompose: bool,
+    preview: bool = False,
 ) -> dict:
     """Execute the audit -> regen -> re-audit loop."""
     from videoclaw.drama.runner import DramaRunner
@@ -369,6 +374,20 @@ async def _drama_audit_regen_async(
         report.save_to_log(series_dir, round_num)
 
         regen_ids = report.regen_required
+
+        # Human preview breakpoint (人工预览断点)
+        if preview:
+            from videoclaw.drama.vision_auditor import preview_and_confirm
+
+            extra_ids = await preview_and_confirm(report, series_dir)
+            if extra_ids:
+                for sid in extra_ids:
+                    if sid not in regen_ids:
+                        regen_ids.append(sid)
+                console.print(
+                    f"[yellow]User force-regen: {', '.join(extra_ids)}[/yellow]"
+                )
+
         round_record = {
             "round": round_num,
             "total": report.total_shots,
