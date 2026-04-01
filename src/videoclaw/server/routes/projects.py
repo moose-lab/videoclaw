@@ -63,6 +63,35 @@ async def get_project(project_id: str) -> dict:
     return ps.to_dict()
 
 
+@router.get("/{project_id}/cost")
+async def get_project_cost(project_id: str) -> dict:
+    """Return detailed cost breakdown for a project from its persisted ledger."""
+    cost_path = _state_mgr.projects_dir / project_id / "cost.json"
+    if not cost_path.exists():
+        raise HTTPException(status_code=404, detail="No cost ledger for this project")
+
+    from videoclaw.cost.tracker import CostTracker
+
+    tracker = CostTracker.load_ledger(cost_path)
+    summary = tracker.get_summary()
+    hints = tracker.get_optimization_hints()
+    return {
+        "project_id": summary.project_id,
+        "total_usd": summary.total_usd,
+        "cloud_usd": summary.cloud_usd,
+        "local_usd": summary.local_usd,
+        "record_count": len(summary.records),
+        "by_model": summary.by_model,
+        "by_task_type": summary.by_task_type,
+        "budget_usd": tracker.budget_usd,
+        "within_budget": tracker.check_budget()[0],
+        "hints": [
+            {"message": h.message, "savings": h.potential_savings_usd, "action": h.action}
+            for h in hints
+        ],
+    }
+
+
 @router.delete("/{project_id}")
 async def delete_project(project_id: str) -> dict:
     import shutil

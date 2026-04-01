@@ -128,7 +128,7 @@ class CostTracker:
             cost.total_usd,
             self._total_usd,
         )
-        # Fire-and-forget event emission.
+        # Fire-and-forget event emission with full billing payload.
         try:
             loop = asyncio.get_running_loop()
             task = loop.create_task(
@@ -137,7 +137,17 @@ class CostTracker:
                     {
                         "project_id": self.project_id,
                         "task_id": cost.task_id,
-                        "total_usd": self._running_total(),
+                        "task_type": cost.task_type,
+                        "model_id": cost.model_id,
+                        "record_usd": cost.total_usd,
+                        "total_usd": self._total_usd,
+                        "budget_usd": self.budget_usd,
+                        "within_budget": (
+                            self._total_usd <= self.budget_usd
+                            if self.budget_usd is not None
+                            else True
+                        ),
+                        "record_count": len(self._records),
                     },
                 )
             )
