@@ -7,6 +7,8 @@ provides optimisation hints to help users minimise spend.
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 import json
 import logging
 from collections import defaultdict
@@ -402,6 +404,44 @@ class CostTracker:
             tracker._total_usd += record.total_usd
         logger.debug("Loaded cost ledger (%d records) from %s", len(tracker._records), path)
         return tracker
+
+    def export_csv(self, path: Path | None = None) -> str:
+        """Export all records as CSV.
+
+        If *path* is given, writes to file and returns the path string.
+        Otherwise returns the CSV content as a string.
+        """
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "timestamp", "task_id", "task_type", "model_id",
+            "execution_mode", "api_cost_usd", "compute_cost_usd",
+            "total_usd", "duration_seconds", "video_seconds",
+            "input_tokens", "output_tokens", "retries",
+        ])
+        for r in self._records:
+            writer.writerow([
+                r.timestamp.isoformat(),
+                r.task_id,
+                r.task_type,
+                r.model_id,
+                r.execution_mode,
+                f"{r.api_cost_usd:.6f}",
+                f"{r.compute_cost_usd:.6f}",
+                f"{r.total_usd:.6f}",
+                f"{r.duration_seconds:.2f}",
+                f"{r.video_seconds:.2f}",
+                r.input_tokens,
+                r.output_tokens,
+                r.retries,
+            ])
+
+        csv_text = output.getvalue()
+        if path is not None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(csv_text, encoding="utf-8")
+            return str(path)
+        return csv_text
 
     # -- Internals ----------------------------------------------------------
 

@@ -177,6 +177,50 @@ def cost_compare(
     out.emit()
 
 
+@cost_app.command("export")
+def cost_export(
+    project_id: Annotated[str, typer.Argument(help="Project or series ID.")],
+    output: Annotated[
+        str, typer.Option("--output", "-o", help="Output file path (CSV)."),
+    ] = "",
+) -> None:
+    """Export cost records to CSV for external analysis."""
+    console = get_console()
+    out = get_output()
+    out._command = "cost export"
+    cfg = get_config()
+
+    cost_path = cfg.projects_dir / project_id / "cost.json"
+    if not cost_path.exists():
+        drama_cost = _find_drama_cost(project_id)
+        if drama_cost:
+            cost_path = drama_cost
+        else:
+            console.print(f"[red]No cost ledger found for {project_id!r}[/red]")
+            out.set_error(f"No cost ledger for {project_id}")
+            out.emit()
+            raise typer.Exit(1)
+
+    from videoclaw.cost.tracker import CostTracker
+
+    tracker = CostTracker.load_ledger(cost_path)
+
+    if output:
+        out_path = Path(output)
+    else:
+        out_path = cost_path.parent / "cost.csv"
+
+    tracker.export_csv(out_path)
+    console.print(f"[green]Exported {len(tracker._records)} records to {out_path}[/green]")
+
+    out.set_result({
+        "project_id": project_id,
+        "records": len(tracker._records),
+        "output": str(out_path),
+    })
+    out.emit()
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
