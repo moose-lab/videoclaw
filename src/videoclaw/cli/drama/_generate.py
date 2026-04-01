@@ -112,7 +112,7 @@ def drama_preview_prompts(
             "characters": sc.characters_present,
             "dialogue": sc.dialogue,
             "narration": sc.narration,
-            "prompt": sc.visual_prompt,
+            "prompt": sc.effective_prompt,
         }
         prompts_data.append(entry)
 
@@ -129,7 +129,7 @@ def drama_preview_prompts(
             console.print(
                 f'[dim]Dialogue: "{dlg_trunc}{ellipsis}"[/dim]'
             )
-        console.print(f"\n[green]{sc.visual_prompt}[/green]")
+        console.print(f"\n[green]{sc.effective_prompt}[/green]")
 
     if output:
         import json as _json

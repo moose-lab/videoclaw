@@ -188,8 +188,27 @@ class TestEnhanceAllScenes:
 
         assert result is episode  # mutates in place
         for scene in episode.scenes:
-            assert "Lin Yue" in scene.visual_prompt
-            assert "Style: cinematic" in scene.visual_prompt
+            # enhanced_visual_prompt should contain enriched content
+            assert "Lin Yue" in scene.enhanced_visual_prompt
+            assert "Style: cinematic" in scene.enhanced_visual_prompt
+        # original visual_prompt must be preserved (not overwritten)
+        assert episode.scenes[0].visual_prompt == "两人在古桥上对视，微风吹过"
+        assert episode.scenes[1].visual_prompt == "forest path scene"
+
+    def test_effective_prompt_returns_enhanced_when_available(self):
+        series = _make_series()
+        episode = Episode(number=1, scenes=[_make_scene()])
+        enhancer = PromptEnhancer(strip_chinese=False)
+        enhancer.enhance_all_scenes(episode, series)
+
+        scene = episode.scenes[0]
+        assert scene.effective_prompt == scene.enhanced_visual_prompt
+        assert scene.effective_prompt != scene.visual_prompt
+
+    def test_effective_prompt_falls_back_to_original(self):
+        scene = _make_scene()
+        assert scene.enhanced_visual_prompt == ""
+        assert scene.effective_prompt == scene.visual_prompt
 
     def test_returns_episode(self):
         enhancer = PromptEnhancer()

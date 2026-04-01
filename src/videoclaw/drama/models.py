@@ -164,6 +164,11 @@ class DramaScene:
     # Vision audit result (written by VisionAuditor, persisted via DramaManager)
     audit_result: dict | None = None
 
+    @property
+    def effective_prompt(self) -> str:
+        """The prompt used for video generation: enhanced if available, else original."""
+        return self.enhanced_visual_prompt or self.visual_prompt
+
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         if self.shot_scale is not None:

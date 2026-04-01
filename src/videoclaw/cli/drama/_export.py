@@ -318,7 +318,7 @@ def drama_export(
                 "dialogue": sc.dialogue,
                 "narration": sc.narration,
                 "original_prompt": sc.description,
-                "enhanced_prompt": sc.enhanced_visual_prompt or sc.visual_prompt,
+                "enhanced_prompt": sc.effective_prompt,
             })
         out_path = prompt_dir / f"ep{ep.number:02d}_prompts.json"
         out_path.parent.mkdir(parents=True, exist_ok=True)

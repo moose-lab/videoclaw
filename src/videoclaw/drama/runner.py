@@ -230,7 +230,7 @@ def build_episode_dag(
         shots.append(Shot(
             shot_id=scene.scene_id or f"ep{episode.number:02d}_s{idx+1:02d}",
             description=scene.description,
-            prompt=scene.visual_prompt,
+            prompt=scene.effective_prompt,
             duration_seconds=scene.duration_seconds,
             model_id=series.model_id,
             status=ShotStatus.PENDING,
@@ -532,7 +532,6 @@ def build_scene_regen_dag(
     # Enhance the target scene's visual prompt
     enhancer = PromptEnhancer()
     enhanced = enhancer.enhance_scene_prompt(target_scene, series)
-    target_scene.visual_prompt = enhanced
     target_scene.enhanced_visual_prompt = enhanced
 
     dag = DAG()
@@ -566,7 +565,7 @@ def build_scene_regen_dag(
         depends_on=[],
         params={
             "shot_id": scene_id,
-            "prompt": target_scene.visual_prompt,
+            "prompt": target_scene.effective_prompt,
             "duration": target_scene.duration_seconds,
             "model_id": shot.model_id if shot else series.model_id,
             "aspect_ratio": series.aspect_ratio,

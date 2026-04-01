@@ -64,7 +64,8 @@ def test_shot_ids_match_scene_ids():
     assert len(state.storyboard) == 3
     for shot, scene in zip(state.storyboard, scenes):
         assert shot.shot_id == scene.scene_id
-        assert shot.prompt == scene.visual_prompt
+        # Shot prompt should use the enhanced version (from PromptEnhancer)
+        assert shot.prompt == scene.effective_prompt
         assert shot.duration_seconds == scene.duration_seconds
 
 

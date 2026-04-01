@@ -128,6 +128,11 @@ class VideoComposer:
                 resolved = [transition] * n_boundaries
 
             # Resolve clip durations -- probe if not provided
+            if clip_durations is not None and len(clip_durations) != len(video_paths):
+                raise ValueError(
+                    f"clip_durations length ({len(clip_durations)}) != "
+                    f"video_paths length ({len(video_paths)})"
+                )
             if clip_durations is None:
                 durations = []
                 for vp in video_paths:
@@ -300,7 +305,7 @@ class VideoComposer:
                 offset = clip_durations[0] - transition_duration
             else:
                 offset = offsets[i - 1] + clip_durations[i] - transition_duration
-            offsets.append(max(0.0, offset))
+            offsets.append(round(max(0.0, offset), 3))
 
         # Input arguments
         cmd: list[str] = ["ffmpeg", "-y"]
