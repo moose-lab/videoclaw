@@ -6,10 +6,9 @@ import asyncio
 import logging
 from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from videoclaw.config import get_config
-from videoclaw.cost.tracker import CostRecord, CostTracker
 from videoclaw.core.events import (
     PROJECT_COMPLETED,
     TASK_COMPLETED,
@@ -22,6 +21,9 @@ from videoclaw.core.events import (
 )
 from videoclaw.core.planner import DAG, NodeStatus, TaskNode, TaskType
 from videoclaw.core.state import ProjectState, ProjectStatus, ShotStatus, StateManager
+
+if TYPE_CHECKING:
+    from videoclaw.cost.tracker import CostTracker
 
 logger = logging.getLogger(__name__)
 
@@ -220,6 +222,8 @@ class DAGExecutor:
         """Build a :class:`CostRecord` from a completed task and record it."""
         if self.cost_tracker is None:
             return
+
+        from videoclaw.cost.tracker import CostRecord
 
         # Extract cost from handler result (dict with cost_usd key)
         cost_usd: float = 0.0

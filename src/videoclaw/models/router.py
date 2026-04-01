@@ -64,7 +64,9 @@ MODEL_PROFILES: dict[str, dict[str, float]] = {
     "pika-2.2": {"quality": 0.80, "speed": 0.7, "cost": 0.6, "price_usd_per_sec": 0.04},
     # MiniMax models (海螺AI) - free tier available
     "minimax-hailuo-2.3": {"quality": 0.82, "speed": 0.75, "cost": 0.85, "price_usd_per_sec": 0.02},
-    "minimax-hailuo-2.3-fast": {"quality": 0.78, "speed": 0.85, "cost": 0.85, "price_usd_per_sec": 0.02},
+    "minimax-hailuo-2.3-fast": {
+        "quality": 0.78, "speed": 0.85, "cost": 0.85, "price_usd_per_sec": 0.02,
+    },
     "minimax-hailuo-02": {"quality": 0.75, "speed": 0.75, "cost": 0.85, "price_usd_per_sec": 0.02},
     "minimax-s2v-01": {"quality": 0.80, "speed": 0.70, "cost": 0.85, "price_usd_per_sec": 0.02},
     # ZhipuAI models (智谱清影/CogVideoX) - free tier available
@@ -77,7 +79,9 @@ MODEL_PROFILES: dict[str, dict[str, float]] = {
     "mock": {"quality": 0.10, "speed": 1.0, "cost": 1.0, "price_usd_per_sec": 0.0},
 }
 
-_DEFAULT_PROFILE: dict[str, float] = {"quality": 0.5, "speed": 0.5, "cost": 0.5, "price_usd_per_sec": 0.02}
+_DEFAULT_PROFILE: dict[str, float] = {
+    "quality": 0.5, "speed": 0.5, "cost": 0.5, "price_usd_per_sec": 0.02,
+}
 
 
 def get_price_usd_per_sec(model_id: str) -> float:
