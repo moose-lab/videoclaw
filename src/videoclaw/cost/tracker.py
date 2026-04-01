@@ -71,23 +71,18 @@ class CostHint:
 
 
 # ---------------------------------------------------------------------------
-# Rough per-second pricing used for estimates and hint generation.
-# Keys are model_id strings; values are USD per second of generated video.
+# Pricing — delegates to the centralised MODEL_PROFILES registry in
+# ``videoclaw.models.router`` for cloud per-second rates.
 # ---------------------------------------------------------------------------
 
-_CLOUD_PRICE_PER_SEC: dict[str, float] = {
-    "sora": 0.10,
-    "runway-gen4": 0.08,
-    "kling-1.6": 0.05,
-    "pika-2.2": 0.04,
-    "minimax": 0.03,
-    "seedance-2.0": 0.05,
-    "seedance-1.5-pro": 0.04,
-    "seedance-1.0": 0.03,
-    "mock": 0.00,
-}
-
 _LOCAL_COST_PER_SEC: float = 0.002  # rough electricity estimate
+
+
+def _cloud_price_per_sec(model_id: str) -> float:
+    """Look up cloud price from the authoritative MODEL_PROFILES registry."""
+    from videoclaw.models.router import get_price_usd_per_sec
+
+    return get_price_usd_per_sec(model_id)
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +247,7 @@ class CostTracker:
             duration: float = float(task.get("duration_seconds", 5.0))
             mode: str = task.get("execution_mode", "cloud")
             if mode == "cloud":
-                rate = _CLOUD_PRICE_PER_SEC.get(model_id, 0.05)
+                rate = _cloud_price_per_sec(model_id)
                 total += duration * rate
             else:
                 total += duration * _LOCAL_COST_PER_SEC

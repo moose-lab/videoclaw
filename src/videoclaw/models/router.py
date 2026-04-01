@@ -55,27 +55,35 @@ class ModelScore:
 # Hardcoded profiles until we collect runtime telemetry.
 # Keys are model_id strings; values carry rough quality / speed / cost
 # characteristics on a 0-1 normalised scale (higher is better).
+# ``price_usd_per_sec`` is the authoritative USD-per-second-of-video rate
+# used by cost tracking, adapters, and optimisation hints.
 MODEL_PROFILES: dict[str, dict[str, float]] = {
-    "sora": {"quality": 0.95, "speed": 0.5, "cost": 0.3},
-    "runway-gen4": {"quality": 0.90, "speed": 0.6, "cost": 0.4},
-    "kling-1.6": {"quality": 0.85, "speed": 0.65, "cost": 0.5},
-    "pika-2.2": {"quality": 0.80, "speed": 0.7, "cost": 0.6},
+    "sora": {"quality": 0.95, "speed": 0.5, "cost": 0.3, "price_usd_per_sec": 0.10},
+    "runway-gen4": {"quality": 0.90, "speed": 0.6, "cost": 0.4, "price_usd_per_sec": 0.08},
+    "kling-1.6": {"quality": 0.85, "speed": 0.65, "cost": 0.5, "price_usd_per_sec": 0.03},
+    "pika-2.2": {"quality": 0.80, "speed": 0.7, "cost": 0.6, "price_usd_per_sec": 0.04},
     # MiniMax models (海螺AI) - free tier available
-    "minimax-hailuo-2.3": {"quality": 0.82, "speed": 0.75, "cost": 0.85},
-    "minimax-hailuo-2.3-fast": {"quality": 0.78, "speed": 0.85, "cost": 0.85},
-    "minimax-hailuo-02": {"quality": 0.75, "speed": 0.75, "cost": 0.85},
-    "minimax-s2v-01": {"quality": 0.80, "speed": 0.70, "cost": 0.85},
+    "minimax-hailuo-2.3": {"quality": 0.82, "speed": 0.75, "cost": 0.85, "price_usd_per_sec": 0.02},
+    "minimax-hailuo-2.3-fast": {"quality": 0.78, "speed": 0.85, "cost": 0.85, "price_usd_per_sec": 0.02},
+    "minimax-hailuo-02": {"quality": 0.75, "speed": 0.75, "cost": 0.85, "price_usd_per_sec": 0.02},
+    "minimax-s2v-01": {"quality": 0.80, "speed": 0.70, "cost": 0.85, "price_usd_per_sec": 0.02},
     # ZhipuAI models (智谱清影/CogVideoX) - free tier available
-    "cogvideox-flash": {"quality": 0.70, "speed": 0.85, "cost": 0.95},
-    "cogvideox": {"quality": 0.75, "speed": 0.60, "cost": 0.95},
+    "cogvideox-flash": {"quality": 0.70, "speed": 0.85, "cost": 0.95, "price_usd_per_sec": 0.015},
+    "cogvideox": {"quality": 0.75, "speed": 0.60, "cost": 0.95, "price_usd_per_sec": 0.015},
     # ByteDance Seedance (豆包) via Volcengine Ark
-    "seedance-2.0": {"quality": 0.92, "speed": 0.65, "cost": 0.80},
-    "seedance-1.5-pro": {"quality": 0.88, "speed": 0.60, "cost": 0.75},
-    "seedance-1.0": {"quality": 0.85, "speed": 0.70, "cost": 0.85},
-    "mock": {"quality": 0.10, "speed": 1.0, "cost": 1.0},
+    "seedance-2.0": {"quality": 0.92, "speed": 0.65, "cost": 0.80, "price_usd_per_sec": 0.05},
+    "seedance-1.5-pro": {"quality": 0.88, "speed": 0.60, "cost": 0.75, "price_usd_per_sec": 0.04},
+    "seedance-1.0": {"quality": 0.85, "speed": 0.70, "cost": 0.85, "price_usd_per_sec": 0.03},
+    "mock": {"quality": 0.10, "speed": 1.0, "cost": 1.0, "price_usd_per_sec": 0.0},
 }
 
-_DEFAULT_PROFILE: dict[str, float] = {"quality": 0.5, "speed": 0.5, "cost": 0.5}
+_DEFAULT_PROFILE: dict[str, float] = {"quality": 0.5, "speed": 0.5, "cost": 0.5, "price_usd_per_sec": 0.02}
+
+
+def get_price_usd_per_sec(model_id: str) -> float:
+    """Return the authoritative USD-per-second pricing for *model_id*."""
+    profile = MODEL_PROFILES.get(model_id, _DEFAULT_PROFILE)
+    return profile.get("price_usd_per_sec", 0.02)
 
 # Strategy -> (quality_weight, speed_weight, cost_weight)
 _STRATEGY_WEIGHTS: dict[RoutingStrategy, tuple[float, float, float]] = {
