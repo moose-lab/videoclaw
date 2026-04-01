@@ -372,6 +372,7 @@ async def _drama_run_async(
             console.print(f"  Scenes: {len(ep.scenes)}")
 
         # --- Prompt review breakpoint ---
+        confirmed_scenes = ep.scenes[:]  # default: all scenes confirmed
         if review and ep.scenes:
             from videoclaw.drama.prompt_enhancer import PromptEnhancer
             from videoclaw.drama.prompt_review import PromptReviewer
@@ -390,6 +391,32 @@ async def _drama_run_async(
                 )
 
             mgr.save(series)
+
+        # Archive confirmed prompts as deliverable
+        from pathlib import Path as _Path
+        import json as _json
+
+        archive_dir = _Path(mgr.base_dir) / series.series_id / f"ep{ep.number:02d}_prompts"
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        archive_path = archive_dir / "confirmed_prompts.json"
+
+        archive_data = []
+        for sc in confirmed_scenes:
+            archive_data.append({
+                "scene_id": sc.scene_id,
+                "duration": sc.duration_seconds,
+                "shot_scale": sc.shot_scale.value if sc.shot_scale else "",
+                "camera": sc.camera_movement,
+                "characters": sc.characters_present,
+                "dialogue": sc.dialogue,
+                "enhanced_prompt": sc.enhanced_visual_prompt,
+            })
+
+        archive_path.write_text(
+            _json.dumps(archive_data, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        console.print(f"[dim]Prompts archived: {archive_path}[/dim]")
 
         with Progress(
             SpinnerColumn(),

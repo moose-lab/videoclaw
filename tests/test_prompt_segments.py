@@ -433,3 +433,142 @@ class TestContentBuilderCollectPathRefs:
 
     def test_empty_list(self):
         assert ContentBuilder.collect_path_refs([]) == []
+
+
+# ---------------------------------------------------------------------------
+# Full pipeline integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestFullPipelineIntegration:
+    """End-to-end: PromptEnhancer → Segmenter → ContentBuilder."""
+
+    def test_enhance_parse_build(self):
+        """Full flow: enhance with markers → parse → build content array."""
+        from videoclaw.drama.models import Character, DramaScene, DramaSeries, ShotScale
+        from videoclaw.drama.prompt_enhancer import PromptEnhancer, _to_ref_key
+
+        series = DramaSeries(
+            title="Integration Test",
+            model_id="seedance-2.0",
+            language="en",
+            style="cinematic",
+            aspect_ratio="9:16",
+            characters=[
+                Character(name="Ivy Angel", visual_prompt="blonde hair, server uniform, green eyes"),
+            ],
+        )
+        scene = DramaScene(
+            scene_id="ep01_s01",
+            visual_prompt="Poolside at night, blue tiles, string lights overhead.",
+            shot_scale=ShotScale.CLOSE_UP,
+            camera_movement="dolly_in",
+            characters_present=["Ivy Angel"],
+            speaking_character="Ivy Angel",
+            duration_seconds=5.0,
+        )
+
+        available_refs = {
+            "characters": {"Ivy Angel": "https://x.com/ivy.png"},
+            "scenes": {"poolside_night": "https://x.com/pool.png"},
+            "props": {},
+        }
+
+        # Step 1: Enhance with ref markers
+        enhancer = PromptEnhancer(strip_chinese=True)
+        enhanced = enhancer.enhance_scene_prompt(scene, series, available_refs=available_refs)
+        assert "[ref:" in enhanced
+
+        # Step 2: Allocate slots + build ref map
+        allocated = allocate_reference_slots(
+            ShotScale.CLOSE_UP,
+            available_refs,
+            speaking_character="Ivy Angel",
+        )
+        ref_map = {_to_ref_key(r.key): r for r in allocated}
+
+        # Step 3: Parse into segments
+        segments = PromptSegmenter.parse(enhanced, ref_map)
+        assert len(segments) >= 2  # at least character desc + scene/style
+
+        # Step 4: Build Seedance content array
+        content = ContentBuilder.build(segments)
+        text_entries = [c for c in content if c["type"] == "text"]
+        image_entries = [c for c in content if c["type"] == "image_url"]
+        assert len(text_entries) >= 1
+        assert len(image_entries) >= 1
+        # Verify images are interleaved (not all at the end)
+        first_image_idx = next(i for i, c in enumerate(content) if c["type"] == "image_url")
+        last_text_idx = max(i for i, c in enumerate(content) if c["type"] == "text")
+        assert first_image_idx < last_text_idx
+
+    def test_text_length_respected_in_content(self):
+        """Content text entries should not exceed word limits after enhancement."""
+        import re as _re
+        from videoclaw.drama.models import Character, DramaScene, DramaSeries
+        from videoclaw.drama.prompt_enhancer import PromptEnhancer
+
+        series = DramaSeries(
+            title="Length Test",
+            model_id="seedance-2.0",
+            language="en",
+            style="cinematic",
+            aspect_ratio="9:16",
+            characters=[
+                Character(name="Test", visual_prompt="a person"),
+            ],
+        )
+        long_desc = "The scene shows a beautiful landscape with many details. " * 100
+        scene = DramaScene(
+            scene_id="ep01_s01",
+            visual_prompt=long_desc,
+            characters_present=["Test"],
+            duration_seconds=5.0,
+        )
+
+        enhancer = PromptEnhancer(strip_chinese=True)
+        enhanced = enhancer.enhance_scene_prompt(scene, series)
+        segments = PromptSegmenter.parse(enhanced, {})
+        content = ContentBuilder.build(segments)
+
+        total_words = sum(
+            len(c["text"].split())
+            for c in content
+            if c["type"] == "text"
+        )
+        assert total_words <= 1000
+
+    def test_no_refs_produces_text_only_content(self):
+        """When no refs available, output is text-only content array."""
+        from videoclaw.drama.models import Character, DramaScene, DramaSeries
+        from videoclaw.drama.prompt_enhancer import PromptEnhancer
+
+        series = DramaSeries(
+            title="No Ref Test",
+            model_id="seedance-2.0",
+            language="en",
+            style="cinematic",
+            aspect_ratio="9:16",
+            characters=[
+                Character(name="Test", visual_prompt="a person"),
+            ],
+        )
+        scene = DramaScene(
+            scene_id="ep01_s01",
+            visual_prompt="A simple scene.",
+            characters_present=["Test"],
+            duration_seconds=5.0,
+        )
+
+        enhancer = PromptEnhancer(strip_chinese=True)
+        enhanced = enhancer.enhance_scene_prompt(scene, series)
+        # No ref markers
+        assert "[ref:" not in enhanced
+
+        segments = PromptSegmenter.parse(enhanced, {})
+        content = ContentBuilder.build(segments)
+        # Should be text-only
+        image_entries = [c for c in content if c["type"] == "image_url"]
+        assert len(image_entries) == 0
+        text_entries = [c for c in content if c["type"] == "text"]
+        assert len(text_entries) >= 1
