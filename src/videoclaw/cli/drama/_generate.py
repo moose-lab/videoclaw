@@ -43,6 +43,10 @@ def drama_preview_prompts(
     ] = None,
     output: Annotated[str, typer.Option("--output", "-o", help="Write prompts to JSON file.")] = "",
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
+    review: Annotated[
+        bool,
+        typer.Option("--review/--no-review", help="Interactive review mode."),
+    ] = False,
 ) -> None:
     """Preview the enhanced Seedance 2.0 prompts for each scene.
 
@@ -100,36 +104,56 @@ def drama_preview_prompts(
     # Persist enhanced prompts to series.json for reproducibility
     mgr.save(series)
 
-    prompts_data: list[dict] = []
-    for sc in ep.scenes:
-        if scene and sc.scene_id != scene:
-            continue
-        entry = {
-            "scene_id": sc.scene_id,
-            "duration": sc.duration_seconds,
-            "shot_scale": sc.shot_scale.value if sc.shot_scale else "",
-            "camera": sc.camera_movement,
-            "characters": sc.characters_present,
-            "dialogue": sc.dialogue,
-            "narration": sc.narration,
-            "prompt": sc.effective_prompt,
-        }
-        prompts_data.append(entry)
+    if review:
+        from videoclaw.drama.prompt_review import PromptReviewer
+        reviewer = PromptReviewer(enabled=True, console=console)
+        reviewer.review_episode(ep, series)
+        mgr.save(series)
+        prompts_data: list[dict] = [
+            {
+                "scene_id": sc.scene_id,
+                "duration": sc.duration_seconds,
+                "shot_scale": sc.shot_scale.value if sc.shot_scale else "",
+                "camera": sc.camera_movement,
+                "characters": sc.characters_present,
+                "dialogue": sc.dialogue,
+                "narration": sc.narration,
+                "prompt": sc.effective_prompt,
+            }
+            for sc in ep.scenes
+            if not scene or sc.scene_id == scene
+        ]
+    else:
+        prompts_data = []
+        for sc in ep.scenes:
+            if scene and sc.scene_id != scene:
+                continue
+            entry = {
+                "scene_id": sc.scene_id,
+                "duration": sc.duration_seconds,
+                "shot_scale": sc.shot_scale.value if sc.shot_scale else "",
+                "camera": sc.camera_movement,
+                "characters": sc.characters_present,
+                "dialogue": sc.dialogue,
+                "narration": sc.narration,
+                "prompt": sc.effective_prompt,
+            }
+            prompts_data.append(entry)
 
-        # Rich display
-        console.print(f"\n[bold cyan]── {sc.scene_id} ──[/bold cyan]")
-        console.print(f"[dim]Duration: {sc.duration_seconds}s | "
-                      f"Scale: {sc.shot_scale.value if sc.shot_scale else 'n/a'} | "
-                      f"Camera: {sc.camera_movement}[/dim]")
-        if sc.characters_present:
-            console.print(f"[dim]Characters: {', '.join(sc.characters_present)}[/dim]")
-        if sc.dialogue:
-            dlg_trunc = sc.dialogue[:80]
-            ellipsis = "\u2026" if len(sc.dialogue) > 80 else ""
-            console.print(
-                f'[dim]Dialogue: "{dlg_trunc}{ellipsis}"[/dim]'
-            )
-        console.print(f"\n[green]{sc.effective_prompt}[/green]")
+            # Rich display
+            console.print(f"\n[bold cyan]── {sc.scene_id} ──[/bold cyan]")
+            console.print(f"[dim]Duration: {sc.duration_seconds}s | "
+                          f"Scale: {sc.shot_scale.value if sc.shot_scale else 'n/a'} | "
+                          f"Camera: {sc.camera_movement}[/dim]")
+            if sc.characters_present:
+                console.print(f"[dim]Characters: {', '.join(sc.characters_present)}[/dim]")
+            if sc.dialogue:
+                dlg_trunc = sc.dialogue[:80]
+                ellipsis = "\u2026" if len(sc.dialogue) > 80 else ""
+                console.print(
+                    f'[dim]Dialogue: "{dlg_trunc}{ellipsis}"[/dim]'
+                )
+            console.print(f"\n[green]{sc.effective_prompt}[/green]")
 
     if output:
         import json as _json
@@ -184,6 +208,13 @@ def drama_run(
             help="Limit video/TTS generation to the first N shots (useful for test runs).",
         ),
     ] = None,
+    review: Annotated[
+        bool,
+        typer.Option(
+            "--review/--no-review",
+            help="Interactive prompt review before generation (default: on).",
+        ),
+    ] = True,
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Show execution plan without running.")
     ] = False,
@@ -266,6 +297,7 @@ def drama_run(
         asyncio.run(_drama_run_async(
             series, mgr, start, end, budget,
             concurrency, refresh_urls, max_shots=max_shots,
+            review=review,
         ))
     except typer.Exit:
         raise
@@ -288,6 +320,7 @@ async def _drama_run_async(
     auto_refresh_urls: bool = True,
     *,
     max_shots: int | None = None,
+    review: bool = True,
 ) -> None:
     console = get_console()
 
@@ -337,6 +370,26 @@ async def _drama_run_async(
             prev_cliffhanger = script_data.get("cliffhanger")
             mgr.save(series)
             console.print(f"  Scenes: {len(ep.scenes)}")
+
+        # --- Prompt review breakpoint ---
+        if review and ep.scenes:
+            from videoclaw.drama.prompt_enhancer import PromptEnhancer
+            from videoclaw.drama.prompt_review import PromptReviewer
+
+            # Ensure prompts are enhanced before review
+            if not ep.scenes[0].enhanced_visual_prompt:
+                enhancer = PromptEnhancer()
+                enhancer.enhance_all_scenes(ep, series)
+
+            reviewer = PromptReviewer(enabled=True, console=console)
+            confirmed_scenes = reviewer.review_episode(ep, series)
+
+            if len(confirmed_scenes) < len(ep.scenes):
+                console.print(
+                    f"[yellow]{len(ep.scenes) - len(confirmed_scenes)} scene(s) skipped[/yellow]"
+                )
+
+            mgr.save(series)
 
         with Progress(
             SpinnerColumn(),
