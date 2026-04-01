@@ -24,6 +24,23 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+# Per-token pricing (USD per 1K tokens) for cost estimation.
+# Input / output rates for common LLM models.
+_LLM_PRICING: dict[str, tuple[float, float]] = {
+    # (input_per_1k, output_per_1k)
+    "gpt-4o": (0.0025, 0.01),
+    "gpt-4o-mini": (0.00015, 0.0006),
+    "gpt-5.1-chat": (0.005, 0.015),
+    "claude-sonnet-4-6": (0.003, 0.015),
+    "claude-opus-4-6": (0.015, 0.075),
+    "claude-haiku-4-5": (0.0008, 0.004),
+    "deepseek-chat": (0.00014, 0.00028),
+    "deepseek-reasoner": (0.00055, 0.0022),
+    "kimi-k2": (0.001, 0.004),
+}
+_DEFAULT_LLM_PRICE = (0.002, 0.008)  # conservative fallback
+
+
 @dataclass(slots=True)
 class TokenUsage:
     """Cumulative token counters for cost reporting."""
@@ -37,6 +54,21 @@ class TokenUsage:
         self.prompt_tokens += usage.get("prompt_tokens", 0)
         self.completion_tokens += usage.get("completion_tokens", 0)
         self.total_tokens += usage.get("total_tokens", 0)
+
+    def estimate_cost_usd(self, model: str = "gpt-4o") -> float:
+        """Estimate total USD cost based on token counts and model pricing."""
+        bare = model.removeprefix("openai/").removeprefix("anthropic/")
+        input_rate, output_rate = _LLM_PRICING.get(bare, _DEFAULT_LLM_PRICE)
+        return (
+            self.prompt_tokens / 1000 * input_rate
+            + self.completion_tokens / 1000 * output_rate
+        )
+
+    def reset(self) -> None:
+        """Zero out all counters (e.g. between pipeline stages)."""
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        self.total_tokens = 0
 
 
 # ---------------------------------------------------------------------------
@@ -301,6 +333,7 @@ class LLMClient:
 
         if use_stream:
             kwargs["stream"] = True
+            kwargs["stream_options"] = {"include_usage": True}
             response = await litellm.acompletion(**kwargs)
             chunks: list[str] = []
             reasoning_chunks: list[str] = []
@@ -313,6 +346,16 @@ class LLMClient:
                     rc = getattr(delta, "reasoning_content", None)
                     if rc:
                         reasoning_chunks.append(rc)
+                # Capture token usage from the final chunk
+                stream_usage = getattr(chunk, "usage", None)
+                if stream_usage is not None:
+                    self.usage.record(
+                        {
+                            "prompt_tokens": getattr(stream_usage, "prompt_tokens", 0) or 0,
+                            "completion_tokens": getattr(stream_usage, "completion_tokens", 0) or 0,
+                            "total_tokens": getattr(stream_usage, "total_tokens", 0) or 0,
+                        }
+                    )
             content = "".join(chunks)
             if not content and reasoning_chunks:
                 # Fallback: extract JSON from reasoning output
