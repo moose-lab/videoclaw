@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from videoclaw.utils.ffmpeg import check_ffmpeg, run_ffmpeg
+from videoclaw.utils.ffmpeg import check_ffmpeg, get_video_duration, run_ffmpeg
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +76,7 @@ class VideoComposer:
         transition: str = "dissolve",
         transition_duration: float = 0.5,
         transitions: list[str] | None = None,
+        clip_durations: list[float] | None = None,
     ) -> Path:
         """Concatenate *video_paths* with transitions into *output_path*.
 
@@ -95,6 +96,9 @@ class VideoComposer:
             Each entry specifies the transition for that clip boundary.
             Empty strings fall back to *transition*.  When ``None``, the single
             *transition* parameter is used for all boundaries.
+        clip_durations:
+            Duration of each clip in seconds.  When ``None``, durations are
+            probed via ``ffprobe``.  Must have the same length as *video_paths*.
 
         Returns
         -------
@@ -123,8 +127,17 @@ class VideoComposer:
             else:
                 resolved = [transition] * n_boundaries
 
+            # Resolve clip durations -- probe if not provided
+            if clip_durations is None:
+                durations = []
+                for vp in video_paths:
+                    dur = await get_video_duration(vp)
+                    durations.append(dur)
+                clip_durations = durations
+
             cmd = self._build_concat_cmd(
                 video_paths, output_path, resolved, transition_duration,
+                clip_durations,
             )
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -259,6 +272,7 @@ class VideoComposer:
         output_path: Path,
         transitions: list[str],
         transition_duration: float,
+        clip_durations: list[float],
     ) -> list[str]:
         """Build an FFmpeg xfade filter-chain for concatenation with transitions.
 
@@ -271,8 +285,22 @@ class VideoComposer:
             A list of transition types, one per clip boundary
             (length = ``len(video_paths) - 1``).  Each entry must already be a
             valid supported transition string.
+        clip_durations:
+            Duration of each clip in seconds (same length as *video_paths*).
+            Used to compute the correct ``offset`` for each xfade filter.
         """
         n = len(video_paths)
+
+        # Compute xfade offsets from clip durations.
+        # offset_0 = clip_durations[0] - transition_duration
+        # offset_i = offset_{i-1} + clip_durations[i] - transition_duration
+        offsets: list[float] = []
+        for i in range(n - 1):
+            if i == 0:
+                offset = clip_durations[0] - transition_duration
+            else:
+                offset = offsets[i - 1] + clip_durations[i] - transition_duration
+            offsets.append(max(0.0, offset))
 
         # Input arguments
         cmd: list[str] = ["ffmpeg", "-y"]
@@ -283,7 +311,7 @@ class VideoComposer:
             trans = transitions[0] if transitions[0] in _SUPPORTED_TRANSITIONS else "dissolve"
             filter_str = (
                 f"[0:v][1:v]xfade=transition={trans}"
-                f":duration={transition_duration}:offset=0[outv]"
+                f":duration={transition_duration}:offset={offsets[0]}[outv]"
             )
             cmd.extend([
                 "-filter_complex", filter_str,
@@ -304,7 +332,7 @@ class VideoComposer:
             out_label = f"v{i}" if i < n - 1 else "outv"
             filters.append(
                 f"[{prev_label}][{i}:v]xfade=transition={trans}"
-                f":duration={transition_duration}:offset=0[{out_label}]"
+                f":duration={transition_duration}:offset={offsets[i - 1]}[{out_label}]"
             )
             prev_label = out_label
 

@@ -27,8 +27,9 @@ class TestComposePerBoundaryTransitions:
         """_build_concat_cmd should use a different transition for each boundary."""
         paths = [Path("/a.mp4"), Path("/b.mp4"), Path("/c.mp4")]
         transitions = ["fade", "wipeleft"]
+        durations = [5.0, 5.0, 5.0]
 
-        cmd = VideoComposer._build_concat_cmd(paths, Path("/out.mp4"), transitions, 0.5)
+        cmd = VideoComposer._build_concat_cmd(paths, Path("/out.mp4"), transitions, 0.5, durations)
         cmd_str = " ".join(cmd)
 
         # The filter_complex should contain both transitions
@@ -39,8 +40,9 @@ class TestComposePerBoundaryTransitions:
         """Two-clip case should use the single transition from the list."""
         paths = [Path("/a.mp4"), Path("/b.mp4")]
         transitions = ["wiperight"]
+        durations = [5.0, 5.0]
 
-        cmd = VideoComposer._build_concat_cmd(paths, Path("/out.mp4"), transitions, 0.5)
+        cmd = VideoComposer._build_concat_cmd(paths, Path("/out.mp4"), transitions, 0.5, durations)
         cmd_str = " ".join(cmd)
 
         assert "transition=wiperight" in cmd_str
@@ -49,8 +51,9 @@ class TestComposePerBoundaryTransitions:
         """Invalid transitions in the list should fall back to dissolve."""
         paths = [Path("/a.mp4"), Path("/b.mp4")]
         transitions = ["invalid_transition"]
+        durations = [5.0, 5.0]
 
-        cmd = VideoComposer._build_concat_cmd(paths, Path("/out.mp4"), transitions, 0.5)
+        cmd = VideoComposer._build_concat_cmd(paths, Path("/out.mp4"), transitions, 0.5, durations)
         cmd_str = " ".join(cmd)
 
         assert "transition=dissolve" in cmd_str
@@ -65,6 +68,7 @@ class TestComposePerBoundaryTransitions:
 
         with patch.object(composer, "_ensure_ffmpeg", new_callable=AsyncMock), \
              patch.object(composer, "_run_ffmpeg", new_callable=AsyncMock), \
+             patch("videoclaw.generation.compose.get_video_duration", new_callable=AsyncMock, return_value=5.0), \
              patch.object(VideoComposer, "_build_concat_cmd", return_value=["ffmpeg"]) as mock_build:
 
             await composer.compose(
@@ -88,6 +92,7 @@ class TestComposePerBoundaryTransitions:
 
         with patch.object(composer, "_ensure_ffmpeg", new_callable=AsyncMock), \
              patch.object(composer, "_run_ffmpeg", new_callable=AsyncMock), \
+             patch("videoclaw.generation.compose.get_video_duration", new_callable=AsyncMock, return_value=5.0), \
              patch.object(VideoComposer, "_build_concat_cmd", return_value=["ffmpeg"]) as mock_build:
 
             await composer.compose(
@@ -108,6 +113,7 @@ class TestComposePerBoundaryTransitions:
 
         with patch.object(composer, "_ensure_ffmpeg", new_callable=AsyncMock), \
              patch.object(composer, "_run_ffmpeg", new_callable=AsyncMock), \
+             patch("videoclaw.generation.compose.get_video_duration", new_callable=AsyncMock, return_value=5.0), \
              patch.object(VideoComposer, "_build_concat_cmd", return_value=["ffmpeg"]) as mock_build:
 
             await composer.compose(
@@ -128,6 +134,7 @@ class TestComposePerBoundaryTransitions:
 
         with patch.object(composer, "_ensure_ffmpeg", new_callable=AsyncMock), \
              patch.object(composer, "_run_ffmpeg", new_callable=AsyncMock), \
+             patch("videoclaw.generation.compose.get_video_duration", new_callable=AsyncMock, return_value=5.0), \
              patch.object(VideoComposer, "_build_concat_cmd", return_value=["ffmpeg"]) as mock_build:
 
             await composer.compose(
@@ -139,6 +146,121 @@ class TestComposePerBoundaryTransitions:
 
             resolved = mock_build.call_args[0][2]
             assert resolved == ["fade", "wipeleft"]
+
+
+# ---------------------------------------------------------------------------
+# xfade offset calculation
+# ---------------------------------------------------------------------------
+
+
+class TestXfadeOffsetCalculation:
+    """Verify that _build_concat_cmd computes correct xfade offsets from clip durations."""
+
+    def test_two_clips_offset(self):
+        """For 2 clips: offset = dur[0] - transition_duration."""
+        paths = [Path("/a.mp4"), Path("/b.mp4")]
+        transitions = ["dissolve"]
+        durations = [5.0, 4.0]
+        td = 0.5
+
+        cmd = VideoComposer._build_concat_cmd(paths, Path("/out.mp4"), transitions, td, durations)
+        cmd_str = " ".join(cmd)
+
+        # offset should be 5.0 - 0.5 = 4.5
+        assert "offset=4.5" in cmd_str
+
+    def test_three_clips_offset_chain(self):
+        """For 3 clips: offset_0 = dur[0] - td, offset_1 = offset_0 + dur[1] - td."""
+        paths = [Path("/a.mp4"), Path("/b.mp4"), Path("/c.mp4")]
+        transitions = ["dissolve", "fade"]
+        durations = [5.0, 4.0, 3.0]
+        td = 0.5
+
+        cmd = VideoComposer._build_concat_cmd(paths, Path("/out.mp4"), transitions, td, durations)
+        cmd_str = " ".join(cmd)
+
+        # offset_0 = 5.0 - 0.5 = 4.5
+        # offset_1 = 4.5 + 4.0 - 0.5 = 8.0
+        assert "offset=4.5" in cmd_str
+        assert "offset=8.0" in cmd_str
+
+    def test_different_durations_per_clip(self):
+        """Each clip can have a different duration; offsets accumulate correctly."""
+        paths = [Path("/a.mp4"), Path("/b.mp4"), Path("/c.mp4"), Path("/d.mp4")]
+        transitions = ["dissolve", "fade", "wipeleft"]
+        durations = [3.0, 6.0, 2.0, 4.0]
+        td = 1.0
+
+        cmd = VideoComposer._build_concat_cmd(paths, Path("/out.mp4"), transitions, td, durations)
+        cmd_str = " ".join(cmd)
+
+        # offset_0 = 3.0 - 1.0 = 2.0
+        # offset_1 = 2.0 + 6.0 - 1.0 = 7.0
+        # offset_2 = 7.0 + 2.0 - 1.0 = 8.0
+        assert "offset=2.0" in cmd_str
+        assert "offset=7.0" in cmd_str
+        assert "offset=8.0" in cmd_str
+
+    def test_offset_clamped_to_zero(self):
+        """Offset should never go negative; clamp to 0.0."""
+        paths = [Path("/a.mp4"), Path("/b.mp4")]
+        transitions = ["dissolve"]
+        durations = [0.3, 5.0]  # 0.3 - 0.5 = -0.2 -> clamped to 0.0
+        td = 0.5
+
+        cmd = VideoComposer._build_concat_cmd(paths, Path("/out.mp4"), transitions, td, durations)
+        cmd_str = " ".join(cmd)
+
+        assert "offset=0.0" in cmd_str
+
+    @pytest.mark.asyncio
+    async def test_compose_probes_durations_when_none(self):
+        """When clip_durations is None, compose() should probe durations via ffprobe."""
+        composer = VideoComposer()
+        paths = [Path("/a.mp4"), Path("/b.mp4"), Path("/c.mp4")]
+
+        with patch.object(composer, "_ensure_ffmpeg", new_callable=AsyncMock), \
+             patch.object(composer, "_run_ffmpeg", new_callable=AsyncMock), \
+             patch("videoclaw.generation.compose.get_video_duration", new_callable=AsyncMock) as mock_probe, \
+             patch.object(VideoComposer, "_build_concat_cmd", return_value=["ffmpeg"]) as mock_build:
+
+            mock_probe.side_effect = [5.0, 4.0, 3.0]
+
+            await composer.compose(
+                paths,
+                Path("/tmp/out.mp4"),
+                transition="dissolve",
+            )
+
+            # ffprobe should have been called for each clip
+            assert mock_probe.call_count == 3
+            # _build_concat_cmd should receive the probed durations
+            call_args = mock_build.call_args
+            assert call_args[0][4] == [5.0, 4.0, 3.0]
+
+    @pytest.mark.asyncio
+    async def test_compose_uses_provided_durations(self):
+        """When clip_durations is provided, compose() should NOT probe and pass them through."""
+        composer = VideoComposer()
+        paths = [Path("/a.mp4"), Path("/b.mp4")]
+
+        with patch.object(composer, "_ensure_ffmpeg", new_callable=AsyncMock), \
+             patch.object(composer, "_run_ffmpeg", new_callable=AsyncMock), \
+             patch("videoclaw.generation.compose.get_video_duration", new_callable=AsyncMock) as mock_probe, \
+             patch.object(VideoComposer, "_build_concat_cmd", return_value=["ffmpeg"]) as mock_build:
+
+            await composer.compose(
+                paths,
+                Path("/tmp/out.mp4"),
+                transition="dissolve",
+                clip_durations=[6.0, 7.0],
+            )
+
+            # ffprobe should NOT have been called
+            mock_probe.assert_not_called()
+            # _build_concat_cmd should receive the provided durations
+            call_args = mock_build.call_args
+            assert call_args[0][4] == [6.0, 7.0]
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +279,7 @@ class TestComposeBackwardCompatibility:
 
         with patch.object(composer, "_ensure_ffmpeg", new_callable=AsyncMock), \
              patch.object(composer, "_run_ffmpeg", new_callable=AsyncMock), \
+             patch("videoclaw.generation.compose.get_video_duration", new_callable=AsyncMock, return_value=5.0), \
              patch.object(VideoComposer, "_build_concat_cmd", return_value=["ffmpeg"]) as mock_build:
 
             await composer.compose(
@@ -176,6 +299,7 @@ class TestComposeBackwardCompatibility:
 
         with patch.object(composer, "_ensure_ffmpeg", new_callable=AsyncMock), \
              patch.object(composer, "_run_ffmpeg", new_callable=AsyncMock), \
+             patch("videoclaw.generation.compose.get_video_duration", new_callable=AsyncMock, return_value=5.0), \
              patch.object(VideoComposer, "_build_concat_cmd", return_value=["ffmpeg"]) as mock_build:
 
             await composer.compose(paths, Path("/tmp/out.mp4"))
@@ -257,9 +381,10 @@ class TestHandleComposeTransitions:
 
             await executor._handle_compose(node, state)
 
-            # compose() should have been called with transitions kwarg
+            # compose() should have been called with transitions and clip_durations kwargs
             compose_call = mock_instance.compose.call_args
             assert compose_call.kwargs.get("transitions") == ["fade", "wipeleft", ""]
+            assert compose_call.kwargs.get("clip_durations") == [5.0, 5.0, 5.0]
 
     @pytest.mark.asyncio
     async def test_handle_compose_no_scenes_passes_none(self, tmp_path):

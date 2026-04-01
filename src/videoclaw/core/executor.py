@@ -945,19 +945,25 @@ class DAGExecutor:
         composed_path = project_dir / "composed.mp4"
         transition = node.params.get("transition", "dissolve")
 
-        # Extract per-scene transitions when available
+        # Extract per-scene transitions and durations when available
         per_scene_transitions: list[str] | None = None
+        clip_durations: list[float] | None = None
         scenes = node.params.get("scenes", [])
         if scenes:
             per_scene_transitions = [
                 s.get("transition", "") or "" for s in scenes
             ]
+            # Extract clip durations from scene data if available
+            durations = [s.get("duration_seconds", 0.0) for s in scenes]
+            if all(d > 0 for d in durations):
+                clip_durations = durations
 
         await composer.compose(
             video_paths,
             composed_path,
             transition=transition,
             transitions=per_scene_transitions,
+            clip_durations=clip_durations,
         )
         logger.info("[compose] Composed %d clips -> %s", len(video_paths), composed_path)
 
