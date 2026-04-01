@@ -3,17 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
-import numpy as np
 import pytest
 
-from videoclaw.drama.models import DramaScene, ShotScale
+from videoclaw.drama.models import DramaScene
 from videoclaw.drama.vision_auditor import (
     ShotAuditResult,
     VisionAuditor,
-    _FATAL_THRESHOLD,
-    _TOLERABLE_THRESHOLD,
 )
 
 

@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-from PIL import Image
 
 from videoclaw.drama.frame_analyzer import (
     compute_center_ssim,
