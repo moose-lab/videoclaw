@@ -46,7 +46,7 @@ from rich.table import Table
 
 from videoclaw.drama.models import DramaScene, DramaSeries
 from videoclaw.models.llm.litellm_wrapper import LLMClient
-from videoclaw.utils.ffmpeg import get_video_info
+from videoclaw.utils.ffmpeg import get_video_duration, get_video_info
 
 if TYPE_CHECKING:
     from videoclaw.drama.models import DramaManager
@@ -129,6 +129,26 @@ Your job: identify ONLY defects that would make a viewer swipe away.
 Accept minor imperfections — 80% of AI videos have 1-2 small defects; that is normal.
 
 Return ONLY valid JSON. No markdown, no explanation."""
+
+_COMPOSITION_AUDIT_PROMPT = """\
+You are auditing a FINAL COMPOSED episode of a Western TikTok short drama.
+The {frame_count} keyframes are evenly sampled from the full {duration:.0f}s video.
+
+Check for episode-level issues ONLY (not per-shot details):
+
+1. VISUAL COHERENCE — Do shots look like they belong to the same episode?
+   (consistent color grading, lighting style, character appearances)
+2. TRANSITION QUALITY — Any jarring visual jumps between adjacent frames?
+3. PACING — Does the frame sequence suggest good dramatic rhythm?
+   (variety of shot scales, building tension)
+
+Return JSON:
+{{
+  "fatals": ["episode-level fatal issues"],
+  "tolerables": ["minor coherence issues"]
+}}
+
+Be generous — minor style variations between shots are normal for AI-generated content."""
 
 _AUDIT_USER_TEMPLATE_V2 = """\
 Scene spec:
@@ -884,3 +904,147 @@ class VisionAuditor:
             logger.info("Audit results persisted to series %s", series.series_id)
 
         return report
+
+    # ------------------------------------------------------------------
+    # Composition-level audit (成片审计)
+    # ------------------------------------------------------------------
+
+    async def audit_composition(
+        self,
+        video_path: Path,
+        episode_number: int,
+        total_duration: float | None = None,
+    ) -> ShotAuditResult:
+        """Audit a final composed video with duration-adaptive strategy.
+
+        For short videos (< 30s): extract 5 frames, full LLM audit.
+        For medium videos (30-90s): extract 8 frames, full LLM audit.
+        For long videos (> 90s): extract 10 frames, SSIM check only + LLM
+            on first/last 2 frames (performance optimization).
+
+        Returns a ShotAuditResult with the composition-level verdict.
+        """
+        from videoclaw.drama.frame_analyzer import (
+            detect_temporal_breaks,
+            extract_frames_as_arrays,
+        )
+
+        shot_id = f"composition_ep{episode_number:02d}"
+
+        # Get duration
+        duration = total_duration
+        if duration is None:
+            duration = await get_video_duration(video_path)
+
+        # Determine frame count by duration bracket
+        if duration < 30:
+            n_frames = 5
+        elif duration <= 90:
+            n_frames = 8
+        else:
+            n_frames = 10
+
+        logger.info(
+            "Composition audit: %s — %.0fs, extracting %d frames",
+            video_path.name, duration, n_frames,
+        )
+
+        # Extract frames
+        frames = extract_frames_as_arrays(video_path, n=n_frames)
+
+        # Layer 1: SSIM temporal check on ALL extracted frames
+        all_fatals: list[str] = []
+        all_tolerables: list[str] = []
+
+        breaks = detect_temporal_breaks(
+            frames,
+            fatal_threshold=_FATAL_THRESHOLD,
+            tolerable_threshold=_TOLERABLE_THRESHOLD,
+        )
+        for brk in breaks:
+            label = (
+                f"composition_temporal_break_f{brk.frame_pair[0]}_f{brk.frame_pair[1]}"
+                f"_ssim{brk.ssim_score:.2f}"
+            )
+            if brk.severity == "fatal":
+                all_fatals.append(label)
+            else:
+                all_tolerables.append(label)
+
+        # LLM audit — for long videos, only send first 2 + last 2 frames
+        if duration > 90:
+            llm_frames = frames[:2] + frames[-2:]
+        else:
+            llm_frames = frames
+
+        l2_fatals, l2_tolerables = await self._composition_vision_llm(
+            llm_frames, duration,
+        )
+        all_fatals.extend(l2_fatals)
+        all_tolerables.extend(l2_tolerables)
+
+        result = self._build_verdict(
+            shot_id, all_fatals, all_tolerables, clip_path=str(video_path),
+        )
+        status = "PASS" if result.passed else "REGEN"
+        logger.info(
+            "Composition %s: %s — F:%d T:%d",
+            shot_id, status, len(result.fatals), len(result.tolerables),
+        )
+        return result
+
+    async def _composition_vision_llm(
+        self,
+        frames: list,
+        duration: float,
+    ) -> tuple[list[str], list[str]]:
+        """Run LLM audit on composition frames, return (fatals, tolerables)."""
+        fatals: list[str] = []
+        tolerables: list[str] = []
+
+        # Encode frames to base64 for the vision model
+        import io
+
+        content: list[dict[str, Any]] = []
+        for frame in frames:
+            from PIL import Image
+
+            img = Image.fromarray(frame)
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            b64 = base64.b64encode(buf.getvalue()).decode()
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+            })
+
+        content.append({"type": "text", "text": _COMPOSITION_AUDIT_PROMPT.format(
+            frame_count=len(frames),
+            duration=duration,
+        )})
+
+        messages = [
+            {"role": "system", "content": _AUDIT_SYSTEM_V2},
+            {"role": "user", "content": content},
+        ]
+
+        llm = self._ensure_llm()
+        try:
+            raw = await llm.chat(messages, model=VISION_MODEL, temperature=0.1, max_tokens=1024)
+        except Exception as exc:
+            logger.error("Vision API error for composition audit: %s", exc)
+            return fatals, tolerables
+
+        try:
+            text = raw.strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1]
+            if text.endswith("```"):
+                text = text.rsplit("```", 1)[0]
+            data = json.loads(text.strip())
+            fatals = list(data.get("fatals", []))
+            tolerables = list(data.get("tolerables", []))
+        except (json.JSONDecodeError, ValueError) as exc:
+            logger.error("Failed to parse composition audit JSON: %s", exc)
+
+        return fatals, tolerables
