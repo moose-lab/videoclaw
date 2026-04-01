@@ -141,7 +141,10 @@ def project_show(
 
     cost_path = get_config().projects_dir / project_id / "cost.json"
     if cost_path.exists():
-        console.print(f"\n[dim]Cost details: {cost_path}[/dim]")
+        console.print(
+            f"\n[dim]Cost ledger: {cost_path}[/dim]"
+            f"\n[dim]Run [bold]claw cost show {project_id}[/bold] for detailed breakdown[/dim]"
+        )
 
     out.set_result({
         "project_id": state.project_id,

@@ -124,8 +124,10 @@ _REF_IMAGE_OPTIMAL_MAX_PX = 1280
 _MAX_TEXT_EN_WORDS = 1000
 _MAX_TEXT_ZH_CHARS = 500
 
-# Cost estimate (USD per second)
-_COST_PER_SECOND_USD = 0.05
+# Cost estimate — delegates to centralized MODEL_PROFILES registry
+def _get_seedance_cost_per_sec() -> float:
+    from videoclaw.models.router import get_price_usd_per_sec
+    return get_price_usd_per_sec("seedance-2.0")
 
 # Polling configuration
 _POLL_INTERVAL_S = 10.0
@@ -979,4 +981,4 @@ class SeedanceVideoAdapter:
 
     @staticmethod
     def _estimate_cost_for(request: GenerationRequest) -> float:
-        return round(request.duration_seconds * _COST_PER_SECOND_USD, 4)
+        return round(request.duration_seconds * _get_seedance_cost_per_sec(), 4)
