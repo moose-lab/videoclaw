@@ -28,6 +28,34 @@ if TYPE_CHECKING:
     from videoclaw.drama.models import Character, DramaScene, DramaSeries, Episode
 
 # ---------------------------------------------------------------------------
+# Reference marker constants
+# ---------------------------------------------------------------------------
+
+_MAX_ENGLISH_WORDS = 1000
+_MAX_CHINESE_CHARS = 500
+_CJK_CHAR_RE = re.compile(r'[\u4e00-\u9fff\u3400-\u4dbf]')
+_REF_KEY_RE = re.compile(r'[^a-zA-Z0-9]')
+
+
+def _to_ref_key(name: str) -> str:
+    """Convert a human-readable name to a ref key for ``[ref:key]`` markers.
+
+    - Lowercase
+    - Non-alphanumeric → underscore
+    - Strip leading/trailing underscores
+
+    Examples::
+
+        "Ivy Angel"       → "ivy_angel"
+        "poolside_night"  → "poolside_night"
+        "Colton Black"    → "colton_black"
+    """
+    key = _REF_KEY_RE.sub("_", name.lower()).strip("_")
+    # Collapse consecutive underscores
+    key = re.sub(r"_+", "_", key)
+    return key
+
+# ---------------------------------------------------------------------------
 # Seedance 2.0 camera vocabulary
 # ---------------------------------------------------------------------------
 
@@ -174,7 +202,13 @@ class PromptEnhancer:
             return self._strip_chinese
         return any(model_id.startswith(p) for p in _ENGLISH_ONLY_PREFIXES)
 
-    def enhance_scene_prompt(self, scene: DramaScene, series: DramaSeries) -> str:
+    def enhance_scene_prompt(
+        self,
+        scene: DramaScene,
+        series: DramaSeries,
+        *,
+        available_refs: dict[str, dict[str, str]] | None = None,
+    ) -> str:
         """Build a Seedance 2.0 optimised visual prompt for a single *scene*.
 
         Six-part structure:
@@ -198,6 +232,14 @@ class PromptEnhancer:
 
         - **Dramatic tension** for hook (first) and cliffhanger (last) shots
         - **Continuity hints** linking adjacent shots for visual coherence
+        - **[ref:key] markers** when *available_refs* is provided
+
+        Parameters
+        ----------
+        available_refs:
+            Optional dict with keys ``"characters"``, ``"scenes"``, ``"props"``.
+            Each value maps ``name -> URL-or-path``. When provided, ``[ref:key]``
+            markers are inserted after matching character/scene/prop descriptions.
         """
         parts: list[str] = []
         char_map = {c.name: c for c in series.characters}
@@ -221,13 +263,18 @@ class PromptEnhancer:
                 parts.append(_CONTINUITY_PREFIX)
 
         # --- 0c. Western drama: realism header + CHARACTER IDENTITY (two-layer strategy) ---
+        char_refs = (available_refs or {}).get("characters", {})
         if series.language == "en" and scene.characters_present:
             char_ids = []
             for name in scene.characters_present:
                 char = char_map.get(name)
                 if char and char.visual_prompt:
                     vp_compact = char.visual_prompt[:150].rstrip(",. ")
-                    char_ids.append(f"{name}: {vp_compact}")
+                    entry = f"{name}: {vp_compact}"
+                    ref_key = _to_ref_key(name)
+                    if char_refs and ref_key in {_to_ref_key(k) for k in char_refs}:
+                        entry += f" [ref:{ref_key}]"
+                    char_ids.append(entry)
             if char_ids:
                 parts.append(
                     _WESTERN_REALISM_HEADER
@@ -256,13 +303,38 @@ class PromptEnhancer:
             for name in scene.characters_present:
                 char = char_map.get(name)
                 if char and char.visual_prompt:
-                    parts.append(
-                        f"Same character {name} — {char.visual_prompt.rstrip('.')}."
-                    )
+                    entry = f"Same character {name} — {char.visual_prompt.rstrip('.')}."
+                    ref_key = _to_ref_key(name)
+                    if char_refs and ref_key in {_to_ref_key(k) for k in char_refs}:
+                        entry += f" [ref:{ref_key}]"
+                    parts.append(entry)
 
         # --- 3. Scene (original visual prompt — setting + action + mood) ---
+        scene_refs = (available_refs or {}).get("scenes", {})
+        prop_refs = (available_refs or {}).get("props", {})
         if scene.visual_prompt:
-            parts.append(scene.visual_prompt.rstrip(".") + ".")
+            scene_text = scene.visual_prompt.rstrip(".") + "."
+            # --- Scene ref marker ---
+            if scene_refs:
+                vp_lower = scene.visual_prompt.lower()
+                desc_lower = scene.description.lower()
+                for scene_name in scene_refs:
+                    skey = _to_ref_key(scene_name)
+                    # Match if the scene key (with underscores as spaces) appears
+                    # in the visual_prompt or description
+                    match_text = skey.replace("_", " ")
+                    if match_text in vp_lower or match_text in desc_lower:
+                        scene_text += f" [ref:{skey}]"
+                        break  # Only ONE scene ref per shot
+            # --- Prop ref markers ---
+            if prop_refs:
+                vp_lower = scene.visual_prompt.lower()
+                for prop_name in prop_refs:
+                    pkey = _to_ref_key(prop_name)
+                    match_text = pkey.replace("_", " ")
+                    if match_text in vp_lower:
+                        scene_text += f" [ref:{pkey}]"
+            parts.append(scene_text)
 
         # --- 4. Text directives (subtitle / name card / title card / inner monologue) ---
         text_directives = self._build_text_directives(scene, char_map, series)
@@ -284,9 +356,19 @@ class PromptEnhancer:
         # --- 7. Constraints ---
         text = text.rstrip() + " " + f"Constraints: {_DEFAULT_CONSTRAINTS}."
 
+        # --- 8. Enforce text length limits ---
+        language = series.language or "en"
+        text = self._enforce_text_length(text, language)
+
         return text.strip()
 
-    def enhance_all_scenes(self, episode: Episode, series: DramaSeries) -> Episode:
+    def enhance_all_scenes(
+        self,
+        episode: Episode,
+        series: DramaSeries,
+        *,
+        available_refs: dict[str, dict[str, str]] | None = None,
+    ) -> Episode:
         """Enhance all scenes in *episode* in-place. Returns the mutated episode.
 
         Resets all per-episode tracking state:
@@ -300,7 +382,9 @@ class PromptEnhancer:
         self._scene_index = 0
 
         for scene in episode.scenes:
-            enhanced = self.enhance_scene_prompt(scene, series)
+            enhanced = self.enhance_scene_prompt(
+                scene, series, available_refs=available_refs,
+            )
             scene.enhanced_visual_prompt = enhanced
             self._prev_scene = scene
             self._scene_index += 1
@@ -308,6 +392,124 @@ class PromptEnhancer:
         return episode
 
     # -- internal -----------------------------------------------------------
+
+    @staticmethod
+    def _enforce_text_length(text: str, language: str) -> str:
+        """Enforce hard text length limits.
+
+        - English (or any non-Chinese): max *_MAX_ENGLISH_WORDS* words
+          (excluding ``[ref:key]`` markers).
+        - Chinese: max *_MAX_CHINESE_CHARS* CJK characters.
+
+        When a prompt exceeds the limit, the visual description section (the
+        middle bulk of the prompt) is shortened while preserving camera
+        directives, style, constraints, and all ``[ref:key]`` markers.
+        """
+        if language == "zh":
+            cjk_chars = _CJK_CHAR_RE.findall(text)
+            if len(cjk_chars) <= _MAX_CHINESE_CHARS:
+                return text
+            # Find the visual description section to truncate.
+            # Strategy: locate "Style:" marker, keep everything from Style:
+            # onward plus camera/header prefix. Shorten the middle.
+            style_idx = text.find("Style:")
+            if style_idx == -1:
+                # No structure found — hard truncate CJK chars
+                return text
+            prefix_end = 0
+            # Find end of camera/header section (first sentence after any
+            # hook/continuity/character identity block)
+            for marker in ("CHARACTER IDENTITY:", "Same character"):
+                idx = text.find(marker)
+                if idx != -1:
+                    # Find end of this section (next sentence boundary)
+                    end = text.find(". ", idx)
+                    if end != -1:
+                        prefix_end = max(prefix_end, end + 2)
+            suffix = text[style_idx:]
+            middle = text[prefix_end:style_idx].rstrip()
+            # Extract ref markers from middle to preserve them
+            ref_markers = re.findall(r'\[ref:[a-zA-Z0-9_]+\]', middle)
+            # Count CJK chars in prefix + suffix
+            fixed_cjk = len(_CJK_CHAR_RE.findall(text[:prefix_end])) + len(
+                _CJK_CHAR_RE.findall(suffix)
+            )
+            budget = _MAX_CHINESE_CHARS - fixed_cjk
+            if budget <= 0:
+                return text[:prefix_end].rstrip() + " " + suffix
+            # Truncate middle to fit budget
+            truncated: list[str] = []
+            count = 0
+            for ch in middle:
+                if _CJK_CHAR_RE.match(ch):
+                    if count >= budget:
+                        break
+                    count += 1
+                truncated.append(ch)
+            middle_new = "".join(truncated).rstrip()
+            # Re-append any ref markers that were lost
+            for marker in ref_markers:
+                if marker not in middle_new:
+                    middle_new += f" {marker}"
+            return text[:prefix_end] + middle_new + " " + suffix
+        else:
+            # English word count (exclude [ref:key] markers)
+            stripped = re.sub(r'\[ref:[a-zA-Z0-9_]+\]', '', text)
+            words = stripped.split()
+            if len(words) <= _MAX_ENGLISH_WORDS:
+                return text
+            # Need to shorten — find visual description section
+            style_idx = text.find("Style:")
+            if style_idx == -1:
+                return text
+            # Preserve everything from "Style:" onward (style + constraints)
+            suffix = text[style_idx:]
+            # Find the prefix to preserve (camera + character identity)
+            prefix_end = 0
+            for marker in ("CHARACTER IDENTITY:", "Same character"):
+                idx = text.find(marker)
+                if idx != -1:
+                    end = text.find(". ", idx)
+                    if end != -1:
+                        prefix_end = max(prefix_end, end + 2)
+            # Also preserve camera line
+            cam_end = text.find(".", 0, style_idx)
+            if cam_end != -1 and cam_end < prefix_end:
+                pass  # prefix_end already covers it
+            elif cam_end != -1 and prefix_end == 0:
+                prefix_end = cam_end + 2
+            prefix = text[:prefix_end]
+            middle = text[prefix_end:style_idx].rstrip()
+            # Extract ref markers from middle
+            ref_markers = re.findall(r'\[ref:[a-zA-Z0-9_]+\]', middle)
+            # Count words in prefix + suffix (excluding markers)
+            prefix_clean = re.sub(r'\[ref:[a-zA-Z0-9_]+\]', '', prefix)
+            suffix_clean = re.sub(r'\[ref:[a-zA-Z0-9_]+\]', '', suffix)
+            fixed_words = len(prefix_clean.split()) + len(suffix_clean.split())
+            budget = _MAX_ENGLISH_WORDS - fixed_words
+            if budget <= 0:
+                result = prefix.rstrip() + " " + suffix
+                return result
+            # Truncate middle to budget words, preserving ref markers
+            middle_clean = re.sub(r'\[ref:[a-zA-Z0-9_]+\]', '\x00', middle)
+            tokens = middle_clean.split()
+            kept: list[str] = []
+            wcount = 0
+            for tok in tokens:
+                if tok == '\x00':
+                    kept.append(tok)  # Always keep marker placeholders
+                    continue
+                if wcount >= budget:
+                    break
+                kept.append(tok)
+                wcount += 1
+            middle_new = " ".join(kept)
+            # Restore ref markers
+            for marker in ref_markers:
+                middle_new = middle_new.replace('\x00', marker, 1)
+            # Remove any remaining placeholders
+            middle_new = middle_new.replace('\x00', '').strip()
+            return prefix + middle_new + " " + suffix
 
     def _build_text_directives(
         self,
