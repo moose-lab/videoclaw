@@ -306,3 +306,57 @@ def test_build_scene_regen_dag_propagates_narration_type():
     dag = build_scene_regen_dag(ep, series, "ep01_s03", state)
 
     assert dag.nodes["tts_ep01_s03"].params["scene"]["narration_type"] == "title_card"
+
+
+def test_scene_and_prop_refs_passed_to_shots(tmp_path):
+    """build_episode_dag should pass scene and prop references from ConsistencyManifest to Shots."""
+    import pathlib
+    from videoclaw.drama.models import ConsistencyManifest
+
+    # Create dummy reference files so verify_references() passes and verified stays True
+    ivy_img = tmp_path / "ivy.png"
+    pool_img = tmp_path / "pool.png"
+    brochure_img = tmp_path / "brochure.png"
+    for p in (ivy_img, pool_img, brochure_img):
+        p.write_bytes(b"\x89PNG")
+
+    series = DramaSeries(
+        title="Ref Test",
+        model_id="mock",
+        characters=[
+            Character(
+                name="Ivy",
+                visual_prompt="blonde hair",
+                reference_image=str(ivy_img),
+                reference_image_url="https://x.com/ivy.png",
+            ),
+        ],
+    )
+    series.consistency_manifest = ConsistencyManifest(
+        character_visuals={"Ivy": "blonde hair"},
+        character_references={"Ivy": str(ivy_img)},
+        scene_references={"poolside_night": str(pool_img)},
+        prop_references={"brochure": str(brochure_img)},
+        verified=True,
+    )
+
+    ep = Episode(
+        number=1,
+        title="Test",
+        scenes=[
+            DramaScene(
+                scene_id="ep01_s01",
+                visual_prompt="Ivy at poolside",
+                characters_present=["Ivy"],
+                duration_seconds=5.0,
+            ),
+        ],
+    )
+
+    _, state = build_episode_dag(ep, series)
+    shot = state.storyboard[0]
+
+    assert hasattr(shot, "scene_reference_urls")
+    assert "poolside_night" in shot.scene_reference_urls
+    assert hasattr(shot, "prop_reference_urls")
+    assert "brochure" in shot.prop_reference_urls

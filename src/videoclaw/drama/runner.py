@@ -200,11 +200,25 @@ def build_episode_dag(
         logger.info("Synced %d scenes from %d scene_blocks",
                      len(episode.scenes), len(episode.scene_blocks))
 
+    # Build scene and prop reference maps from ConsistencyManifest
+    scene_ref_map: dict[str, str] = {}
+    prop_ref_map: dict[str, str] = {}
+    if manifest and manifest.verified:
+        scene_ref_map = dict(manifest.scene_references)
+        prop_ref_map = dict(manifest.prop_references)
+
+    # Build available_refs for PromptEnhancer ref marker injection
+    available_refs: dict[str, dict[str, str]] = {
+        "characters": char_url_map if char_url_map else dict(char_ref_map),
+        "scenes": scene_ref_map,
+        "props": prop_ref_map,
+    }
+
     # Enhance visual prompts before building shots
     # For locked scripts: enhancer only optimizes visual_prompt for Seedance,
     # does NOT modify dialogue, narration, or scene structure.
     enhancer = PromptEnhancer()
-    enhancer.enhance_all_scenes(episode, series)
+    enhancer.enhance_all_scenes(episode, series, available_refs=available_refs)
 
     # Build shots from typed DramaScene objects with reference images injected
     shots: list[Shot] = []
@@ -237,6 +251,8 @@ def build_episode_dag(
             reference_images=ref_images,
             multi_reference_images=multi_refs,
             reference_image_urls=ref_urls,
+            scene_reference_urls=scene_ref_map,
+            prop_reference_urls=prop_ref_map,
         ))
 
     # Create project state for this episode
@@ -372,6 +388,8 @@ def _build_drama_dag(
                 "reference_images": shot.reference_images,
                 "multi_reference_images": shot.multi_reference_images,
                 "reference_image_urls": shot.reference_image_urls,
+                "scene_reference_urls": shot.scene_reference_urls,
+                "prop_reference_urls": shot.prop_reference_urls,
                 "speaking_character": scene.speaking_character,
             },
         ))
@@ -520,6 +538,14 @@ def build_scene_regen_dag(
             if first_name != c.name:
                 char_url_map[first_name] = url
 
+    # Build scene and prop reference maps from ConsistencyManifest
+    regen_scene_ref_map: dict[str, str] = {}
+    regen_prop_ref_map: dict[str, str] = {}
+    manifest = series.consistency_manifest
+    if manifest and manifest.verified:
+        regen_scene_ref_map = dict(manifest.scene_references)
+        regen_prop_ref_map = dict(manifest.prop_references)
+
     # Build character voice lookup
     character_voices: dict[str, dict] = {}
     for char in series.characters:
@@ -572,6 +598,8 @@ def build_scene_regen_dag(
             "reference_images": ref_images,
             "multi_reference_images": multi_refs,
             "reference_image_urls": ref_urls,
+            "scene_reference_urls": regen_scene_ref_map,
+            "prop_reference_urls": regen_prop_ref_map,
             "speaking_character": target_scene.speaking_character,
         },
     ))

@@ -60,6 +60,12 @@ class Shot:
     reference_image_urls: dict[str, str] = field(default_factory=dict)
     # Mapping: character_name → HTTPS URL (turnaround sheet)
     # For Seedance API via vectorspace.cn proxy which rejects base64 data URIs
+    scene_reference_urls: dict[str, str] = field(default_factory=dict)
+    # Mapping: location_key → HTTPS URL or local path
+    # For Seedance Universal Reference — scene environment consistency
+    prop_reference_urls: dict[str, str] = field(default_factory=dict)
+    # Mapping: prop_name → HTTPS URL or local path
+    # For Seedance Universal Reference — prop consistency
 
     # -- Serialisation helpers -------------------------------------------------
 
