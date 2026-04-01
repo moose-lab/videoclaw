@@ -17,6 +17,7 @@ from videoclaw.core.events import event_bus
 from videoclaw.core.executor import DAGExecutor
 from videoclaw.core.planner import DAG, TaskNode, TaskType
 from videoclaw.core.state import ProjectState, Shot, ShotStatus, StateManager
+from videoclaw.cost.tracker import CostTracker
 from videoclaw.drama.models import (
     DramaManager,
     DramaScene,
@@ -675,11 +676,13 @@ class DramaRunner:
         state_manager: StateManager | None = None,
         max_concurrency: int = 4,
         auto_refresh_urls: bool = True,
+        budget_usd: float | None = None,
     ) -> None:
         self.drama_mgr = drama_manager or DramaManager()
         self.state_mgr = state_manager or StateManager()
         self.max_concurrency = max_concurrency
         self.auto_refresh_urls = auto_refresh_urls
+        self.budget_usd = budget_usd
 
     async def run_episode(
         self,
@@ -709,12 +712,18 @@ class DramaRunner:
         dag, state = build_episode_dag(episode, series, max_shots=max_shots)
         self.state_mgr.save(state)
 
+        tracker = CostTracker(
+            project_id=state.project_id,
+            budget_usd=self.budget_usd,
+        )
+
         executor = DAGExecutor(
             dag=dag,
             state=state,
             state_manager=self.state_mgr,
             bus=event_bus,
             max_concurrency=self.max_concurrency,
+            cost_tracker=tracker,
         )
 
         state = await executor.run()
@@ -905,12 +914,18 @@ class DramaRunner:
         # 4. Build and execute mini-DAG
         dag = build_scene_regen_dag(episode, series, scene_id, state, recompose)
 
+        tracker = CostTracker(
+            project_id=state.project_id,
+            budget_usd=self.budget_usd,
+        )
+
         executor = DAGExecutor(
             dag=dag,
             state=state,
             state_manager=self.state_mgr,
             bus=event_bus,
             max_concurrency=self.max_concurrency,
+            cost_tracker=tracker,
         )
 
         state = await executor.run()

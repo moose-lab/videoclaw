@@ -228,7 +228,11 @@ async def _generate_async(
     from videoclaw.core.events import TASK_COMPLETED, event_bus
     from videoclaw.core.executor import DAGExecutor
 
-    executor = DAGExecutor(dag=dag, state=state, max_concurrency=max_concurrency)
+    executor = DAGExecutor(
+        dag=dag, state=state,
+        max_concurrency=max_concurrency,
+        cost_tracker=tracker,
+    )
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),

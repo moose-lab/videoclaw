@@ -295,8 +295,12 @@ async def _drama_run_async(
     from videoclaw.drama.runner import DramaRunner
 
     planner = DramaPlanner()
-    runner = DramaRunner(drama_manager=mgr, auto_refresh_urls=auto_refresh_urls)
     effective_budget = budget_usd or get_config().budget_default_usd
+    runner = DramaRunner(
+        drama_manager=mgr,
+        auto_refresh_urls=auto_refresh_urls,
+        budget_usd=effective_budget,
+    )
 
     episodes_to_run = [
         ep for ep in series.episodes
