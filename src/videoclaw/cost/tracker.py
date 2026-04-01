@@ -7,10 +7,12 @@ provides optimisation hints to help users minimise spend.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from videoclaw.core.events import COST_UPDATED, event_bus
@@ -342,6 +344,54 @@ class CostTracker:
         with console.capture() as capture:
             console.print(table)
         return capture.get()
+
+    # -- Persistence --------------------------------------------------------
+
+    def save_ledger(self, path: Path) -> None:
+        """Persist all records to a JSON file for later replay.
+
+        The file is written atomically (write-to-temp then rename) to
+        avoid corruption if the process is interrupted mid-write.
+        """
+        records_data = []
+        for r in self._records:
+            d = asdict(r)
+            d["timestamp"] = r.timestamp.isoformat()
+            records_data.append(d)
+
+        payload = {
+            "project_id": self.project_id,
+            "budget_usd": self.budget_usd,
+            "total_usd": self._total_usd,
+            "record_count": len(records_data),
+            "records": records_data,
+        }
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(path)
+        logger.debug("Saved cost ledger (%d records) to %s", len(records_data), path)
+
+    @classmethod
+    def load_ledger(cls, path: Path) -> CostTracker:
+        """Restore a tracker from a previously saved ledger file.
+
+        Raises:
+            FileNotFoundError: if *path* does not exist.
+        """
+        data = json.loads(path.read_text(encoding="utf-8"))
+        tracker = cls(
+            project_id=data["project_id"],
+            budget_usd=data.get("budget_usd"),
+        )
+        for rd in data.get("records", []):
+            rd["timestamp"] = datetime.fromisoformat(rd["timestamp"])
+            record = CostRecord(**rd)
+            tracker._records.append(record)
+            tracker._total_usd += record.total_usd
+        logger.debug("Loaded cost ledger (%d records) from %s", len(tracker._records), path)
+        return tracker
 
     # -- Internals ----------------------------------------------------------
 
