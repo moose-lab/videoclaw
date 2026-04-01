@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from videoclaw.config import get_config
+from videoclaw.cost.tracker import CostRecord, CostTracker
 from videoclaw.core.events import (
     PROJECT_COMPLETED,
     TASK_COMPLETED,
@@ -42,6 +43,7 @@ class DAGExecutor:
         state_manager: StateManager | None = None,
         bus: EventBus | None = None,
         max_concurrency: int = 4,
+        cost_tracker: CostTracker | None = None,
     ) -> None:
         self.dag = dag
         self.state = state
@@ -49,6 +51,7 @@ class DAGExecutor:
         self.bus = bus or default_event_bus
         self._semaphore = asyncio.Semaphore(max_concurrency)
         self._config = get_config()
+        self.cost_tracker = cost_tracker
 
         # Handler dispatch table -- maps TaskType to its async handler.
         # During Phase 1 every entry points at a placeholder.  Later phases
@@ -103,6 +106,18 @@ class DAGExecutor:
             self.state.status = ProjectStatus.COMPLETED
             await self.bus.emit(PROJECT_COMPLETED, {"project_id": self.state.project_id})
 
+        # Persist cost ledger to disk alongside project state.
+        if self.cost_tracker is not None:
+            cost_path = (
+                Path(self._config.projects_dir)
+                / self.state.project_id
+                / "cost.json"
+            )
+            try:
+                self.cost_tracker.save_ledger(cost_path)
+            except Exception:
+                logger.exception("Failed to save cost ledger for %s", self.state.project_id)
+
         self._checkpoint()
         logger.info(
             "Project %s finished with status %s",
@@ -121,7 +136,9 @@ class DAGExecutor:
             await self._execute_node(node)
 
     async def _execute_node(self, node: TaskNode) -> None:
-        """Dispatch *node* to its handler, with retry logic."""
+        """Dispatch *node* to its handler, with retry logic and cost tracking."""
+        import time as _time
+
         handler = self._handlers.get(node.task_type)
         if handler is None:
             self.dag.mark_failed(node.node_id, f"No handler for {node.task_type}")
@@ -140,10 +157,14 @@ class DAGExecutor:
 
         max_attempts = self._config.max_retries + 1
         last_error: str = ""
+        t0 = _time.monotonic()
+        retries = 0
 
         for attempt in range(1, max_attempts + 1):
             try:
                 result = await handler(node, self.state)
+                duration = _time.monotonic() - t0
+                self._record_cost(node, result, duration, retries)
                 self.dag.mark_complete(node.node_id, result)
                 await self.bus.emit(TASK_COMPLETED, {
                     "node_id": node.node_id,
@@ -153,6 +174,7 @@ class DAGExecutor:
                 self._checkpoint()
                 return
             except Exception as exc:
+                retries += 1
                 last_error = f"{type(exc).__name__}: {exc}"
                 logger.warning(
                     "Node %s attempt %d/%d failed: %s",
@@ -183,6 +205,58 @@ class DAGExecutor:
             self.state_manager.save(self.state)
         except Exception:
             logger.exception("Failed to checkpoint state for %s", self.state.project_id)
+
+    # ------------------------------------------------------------------
+    # Cost tracking
+    # ------------------------------------------------------------------
+
+    def _record_cost(
+        self,
+        node: TaskNode,
+        result: Any,
+        duration_seconds: float,
+        retries: int,
+    ) -> None:
+        """Build a :class:`CostRecord` from a completed task and record it."""
+        if self.cost_tracker is None:
+            return
+
+        # Extract cost from handler result (dict with cost_usd key)
+        cost_usd: float = 0.0
+        model_id: str = "unknown"
+        video_seconds: float = 0.0
+
+        if isinstance(result, dict):
+            cost_usd = float(result.get("cost_usd", 0.0))
+            model_id = result.get("model_id", node.params.get("model_id", "unknown"))
+            video_seconds = float(result.get("video_seconds", 0.0))
+
+        # Map TaskType to task_type string for bucketing
+        task_type_map = {
+            TaskType.VIDEO_GEN: "video_gen",
+            TaskType.TTS: "tts",
+            TaskType.PER_SCENE_TTS: "tts",
+            TaskType.SCRIPT_GEN: "llm",
+            TaskType.STORYBOARD: "llm",
+            TaskType.SCENE_VALIDATE: "validate",
+            TaskType.SUBTITLE_GEN: "subtitle",
+            TaskType.MUSIC: "music",
+            TaskType.COMPOSE: "compose",
+            TaskType.RENDER: "render",
+        }
+
+        record = CostRecord(
+            task_id=node.node_id,
+            model_id=model_id,
+            execution_mode="cloud" if cost_usd > 0 else "local",
+            api_cost_usd=cost_usd,
+            compute_cost_usd=0.0,
+            duration_seconds=duration_seconds,
+            task_type=task_type_map.get(node.task_type, node.task_type.value),
+            video_seconds=video_seconds,
+            retries=retries,
+        )
+        self.cost_tracker.record(record)
 
     # ------------------------------------------------------------------
     # Handlers
