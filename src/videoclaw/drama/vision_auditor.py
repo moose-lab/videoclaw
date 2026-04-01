@@ -31,6 +31,7 @@ modified clip when multiple session-prefixed files exist.
 from __future__ import annotations
 
 import base64
+import io
 import json
 import logging
 import subprocess
@@ -56,6 +57,7 @@ logger = logging.getLogger(__name__)
 # Vision model — sonnet is multimodal capable and cost-efficient
 VISION_MODEL = "claude-sonnet-4-6"
 
+# V1 template — retained for backward compatibility, not used in production.
 _AUDIT_SYSTEM = """\
 You are a professional AI video quality auditor for TikTok-style short dramas.
 You will be shown keyframes from a video clip alongside the scene specification.
@@ -65,6 +67,7 @@ Be concise and specific. Focus on production-blocking issues, not minor imperfec
 Return ONLY valid JSON matching the schema given in the user message.
 """
 
+# V1 template — retained for backward compatibility, not used in production.
 _AUDIT_USER_TEMPLATE = """\
 Scene specification:
   scene_id: {scene_id}
@@ -300,15 +303,13 @@ class EpisodeAuditReport:
 # ---------------------------------------------------------------------------
 
 
-async def preview_and_confirm(
+def preview_and_confirm(
     report: EpisodeAuditReport,
-    series_dir: Path,
 ) -> list[str]:
     """Present passed/tolerable shots for optional human review.
 
-    Prints a summary table of all shots with their status and defects.
-    For shots with tolerables, shows the defect descriptions.
-    Prompts the user to enter scene IDs they want to force-regen (comma-separated),
+    Prints a Rich table of all shots with status and defects.
+    Prompts the user to enter scene IDs to force-regen (comma-separated),
     or press Enter to accept all.
 
     Returns list of additional scene_ids the user wants to regen.
@@ -331,7 +332,7 @@ async def preview_and_confirm(
 
     console.print(table)
 
-    user_input = input(
+    user_input = console.input(
         "\n[yellow]Enter scene IDs to force-regen (comma-separated), "
         "or press Enter to accept:[/yellow] "
     )
@@ -615,7 +616,7 @@ class VisionAuditor:
                     tolerables.append(label)
         except Exception as exc:
             logger.warning("Layer 1 frame analysis failed for %s: %s", clip_path.name, exc)
-            # Frame extraction failure is not fatal — fall through to Layer 2
+            tolerables.append("layer1_analysis_unavailable")
         return fatals, tolerables
 
     async def _layer2_vision_llm(
@@ -1003,12 +1004,10 @@ class VisionAuditor:
         tolerables: list[str] = []
 
         # Encode frames to base64 for the vision model
-        import io
+        from PIL import Image
 
         content: list[dict[str, Any]] = []
         for frame in frames:
-            from PIL import Image
-
             img = Image.fromarray(frame)
             buf = io.BytesIO()
             img.save(buf, format="JPEG", quality=85)

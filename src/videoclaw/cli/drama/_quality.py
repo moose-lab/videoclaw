@@ -379,7 +379,7 @@ async def _drama_audit_regen_async(
         if preview:
             from videoclaw.drama.vision_auditor import preview_and_confirm
 
-            extra_ids = await preview_and_confirm(report, series_dir)
+            extra_ids = preview_and_confirm(report)
             if extra_ids:
                 for sid in extra_ids:
                     if sid not in regen_ids:
