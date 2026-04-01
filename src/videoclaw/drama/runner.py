@@ -391,6 +391,7 @@ def _build_drama_dag(
                 "scene_reference_urls": shot.scene_reference_urls,
                 "prop_reference_urls": shot.prop_reference_urls,
                 "speaking_character": scene.speaking_character,
+                "shot_scale": scene.shot_scale.value if scene.shot_scale else None,
             },
         ))
         video_node_ids.append(vid_id)
@@ -555,9 +556,16 @@ def build_scene_regen_dag(
     # Find the corresponding shot in the storyboard
     shot = next((s for s in state.storyboard if s.shot_id == scene_id), None)
 
-    # Enhance the target scene's visual prompt
+    # Enhance the target scene's visual prompt (with available refs for [ref:key] markers)
+    regen_available_refs: dict[str, dict[str, str]] = {
+        "characters": char_url_map if char_url_map else dict(char_ref_map),
+        "scenes": regen_scene_ref_map,
+        "props": regen_prop_ref_map,
+    }
     enhancer = PromptEnhancer()
-    enhanced = enhancer.enhance_scene_prompt(target_scene, series)
+    enhanced = enhancer.enhance_scene_prompt(
+        target_scene, series, available_refs=regen_available_refs,
+    )
     target_scene.enhanced_visual_prompt = enhanced
 
     dag = DAG()
@@ -601,6 +609,7 @@ def build_scene_regen_dag(
             "scene_reference_urls": regen_scene_ref_map,
             "prop_reference_urls": regen_prop_ref_map,
             "speaking_character": target_scene.speaking_character,
+            "shot_scale": target_scene.shot_scale.value if target_scene.shot_scale else None,
         },
     ))
 

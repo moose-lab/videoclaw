@@ -99,8 +99,24 @@ def drama_preview_prompts(
 
     enhancer = PromptEnhancer()
 
+    # Build available_refs from series state for [ref:key] marker injection
+    _available_refs: dict[str, dict[str, str]] = {
+        "characters": {},
+        "scenes": {},
+        "props": {},
+    }
+    for c in series.characters:
+        url = getattr(c, "reference_image_url", None)
+        if url:
+            _available_refs["characters"][c.name] = url
+        elif c.reference_image:
+            _available_refs["characters"][c.name] = c.reference_image
+    if series.consistency_manifest:
+        _available_refs["scenes"] = dict(series.consistency_manifest.scene_references)
+        _available_refs["props"] = dict(series.consistency_manifest.prop_references)
+
     # Enhance all scenes (populates name card tracking across episode)
-    enhancer.enhance_all_scenes(ep, series)
+    enhancer.enhance_all_scenes(ep, series, available_refs=_available_refs)
     # Persist enhanced prompts to series.json for reproducibility
     mgr.save(series)
 
@@ -377,10 +393,24 @@ async def _drama_run_async(
             from videoclaw.drama.prompt_enhancer import PromptEnhancer
             from videoclaw.drama.prompt_review import PromptReviewer
 
-            # Ensure prompts are enhanced before review
+            # Ensure prompts are enhanced before review (with available_refs for [ref:key] markers)
             if not ep.scenes[0].enhanced_visual_prompt:
+                _run_available_refs: dict[str, dict[str, str]] = {
+                    "characters": {},
+                    "scenes": {},
+                    "props": {},
+                }
+                for c in series.characters:
+                    url = getattr(c, "reference_image_url", None)
+                    if url:
+                        _run_available_refs["characters"][c.name] = url
+                    elif c.reference_image:
+                        _run_available_refs["characters"][c.name] = c.reference_image
+                if series.consistency_manifest:
+                    _run_available_refs["scenes"] = dict(series.consistency_manifest.scene_references)
+                    _run_available_refs["props"] = dict(series.consistency_manifest.prop_references)
                 enhancer = PromptEnhancer()
-                enhancer.enhance_all_scenes(ep, series)
+                enhancer.enhance_all_scenes(ep, series, available_refs=_run_available_refs)
 
             reviewer = PromptReviewer(enabled=True, console=console)
             confirmed_scenes = reviewer.review_episode(ep, series)
@@ -389,6 +419,8 @@ async def _drama_run_async(
                 console.print(
                     f"[yellow]{len(ep.scenes) - len(confirmed_scenes)} scene(s) skipped[/yellow]"
                 )
+                # Filter episode scenes to only confirmed ones for generation
+                ep.scenes = confirmed_scenes
 
             mgr.save(series)
 
