@@ -218,6 +218,19 @@ def build_episode_dag(
     # For locked scripts: enhancer only optimizes visual_prompt for Seedance,
     # does NOT modify dialogue, narration, or scene structure.
     enhancer = PromptEnhancer()
+
+    # Experience feedback (经验反哺): inject frequent audit defects as constraints
+    from videoclaw.config import get_config
+    series_dir = get_config().projects_dir / "dramas" / series.series_id
+    audit_log_dir = series_dir / "audit_logs"
+    if audit_log_dir.is_dir():
+        learned = enhancer.load_audit_constraints(series_dir)
+        if learned:
+            logger.info(
+                "Loaded %d learned constraints from audit logs: %s",
+                len(learned), learned,
+            )
+
     enhancer.enhance_all_scenes(episode, series, available_refs=available_refs)
 
     # Build shots from typed DramaScene objects with reference images injected

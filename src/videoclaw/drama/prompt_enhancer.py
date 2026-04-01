@@ -20,6 +20,7 @@ regardless of LLM output quality.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from videoclaw.drama.models import ShotScale
@@ -193,6 +194,8 @@ class PromptEnhancer:
         # Total scene count and current index for hook/cliffhanger detection
         self._total_scenes: int = 0
         self._scene_index: int = 0
+        # Learned constraints from audit feedback (experience feedback / 经验反哺)
+        self._learned_constraints: list[str] = []
 
     # -- public API ---------------------------------------------------------
 
@@ -201,6 +204,83 @@ class PromptEnhancer:
         if self._strip_chinese is not None:
             return self._strip_chinese
         return any(model_id.startswith(p) for p in _ENGLISH_ONLY_PREFIXES)
+
+    def load_audit_constraints(self, series_dir: Path, min_count: int = 3) -> list[str]:
+        """Read the audit log's frequent defects and map them to prompt constraints.
+
+        Scans ``{series_dir}/audit_logs/ep*_audit.jsonl`` for defects that
+        appeared >= *min_count* times, then maps common patterns to actionable
+        constraint strings.  Unknown defects are included literally as
+        ``"AVOID: {defect_text}"``.
+
+        The loaded constraints are automatically injected via
+        :meth:`inject_learned_constraints`.
+
+        Returns the list of constraint strings (empty if no log exists).
+        """
+        from videoclaw.drama.vision_auditor import AuditLog
+
+        log_dir = series_dir / "audit_logs"
+        if not log_dir.is_dir():
+            return []
+
+        # Aggregate frequent defects from all episode logs in the directory
+        all_defects: list[str] = []
+        for log_file in sorted(log_dir.glob("ep*_audit.jsonl")):
+            audit_log = AuditLog(log_file)
+            all_defects.extend(audit_log.get_frequent_defects(min_count))
+
+        if not all_defects:
+            return []
+
+        # De-duplicate while preserving order
+        seen: set[str] = set()
+        unique_defects: list[str] = []
+        for d in all_defects:
+            if d not in seen:
+                seen.add(d)
+                unique_defects.append(d)
+
+        constraints: list[str] = []
+        for defect in unique_defects:
+            dl = defect.lower()
+            if "hand" in dl or "finger" in dl:
+                constraints.append(
+                    "Ensure anatomically correct hands with exactly 5 fingers per hand"
+                )
+            elif "temporal_break" in dl or "flicker" in dl:
+                constraints.append(
+                    "Maintain visual stability with no abrupt changes between frames"
+                )
+            elif "character" in dl and "missing" in dl:
+                constraints.append(
+                    "All specified characters must be clearly visible in frame"
+                )
+            elif "scene" in dl and "mismatch" in dl:
+                constraints.append(
+                    "Scene must exactly match the described location and time of day"
+                )
+            else:
+                constraints.append(f"AVOID: {defect}")
+
+        # De-duplicate mapped constraints (multiple defects may map to same constraint)
+        seen_constraints: set[str] = set()
+        deduped: list[str] = []
+        for c in constraints:
+            if c not in seen_constraints:
+                seen_constraints.add(c)
+                deduped.append(c)
+
+        self.inject_learned_constraints(deduped)
+        return deduped
+
+    def inject_learned_constraints(self, constraints: list[str]) -> None:
+        """Store learned constraints to be appended in :meth:`enhance_scene_prompt`.
+
+        These constraints come from audit feedback (经验反哺) and are injected
+        into the ``Constraints:`` section of every subsequent prompt.
+        """
+        self._learned_constraints = list(constraints)
 
     def enhance_scene_prompt(
         self,
@@ -354,7 +434,11 @@ class PromptEnhancer:
         text = text.rstrip() + " " + style_tag
 
         # --- 7. Constraints ---
-        text = text.rstrip() + " " + f"Constraints: {_DEFAULT_CONSTRAINTS}."
+        constraints = _DEFAULT_CONSTRAINTS
+        if self._learned_constraints:
+            learned = ", ".join(self._learned_constraints)
+            constraints = f"{constraints}, {learned}"
+        text = text.rstrip() + " " + f"Constraints: {constraints}."
 
         # --- 8. Enforce text length limits ---
         language = series.language or "en"
