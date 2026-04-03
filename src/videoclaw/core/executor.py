@@ -1009,6 +1009,8 @@ class DAGExecutor:
             AudioType,
             VideoComposer,
             align_clips,
+            scenes_needing_regen,
+            validate_composed_duration,
         )
 
         project_dir = Path(self._config.projects_dir) / state.project_id
@@ -1069,15 +1071,22 @@ class DAGExecutor:
             clip_durations=clip_durations,
         )
 
-        # Store alignment report in state for downstream audit
+        # Store alignment report and post-compose validation in state
         if alignment:
-            import json as _alignment_json
-            state.assets["alignment_report"] = _alignment_json.dumps({
+            # Post-compose validation: check composed video duration
+            compose_validation = await validate_composed_duration(
+                composed_path, alignment,
+            )
+            regen_ids = scenes_needing_regen(alignment)
+
+            state.assets["alignment_report"] = _json.dumps({
                 "is_aligned": alignment.is_aligned,
                 "total_scripted": alignment.total_scripted,
                 "total_actual": alignment.total_actual,
                 "total_drift": alignment.total_drift,
                 "misaligned_scene_ids": alignment.misaligned_scene_ids,
+                "compose_validation": compose_validation,
+                "scenes_needing_regen": regen_ids,
                 "clips": [
                     {
                         "scene_id": c.scene_id,
@@ -1088,6 +1097,12 @@ class DAGExecutor:
                     for c in alignment.clips
                 ],
             })
+
+            if regen_ids:
+                logger.warning(
+                    "[compose] Scenes needing regen due to duration drift: %s",
+                    ", ".join(regen_ids),
+                )
 
         logger.info("[compose] Composed %d clips -> %s", len(video_paths), composed_path)
 

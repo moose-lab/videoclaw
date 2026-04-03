@@ -139,6 +139,63 @@ async def align_clips(
 
     return report
 
+
+async def validate_composed_duration(
+    composed_path: Path,
+    alignment: AlignmentReport,
+    transition_duration: float = 0.5,
+) -> dict:
+    """Validate the composed video duration against the alignment expectation.
+
+    The expected duration accounts for transition overlap:
+    ``total_actual - (n_clips - 1) * transition_duration``
+
+    Returns a dict with ``ok``, ``expected``, ``actual``, and ``drift``.
+    """
+    n_clips = len(alignment.clips)
+    overlap = (n_clips - 1) * transition_duration if n_clips > 1 else 0.0
+    expected = alignment.total_actual - overlap
+
+    actual = await get_video_duration(composed_path)
+    drift = abs(actual - expected)
+
+    ok = drift <= _DURATION_TOLERANCE_SECONDS
+    result = {
+        "ok": ok,
+        "expected": round(expected, 2),
+        "actual": round(actual, 2),
+        "drift": round(drift, 2),
+    }
+
+    if ok:
+        logger.info(
+            "[validate] Composed duration OK: %.1fs (expected %.1fs, drift %.1fs)",
+            actual, expected, drift,
+        )
+    else:
+        logger.warning(
+            "[validate] Composed duration MISMATCH: %.1fs (expected %.1fs, drift %.1fs)",
+            actual, expected, drift,
+        )
+
+    return result
+
+
+def scenes_needing_regen(alignment: AlignmentReport) -> list[str]:
+    """Return scene IDs that should be regenerated due to duration drift.
+
+    Prioritizes scenes with the largest drift (sorted descending).
+    Only includes scenes that exceed the tolerance threshold.
+    """
+    drifted = [
+        (c.scene_id, c.drift)
+        for c in alignment.clips
+        if c.is_misaligned
+    ]
+    drifted.sort(key=lambda x: x[1], reverse=True)
+    return [sid for sid, _ in drifted]
+
+
 # ---------------------------------------------------------------------------
 # Data models
 # ---------------------------------------------------------------------------

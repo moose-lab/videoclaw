@@ -19,6 +19,8 @@ from videoclaw.generation.compose import (
     _DURATION_TOLERANCE_SECONDS,
     _SUPPORTED_TRANSITIONS,
     align_clips,
+    scenes_needing_regen,
+    validate_composed_duration,
 )
 
 
@@ -391,7 +393,10 @@ class TestHandleComposeTransitions:
             total_actual=15.1,
         )
 
+        mock_validation = {"ok": True, "expected": 14.1, "actual": 14.1, "drift": 0.0}
+
         with patch("videoclaw.generation.compose.align_clips", new_callable=AsyncMock, return_value=mock_report), \
+             patch("videoclaw.generation.compose.validate_composed_duration", new_callable=AsyncMock, return_value=mock_validation), \
              patch("videoclaw.generation.compose.VideoComposer") as MockComposer:
             mock_instance = MockComposer.return_value
             mock_instance.compose = AsyncMock(return_value=project_dir / "composed.mp4")
@@ -448,7 +453,10 @@ class TestHandleComposeTransitions:
             total_actual=5.0,
         )
 
+        mock_validation = {"ok": True, "expected": 5.0, "actual": 5.0, "drift": 0.0}
+
         with patch("videoclaw.generation.compose.align_clips", new_callable=AsyncMock, return_value=mock_report), \
+             patch("videoclaw.generation.compose.validate_composed_duration", new_callable=AsyncMock, return_value=mock_validation), \
              patch("videoclaw.generation.compose.VideoComposer") as MockComposer:
             mock_instance = MockComposer.return_value
             mock_instance.compose = AsyncMock(return_value=project_dir / "composed.mp4")
@@ -459,6 +467,8 @@ class TestHandleComposeTransitions:
             assert "alignment_report" in state.assets
             report_data = json.loads(state.assets["alignment_report"])
             assert report_data["is_aligned"] is True
+            assert report_data["compose_validation"]["ok"] is True
+            assert report_data["scenes_needing_regen"] == []
 
     @pytest.mark.asyncio
     async def test_handle_compose_no_scenes_passes_none(self, tmp_path):
@@ -689,3 +699,116 @@ class TestAlignmentReport:
         report = AlignmentReport(clips=clips, misaligned_scene_ids=["s01"], total_scripted=5.0, total_actual=8.0)
         assert not report.is_aligned
         assert report.total_drift == pytest.approx(3.0)
+
+
+# ---------------------------------------------------------------------------
+# validate_composed_duration — post-compose validation
+# ---------------------------------------------------------------------------
+
+
+class TestValidateComposedDuration:
+    """Test post-compose duration validation."""
+
+    @pytest.mark.asyncio
+    async def test_valid_composed_duration(self):
+        """Composed video matching expected duration (with transition overlap) should pass."""
+        clips = [
+            AlignedClip("s01", Path("/a.mp4"), 5.0, 5.0, "fade"),
+            AlignedClip("s02", Path("/b.mp4"), 5.0, 5.0, ""),
+        ]
+        report = AlignmentReport(clips=clips, misaligned_scene_ids=[], total_scripted=10.0, total_actual=10.0)
+
+        # Expected: 10.0 - 1 * 0.5 = 9.5
+        with patch(
+            "videoclaw.generation.compose.get_video_duration",
+            new_callable=AsyncMock,
+            return_value=9.5,
+        ):
+            result = await validate_composed_duration(Path("/composed.mp4"), report)
+
+        assert result["ok"] is True
+        assert result["expected"] == 9.5
+        assert result["actual"] == 9.5
+        assert result["drift"] == 0.0
+
+    @pytest.mark.asyncio
+    async def test_invalid_composed_duration(self):
+        """Composed video with significant drift should fail."""
+        clips = [
+            AlignedClip("s01", Path("/a.mp4"), 5.0, 5.0, "fade"),
+            AlignedClip("s02", Path("/b.mp4"), 5.0, 5.0, ""),
+        ]
+        report = AlignmentReport(clips=clips, misaligned_scene_ids=[], total_scripted=10.0, total_actual=10.0)
+
+        # Expected: 9.5, actual: 7.0 → drift 2.5
+        with patch(
+            "videoclaw.generation.compose.get_video_duration",
+            new_callable=AsyncMock,
+            return_value=7.0,
+        ):
+            result = await validate_composed_duration(Path("/composed.mp4"), report)
+
+        assert result["ok"] is False
+        assert result["drift"] == 2.5
+
+    @pytest.mark.asyncio
+    async def test_single_clip_no_overlap(self):
+        """Single clip should have no transition overlap deduction."""
+        clips = [AlignedClip("s01", Path("/a.mp4"), 8.0, 8.0, "")]
+        report = AlignmentReport(clips=clips, misaligned_scene_ids=[], total_scripted=8.0, total_actual=8.0)
+
+        with patch(
+            "videoclaw.generation.compose.get_video_duration",
+            new_callable=AsyncMock,
+            return_value=8.0,
+        ):
+            result = await validate_composed_duration(Path("/composed.mp4"), report)
+
+        assert result["ok"] is True
+        assert result["expected"] == 8.0
+
+
+# ---------------------------------------------------------------------------
+# scenes_needing_regen — identify scenes to regenerate
+# ---------------------------------------------------------------------------
+
+
+class TestScenesNeedingRegen:
+    """Test scene regen identification from alignment report."""
+
+    def test_no_regen_needed(self):
+        clips = [
+            AlignedClip("s01", Path("/a.mp4"), 5.0, 5.5, ""),
+            AlignedClip("s02", Path("/b.mp4"), 8.0, 8.3, ""),
+        ]
+        report = AlignmentReport(clips=clips, misaligned_scene_ids=[], total_scripted=13.0, total_actual=13.8)
+        assert scenes_needing_regen(report) == []
+
+    def test_regen_sorted_by_drift(self):
+        clips = [
+            AlignedClip("s01", Path("/a.mp4"), 5.0, 7.0, ""),  # drift 2.0
+            AlignedClip("s02", Path("/b.mp4"), 8.0, 5.0, ""),  # drift 3.0
+            AlignedClip("s03", Path("/c.mp4"), 6.0, 6.3, ""),  # drift 0.3
+        ]
+        report = AlignmentReport(
+            clips=clips,
+            misaligned_scene_ids=["s01", "s02"],
+            total_scripted=19.0,
+            total_actual=18.3,
+        )
+        result = scenes_needing_regen(report)
+        assert result == ["s02", "s01"]  # sorted by drift descending
+
+    def test_excludes_within_tolerance(self):
+        clips = [
+            AlignedClip("s01", Path("/a.mp4"), 5.0, 5.8, ""),  # drift 0.8, within tolerance
+            AlignedClip("s02", Path("/b.mp4"), 8.0, 10.5, ""),  # drift 2.5, needs regen
+        ]
+        report = AlignmentReport(
+            clips=clips,
+            misaligned_scene_ids=["s02"],
+            total_scripted=13.0,
+            total_actual=16.3,
+        )
+        result = scenes_needing_regen(report)
+        assert result == ["s02"]

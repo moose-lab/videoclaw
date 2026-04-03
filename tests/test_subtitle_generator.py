@@ -620,7 +620,10 @@ class TestComposeReadsUpstreamSubtitles:
             total_actual=3.0,
         )
 
+        mock_validation = {"ok": True, "expected": 3.0, "actual": 3.0, "drift": 0.0}
+
         with patch("videoclaw.generation.compose.align_clips", new_callable=AsyncMock, return_value=mock_report), \
+             patch("videoclaw.generation.compose.validate_composed_duration", new_callable=AsyncMock, return_value=mock_validation), \
              patch("videoclaw.generation.compose.VideoComposer") as MockComposer:
             mock_composer = AsyncMock()
             MockComposer.return_value = mock_composer
