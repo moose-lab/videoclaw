@@ -471,6 +471,92 @@ class TestHandleComposeTransitions:
             assert report_data["scenes_needing_regen"] == []
 
     @pytest.mark.asyncio
+    async def test_handle_compose_resyncs_audio_start_times(self, tmp_path):
+        """Audio start_times should be re-computed from actual video durations."""
+        sm = StateManager(projects_dir=tmp_path)
+
+        project_dir = tmp_path / "test_project"
+        shots_dir = project_dir / "shots"
+        audio_dir = project_dir / "audio"
+        shots_dir.mkdir(parents=True)
+        audio_dir.mkdir(parents=True)
+        (shots_dir / "s01.mp4").write_bytes(b"fake_video_1")
+        (shots_dir / "s02.mp4").write_bytes(b"fake_video_2")
+        (audio_dir / "s01.mp3").write_bytes(b"fake_audio")
+        (audio_dir / "s02.mp3").write_bytes(b"fake_audio")
+        (project_dir / "composed.mp4").write_bytes(b"composed")
+
+        state = ProjectState(
+            project_id="test_project",
+            prompt="test",
+            storyboard=[
+                Shot(shot_id="s01", asset_path=str(shots_dir / "s01.mp4")),
+                Shot(shot_id="s02", asset_path=str(shots_dir / "s02.mp4")),
+            ],
+            assets={
+                # Audio manifest with scripted start_times (based on 5.0+5.0 scripted)
+                "audio_manifest": json.dumps({
+                    "segments": [
+                        {"scene_id": "s01", "audio_path": str(audio_dir / "s01.mp3"),
+                         "start_time": 0.0, "line_type": "dialogue", "duration_seconds": 2.0},
+                        {"scene_id": "s02", "audio_path": str(audio_dir / "s02.mp3"),
+                         "start_time": 5.0, "line_type": "dialogue", "duration_seconds": 2.0},
+                    ],
+                }),
+            },
+        )
+
+        dag = DAG()
+        node = TaskNode(
+            node_id="compose",
+            task_type=TaskType.COMPOSE,
+            params={
+                "transition": "dissolve",
+                "scenes": [
+                    {"scene_id": "s01", "dialogue": "", "duration_seconds": 5.0, "transition": "dissolve"},
+                    {"scene_id": "s02", "dialogue": "", "duration_seconds": 5.0, "transition": ""},
+                ],
+            },
+        )
+        dag.add_node(node)
+
+        executor = DAGExecutor(dag=dag, state=state, state_manager=sm)
+        executor._config = type(executor._config).model_construct(
+            **{**executor._config.model_dump(), "projects_dir": tmp_path},
+        )
+
+        # Actual durations differ: s01=6.0s (longer than 5.0 scripted)
+        mock_report = AlignmentReport(
+            clips=[
+                AlignedClip("s01", shots_dir / "s01.mp4", 5.0, 6.0, "dissolve"),
+                AlignedClip("s02", shots_dir / "s02.mp4", 5.0, 5.0, ""),
+            ],
+            misaligned_scene_ids=["s01"],
+            total_scripted=10.0,
+            total_actual=11.0,
+        )
+        mock_validation = {"ok": True, "expected": 10.5, "actual": 10.5, "drift": 0.0}
+
+        with patch("videoclaw.generation.compose.align_clips", new_callable=AsyncMock, return_value=mock_report), \
+             patch("videoclaw.generation.compose.validate_composed_duration", new_callable=AsyncMock, return_value=mock_validation), \
+             patch("videoclaw.generation.compose.VideoComposer") as MockComposer:
+            mock_instance = MockComposer.return_value
+            mock_instance.compose = AsyncMock(return_value=project_dir / "composed.mp4")
+            mock_instance.render_final = AsyncMock(return_value=project_dir / "composed_final.mp4")
+
+            await executor._handle_compose(node, state)
+
+            # render_final should have been called with re-synced audio
+            render_call = mock_instance.render_final.call_args
+            audio_tracks = render_call.kwargs.get("audio_tracks", [])
+            assert len(audio_tracks) == 2
+            # s01 starts at 0.0
+            assert audio_tracks[0].start_time == 0.0
+            # s02 should start at actual_s01 - transition = 6.0 - 0.5 = 5.5
+            # (not the scripted 5.0)
+            assert audio_tracks[1].start_time == 5.5
+
+    @pytest.mark.asyncio
     async def test_handle_compose_no_scenes_passes_none(self, tmp_path):
         """When there are no scenes in params, transitions should be None."""
         sm = StateManager(projects_dir=tmp_path)

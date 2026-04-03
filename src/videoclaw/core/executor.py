@@ -1126,7 +1126,23 @@ class DAGExecutor:
         # 4. Collect audio tracks (TTS + music)
         #    Prefer audio_manifest (has start_time + line_type for proper mix)
         #    over the flat tts_audio list.
+        #
+        #    When alignment report is available, re-compute start_times based
+        #    on actual clip durations to keep audio in sync with video.
         audio_tracks: list[AudioTrack] = []
+
+        # Build scene_id → cumulative actual start time map for audio re-sync
+        actual_start_map: dict[str, float] = {}
+        if alignment:
+            cumulative = 0.0
+            transition_dur = 0.5  # same default as compose
+            for i, clip in enumerate(alignment.clips):
+                actual_start_map[clip.scene_id] = cumulative
+                if i < len(alignment.clips) - 1:
+                    cumulative += clip.actual_duration - transition_dur
+                else:
+                    cumulative += clip.actual_duration
+
         raw_manifest = state.assets.get("audio_manifest")
         if raw_manifest:
             from videoclaw.drama.models import LineType
@@ -1136,11 +1152,19 @@ class DAGExecutor:
                 if seg_path and Path(seg_path).exists():
                     line_type = seg.get("line_type", "dialogue")
                     vol = 0.85 if line_type == LineType.NARRATION else 1.0
+
+                    # Re-sync start_time using actual durations if available
+                    seg_scene_id = seg.get("scene_id", "")
+                    if seg_scene_id and seg_scene_id in actual_start_map:
+                        start_time = actual_start_map[seg_scene_id]
+                    else:
+                        start_time = float(seg.get("start_time", 0.0))
+
                     audio_tracks.append(AudioTrack(
                         path=Path(seg_path),
                         type=AudioType.VOICE,
                         volume=vol,
-                        start_time=float(seg.get("start_time", 0.0)),
+                        start_time=start_time,
                     ))
         else:
             tts_data = state.assets.get("tts_audio")
