@@ -141,3 +141,75 @@ class TestBuildVerdict:
         r = auditor._build_verdict("s01", [], ["a", "b", "c"])
         assert r.passed is False
         assert r.regen_required is True
+
+
+class TestPerShotDurationDrift:
+    """Test Layer 0 duration drift check against scripted duration."""
+
+    @pytest.mark.asyncio
+    async def test_drift_within_tolerance_passes(self):
+        """Drift <= 1.0s should not generate any defects."""
+        auditor = VisionAuditor()
+        scene = DramaScene(scene_id="s01", duration_seconds=5.0)
+        # Actual: 5.8s, drift=0.8 → within 1.0 tolerance
+        with patch(
+            "videoclaw.drama.vision_auditor.get_video_info",
+            new_callable=AsyncMock,
+            return_value={"format": {"duration": "5.8", "size": "100000"}},
+        ), patch.object(auditor, "_layer1_temporal", new_callable=AsyncMock, return_value=([], [])), \
+           patch.object(auditor, "_layer2_vision_llm", new_callable=AsyncMock, return_value=([], [])), \
+           patch("pathlib.Path.exists", return_value=True):
+            result = await auditor.audit_shot(scene, Path("/fake/clip.mp4"))
+        assert result.passed is True
+        assert not any("drift" in f for f in result.fatals)
+        assert not any("drift" in t for t in result.tolerables)
+
+    @pytest.mark.asyncio
+    async def test_drift_tolerable(self):
+        """Drift > 1.0s but <= 3.0s should be tolerable."""
+        auditor = VisionAuditor()
+        scene = DramaScene(scene_id="s01", duration_seconds=5.0)
+        # Actual: 7.0s, drift=2.0 → tolerable
+        with patch(
+            "videoclaw.drama.vision_auditor.get_video_info",
+            new_callable=AsyncMock,
+            return_value={"format": {"duration": "7.0", "size": "100000"}},
+        ), patch.object(auditor, "_layer1_temporal", new_callable=AsyncMock, return_value=([], [])), \
+           patch.object(auditor, "_layer2_vision_llm", new_callable=AsyncMock, return_value=([], [])), \
+           patch("pathlib.Path.exists", return_value=True):
+            result = await auditor.audit_shot(scene, Path("/fake/clip.mp4"))
+        assert any("drift" in t for t in result.tolerables)
+        assert not any("drift" in f for f in result.fatals)
+
+    @pytest.mark.asyncio
+    async def test_drift_fatal(self):
+        """Drift > 3.0s should be fatal."""
+        auditor = VisionAuditor()
+        scene = DramaScene(scene_id="s01", duration_seconds=5.0)
+        # Actual: 9.0s, drift=4.0 → fatal
+        with patch(
+            "videoclaw.drama.vision_auditor.get_video_info",
+            new_callable=AsyncMock,
+            return_value={"format": {"duration": "9.0", "size": "100000"}},
+        ), patch.object(auditor, "_layer1_temporal", new_callable=AsyncMock, return_value=([], [])), \
+           patch.object(auditor, "_layer2_vision_llm", new_callable=AsyncMock, return_value=([], [])), \
+           patch("pathlib.Path.exists", return_value=True):
+            result = await auditor.audit_shot(scene, Path("/fake/clip.mp4"))
+        assert any("drift" in f for f in result.fatals)
+        assert result.regen_required is True
+
+    @pytest.mark.asyncio
+    async def test_no_drift_check_when_no_scripted_duration(self):
+        """When scene has no duration_seconds, skip drift check."""
+        auditor = VisionAuditor()
+        scene = DramaScene(scene_id="s01", duration_seconds=0.0)
+        with patch(
+            "videoclaw.drama.vision_auditor.get_video_info",
+            new_callable=AsyncMock,
+            return_value={"format": {"duration": "5.0", "size": "100000"}},
+        ), patch.object(auditor, "_layer1_temporal", new_callable=AsyncMock, return_value=([], [])), \
+           patch.object(auditor, "_layer2_vision_llm", new_callable=AsyncMock, return_value=([], [])), \
+           patch("pathlib.Path.exists", return_value=True):
+            result = await auditor.audit_shot(scene, Path("/fake/clip.mp4"))
+        assert not any("drift" in f for f in result.fatals)
+        assert not any("drift" in t for t in result.tolerables)

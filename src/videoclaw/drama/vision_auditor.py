@@ -554,6 +554,19 @@ class VisionAuditor:
             duration = float(info.get("format", {}).get("duration", 0))
             if duration <= 0.5:
                 all_fatals.append(f"clip duration too short ({duration:.2f}s)")
+            elif scene.duration_seconds > 0:
+                # Check duration drift against scripted value
+                drift = abs(duration - scene.duration_seconds)
+                if drift > 3.0:
+                    all_fatals.append(
+                        f"duration drift {drift:.1f}s "
+                        f"(actual {duration:.1f}s vs scripted {scene.duration_seconds:.1f}s)"
+                    )
+                elif drift > 1.0:
+                    all_tolerables.append(
+                        f"duration drift {drift:.1f}s "
+                        f"(actual {duration:.1f}s vs scripted {scene.duration_seconds:.1f}s)"
+                    )
         except Exception as exc:
             logger.warning("Layer 0 ffprobe failed for %s: %s", scene.scene_id, exc)
             all_fatals.append(f"ffprobe error: {exc}")
