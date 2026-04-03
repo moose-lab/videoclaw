@@ -140,7 +140,7 @@ def _group_scenes_into_blocks(
 
 SERIES_OUTLINE_PROMPT: str = """\
 你是一位资深的中国竖屏短剧（竖屏短剧）编剧，精通抖音/快手/微信视频号等平台的内容生态。
-每集时长30-90秒。你的作品需要在信息流中脱颖而出，驱动完播率和付费转化。
+每集时长50-90秒。你的作品需要在信息流中脱颖而出，驱动完播率和付费转化。
 
 根据给定的概念，产出一份包含分集梗概和角色设定的剧集大纲。
 
@@ -176,7 +176,7 @@ SERIES_OUTLINE_PROMPT: str = """\
 - 反派不能纯粹是坏人，需有可理解的动机
 
 ## 情绪节奏曲线
-- 每集遵循：钩子(0-5s) → 铺垫(5-15s) → 递进(15-35s) → 高潮(35-50s) → 悬念(50-60s)
+- 每集遵循：钩子(0-5s) → 铺垫(5-15s) → 递进(15-40s) → 高潮(40-65s) → 悬念(65-90s)
 - 集与集之间要有情绪对比：紧张→温柔→震撼→甜蜜→虐心
 - 情绪强度整体呈上升趋势，第N-1集达到情绪顶峰
 
@@ -264,11 +264,11 @@ EPISODE_SCRIPT_PROMPT: str = """\
 
 # 节奏控制（Seedance 2.0 约束：单镜头时长 5～15 秒）
 - 每个场景的 duration_seconds 必须在 5～15 秒之间（视频模型硬限制）
-- 场景数量：**6-10 个场景**（单集最长 60 秒）。**硬上限：不超过 12 场景**
+- 场景数量：**6-12 个场景**（单集 50-90 秒）。**硬上限：不超过 15 场景**
 - 每个 shot = 一次 Seedance 视频生成调用，合并细碎动作为复合镜头
   例如"角色说话 + 对方反应"= 1 个 shot，不是 2 个
 - 所有场景的 duration_seconds 之和必须等于目标集时长（±2秒）
-- 节奏模板：钩子(0-5s) → 铺垫(5-15s) → 递进(15-35s) → 高潮(35-50s) → 悬念(50-60s)
+- 节奏模板：钩子(0-5s) → 铺垫(5-15s) → 递进(15-40s) → 高潮(40-65s) → 悬念(65-90s)
 - 高潮场景用短镜头快切（5-6秒/镜头），铺垫场景可适当拉长（8-12秒）
 - 第一个场景必须是视觉钩子或衔接上集悬念，最后一个场景必须制造悬念
 
@@ -282,7 +282,7 @@ EPISODE_SCRIPT_PROMPT: str = """\
 - 禁止为了凑时长缩写对白；应调整时长来适配对白，而非反向操作
 
 # 台词与旁白
-- 中文对白总字数不超过100字（60秒集），语速约4字/秒
+- 中文对白总字数不超过150字（50-90秒集），语速约3.5字/秒
 - 对白要求："说人话" — 短句、口语化、有情绪爆发力，单句不超过15字
 - 旁白用于推进叙事和内心独白，对白用于冲突和情感爆发
 - 不是每个场景都需要台词，无声的表情特写同样有力
@@ -396,7 +396,7 @@ You are a professional short-drama storyboard decomposer for TikTok-style vertic
   Adjust duration to fit the dialogue, not the other way around.
 
 # Shot count constraint (CRITICAL — read before decomposing)
-- Target: **6-10 shots** per episode (max 60s). HARD CEILING: 12 shots max.
+- Target: **6-12 shots** per episode (50-90s). HARD CEILING: 15 shots max.
 - ALL duration_seconds MUST NOT exceed the target maximum episode duration.
 - MERGE consecutive fine-grained actions into COMPOSITE shots.
   Each shot can contain multiple narrative beats (dialogue + reaction + transition).

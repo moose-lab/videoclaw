@@ -309,7 +309,7 @@ EN_GENRE_VOICE_RECOMMENDATIONS: dict[DramaGenre, dict[str, str]] = {
 
 EN_SERIES_OUTLINE_PROMPT: str = """\
 You are a senior screenwriter for Western vertical short-drama platforms — TikTok, YouTube Shorts,
-and Instagram Reels. Each episode runs 30-90 seconds. Your stories must cut through the feed,
+and Instagram Reels. Each episode runs 50-90 seconds. Your stories must cut through the feed,
 drive completion rate, and convert casual scrollers into paying fans.
 
 Given a concept, produce a complete series outline with character profiles and per-episode synopses.
@@ -346,12 +346,12 @@ Given a concept, produce a complete series outline with character profiles and p
 - Antagonists need comprehensible motives — pure evil is boring;
   wounded pride or desperation is compelling.
 
-## 5-Act Micro-Episode Structure (for 30-90s episodes)
+## 5-Act Micro-Episode Structure (for 50-90s episodes)
 - Act 1 — HOOK (0-5s): Scroll-stopping image or line of dialogue. Zero setup.
 - Act 2 — ESCALATION (5-15s): Rapidly establish who, where, what's at stake.
-- Act 3 — COMPLICATION (15-35s): Twist the knife — new information, obstacle, or reversal.
-- Act 4 — PEAK (35-50s): Emotional or narrative climax of this episode.
-- Act 5 — CLIFFHANGER (50-60s): Leave the viewer unable NOT to tap "next episode."
+- Act 3 — COMPLICATION (15-40s): Twist the knife — new information, obstacle, or reversal.
+- Act 4 — PEAK (40-65s): Emotional or narrative climax of this episode.
+- Act 5 — CLIFFHANGER (65-90s): Leave the viewer unable NOT to tap "next episode."
 
 ## Payoff Beats Every 15 Seconds
 - Every 15 seconds must deliver a PAYOFF BEAT — a reversal, reveal, confrontation, or declaration.
@@ -362,7 +362,7 @@ Given a concept, produce a complete series outline with character profiles and p
 
 ## Emotional Rhythm Curve
 - Each episode follows: Hook(0-5s) -> Build(5-15s) ->
-  Escalate(15-35s) -> Peak(35-50s) -> Hook-next(50-60s)
+  Escalate(15-40s) -> Peak(40-65s) -> Hook-next(65-90s)
 - Episode-to-episode contrast: tense -> tender -> shocking -> sweet -> devastating
 - Overall series arc: emotional intensity RISES through the
   penultimate episode, which is the darkest
@@ -409,7 +409,7 @@ Output JSON schema:
 EN_EPISODE_SCRIPT_PROMPT: str = """\
 You are a senior screenwriter and storyboard director for Western vertical short-drama platforms.
 Given series context and an episode synopsis, produce a shot-by-shot script optimised for
-TikTok / YouTube Shorts / Instagram Reels (9:16 vertical video, 30-90 seconds).
+TikTok / YouTube Shorts / Instagram Reels (9:16 vertical video, 50-90 seconds).
 
 # Character Visual Consistency (Highest Priority)
 - Every time a character appears, visual_prompt MUST include their FULL appearance description.
@@ -455,7 +455,7 @@ TikTok / YouTube Shorts / Instagram Reels (9:16 vertical video, 30-90 seconds).
 - jump_cut: time compression within a scene, urgency
 
 # Pacing Rules (Seedance 2.0 hard constraint: 5-15s per shot)
-- Scene count: **6-10 shots** per episode (max 60s). Hard ceiling: NEVER exceed 12 shots.
+- Scene count: **6-12 shots** per episode (50-90s). Hard ceiling: NEVER exceed 15 shots.
   Each shot = one Seedance video generation call.
 - Each shot duration_seconds MUST be between 5 and 15 seconds (video model hard limit).
 - ALL scene duration_seconds MUST NOT exceed the target episode maximum duration.
@@ -463,13 +463,13 @@ TikTok / YouTube Shorts / Instagram Reels (9:16 vertical video, 30-90 seconds).
   e.g. "character speaks, then reacts" = 1 shot, not 2.
   A single shot can contain multiple beats: dialogue + reaction + camera movement.
 - Rhythm template: Hook(0-5s) -> Build(5-15s) ->
-  Escalate(15-35s) -> Peak(35-50s) -> Cliffhanger(50-60s)
+  Escalate(15-40s) -> Peak(40-65s) -> Cliffhanger(65-90s)
 - Climax scenes: 5-6s (fast cuts). Setup/dialogue scenes: 8-12s each.
 - First scene = visual hook or pickup from previous episode's cliffhanger.
 - Last scene = MUST manufacture a cliffhanger.
 
 # Dialogue and Voice-Over
-- Total spoken words ~100-170 for a 60s episode
+- Total spoken words ~120-220 for a 50-90s episode
   (benchmark: ~98 words/min dialogue + ~19% V.O.).
 - Dialogue must be punchy — short sentences, natural American English, emotional power.
   Single line <= 25 words. No exposition dumps.

@@ -149,8 +149,8 @@ def validate_western_quality(
                 )
 
     # ------------------------------------------------------------------
-    # 8. Dialogue density — ≤100 English dialogue words per 60 seconds
-    #    (prompt allows ~150 total spoken words including narration)
+    # 8. Dialogue density — ≤100 English dialogue words per 60 seconds (proportional)
+    #    (episodes are 50-90s; prompt allows ~120-220 total spoken words)
     # ------------------------------------------------------------------
     for ep_num, script in episode_scripts.items():
         scenes = script.get("scenes", [])
@@ -302,7 +302,7 @@ def validate_chinese_quality(
                 )
 
     # ------------------------------------------------------------------
-    # 8. 台词密度 — ≤100 Chinese characters per 60 seconds
+    # 8. 台词密度 — ≤100 Chinese characters per 60 seconds (proportional，单集 50-90 秒)
     # ------------------------------------------------------------------
     for ep_num, script in episode_scripts.items():
         scenes = script.get("scenes", [])

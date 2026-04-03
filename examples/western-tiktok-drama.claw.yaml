@@ -3,7 +3,7 @@ description: Western photorealistic TikTok short drama (Seedance 2.0, 9:16 verti
 version: "1.0"
 
 defaults:
-  duration: 60
+  duration: 70
   style: photorealistic
   aspect_ratio: "9:16"
   strategy: seedance-2.0

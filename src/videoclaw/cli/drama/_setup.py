@@ -43,8 +43,8 @@ def drama_new(
     ] = 5,
     duration: Annotated[
         float,
-        typer.Option("--duration", "-d", help="Target seconds per episode."),
-    ] = 60.0,
+        typer.Option("--duration", "-d", help="Target seconds per episode (50-90s)."),
+    ] = 70.0,
     style: Annotated[
         str, typer.Option("--style", "-s", help="Visual style.")
     ] = "cinematic",
