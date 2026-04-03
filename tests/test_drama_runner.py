@@ -487,3 +487,88 @@ class TestAlignmentRegenLoop:
             assert call_args[0][2] == "s02"  # scene_id
             assert call_args[1]["recompose"] is True
             assert result is post_regen_state
+
+    @pytest.mark.asyncio
+    async def test_max_regen_rounds_limits_iterations(self):
+        """Should stop after max_regen_rounds even if still misaligned."""
+        import json
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from videoclaw.core.state import ProjectState, Shot
+        from videoclaw.drama.runner import DramaRunner
+
+        runner = DramaRunner.__new__(DramaRunner)
+        runner.drama_mgr = MagicMock()
+        runner.state_mgr = MagicMock()
+        runner.max_concurrency = 1
+        runner.budget_usd = None
+
+        # State that stays misaligned across all rounds
+        def make_misaligned_state():
+            s = ProjectState(project_id="test", prompt="test")
+            s.status = MagicMock()
+            s.status.value = "completed"
+            s.storyboard = [Shot(shot_id="s01")]
+            s.assets["alignment_report"] = json.dumps({
+                "is_aligned": False,
+                "scenes_needing_regen": ["s01"],
+                "total_scripted": 5.0,
+                "total_actual": 9.0,
+            })
+            return s
+
+        state = make_misaligned_state()
+        series = DramaSeries(title="Test", model_id="mock")
+        ep = Episode(
+            number=1,
+            scenes=[DramaScene(scene_id="s01", visual_prompt="a", duration_seconds=5.0)],
+        )
+
+        with patch("videoclaw.drama.runner.build_scene_regen_dag") as mock_regen_dag, \
+             patch("videoclaw.drama.runner.DAGExecutor") as MockExecutor:
+
+            mock_regen_dag.return_value = MagicMock()
+            # Each regen still returns misaligned state
+            mock_exec_instance = AsyncMock()
+            mock_exec_instance.run = AsyncMock(side_effect=[
+                make_misaligned_state(),
+                make_misaligned_state(),
+            ])
+            MockExecutor.return_value = mock_exec_instance
+
+            result = await runner._alignment_regen_loop(
+                series, ep, state, max_regen_rounds=2,
+            )
+
+            # Should have tried exactly 2 rounds
+            assert mock_regen_dag.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_regen_stops_early_on_failed_state(self):
+        """Should stop regen if pipeline state is not 'completed'."""
+        import json
+        from unittest.mock import AsyncMock, MagicMock
+
+        from videoclaw.core.state import ProjectState
+        from videoclaw.drama.runner import DramaRunner
+
+        runner = DramaRunner.__new__(DramaRunner)
+        runner.drama_mgr = MagicMock()
+        runner.state_mgr = MagicMock()
+        runner.max_concurrency = 1
+        runner.budget_usd = None
+
+        state = ProjectState(project_id="test", prompt="test")
+        state.status = MagicMock()
+        state.status.value = "failed"  # Not completed
+        state.assets["alignment_report"] = json.dumps({
+            "is_aligned": False,
+            "scenes_needing_regen": ["s01"],
+        })
+
+        series = DramaSeries(title="Test", model_id="mock")
+        ep = Episode(number=1, scenes=[DramaScene(scene_id="s01", visual_prompt="a")])
+
+        result = await runner._alignment_regen_loop(series, ep, state)
+        # Should return immediately without regen
+        assert result is state
