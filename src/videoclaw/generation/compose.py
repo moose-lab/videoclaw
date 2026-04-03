@@ -476,6 +476,21 @@ class VideoComposer:
         """
         n = len(video_paths)
 
+        # Validate: warn about clips shorter than transition_duration
+        for i, dur in enumerate(clip_durations):
+            if dur <= 0:
+                logger.warning(
+                    "[compose] Clip %d has zero/negative duration (%.2fs) — "
+                    "xfade may produce artifacts",
+                    i, dur,
+                )
+            elif dur < transition_duration:
+                logger.warning(
+                    "[compose] Clip %d (%.2fs) shorter than transition (%.2fs) — "
+                    "offset will be clamped to 0",
+                    i, dur, transition_duration,
+                )
+
         # Compute xfade offsets from clip durations.
         # offset_0 = clip_durations[0] - transition_duration
         # offset_i = offset_{i-1} + clip_durations[i] - transition_duration

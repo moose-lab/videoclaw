@@ -1118,10 +1118,48 @@ class DAGExecutor:
         logger.info("[compose] Composed %d clips -> %s", len(video_paths), composed_path)
 
         # 3. Read subtitles from upstream subtitle_gen node
+        #    When alignment data is available, re-generate subtitles with
+        #    actual durations so timing matches the composed video.
         subtitle_path: Path | None = None
         raw_sub = state.assets.get("subtitles")
         if raw_sub and Path(raw_sub).exists():
             subtitle_path = Path(raw_sub)
+
+        if subtitle_path and alignment and not alignment.is_aligned:
+            # Re-generate subtitles with actual durations
+            try:
+                from videoclaw.generation.subtitle import SubtitleGenerator
+
+                sub_gen = SubtitleGenerator()
+                corrected_scenes = []
+                for sc in matched_scenes:
+                    corrected = dict(sc)
+                    sid = corrected.get("scene_id", "")
+                    # Replace scripted duration with actual
+                    for clip in alignment.clips:
+                        if clip.scene_id == sid:
+                            corrected["duration_seconds"] = clip.actual_duration
+                            break
+                    corrected_scenes.append(corrected)
+
+                language = state.metadata.get("language", "zh")
+                if str(subtitle_path).endswith(".ass"):
+                    sub_gen.generate_ass(
+                        corrected_scenes, subtitle_path, language=language,
+                    )
+                else:
+                    sub_gen.generate_srt(
+                        corrected_scenes, subtitle_path, language=language,
+                    )
+                logger.info(
+                    "[compose] Re-generated subtitles with actual durations -> %s",
+                    subtitle_path,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[compose] Failed to re-generate subtitles: %s — "
+                    "using original timing", exc,
+                )
 
         # 4. Collect audio tracks (TTS + music)
         #    Prefer audio_manifest (has start_time + line_type for proper mix)
