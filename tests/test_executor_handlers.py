@@ -670,8 +670,10 @@ class TestComposeHandler:
             params={
                 "transition": "dissolve",
                 "scenes": [
-                    {"dialogue": "你好", "duration_seconds": 5.0,
+                    {"scene_id": "s01", "dialogue": "你好", "duration_seconds": 5.0,
                      "speaking_character": "林薇", "transition": "dissolve"},
+                    {"scene_id": "s02", "dialogue": "世界", "duration_seconds": 5.0,
+                     "speaking_character": "", "transition": ""},
                 ],
             },
         )
@@ -679,7 +681,22 @@ class TestComposeHandler:
 
         executor = DAGExecutor(dag=dag, state=state, state_manager=sm)
 
-        with patch("videoclaw.generation.compose.VideoComposer") as MockComposer:
+        from videoclaw.generation.compose import AlignedClip, AlignmentReport
+
+        mock_report = AlignmentReport(
+            clips=[
+                AlignedClip("s01", shots_dir / "s01.mp4", 5.0, 5.0, "dissolve"),
+                AlignedClip("s02", shots_dir / "s02.mp4", 5.0, 5.0, ""),
+            ],
+            misaligned_scene_ids=[],
+            total_scripted=10.0,
+            total_actual=10.0,
+        )
+        mock_validation = {"ok": True, "expected": 9.5, "actual": 9.5, "drift": 0.0}
+
+        with patch("videoclaw.generation.compose.align_clips", new_callable=AsyncMock, return_value=mock_report), \
+             patch("videoclaw.generation.compose.validate_composed_duration", new_callable=AsyncMock, return_value=mock_validation), \
+             patch("videoclaw.generation.compose.VideoComposer") as MockComposer:
             mock_instance = MockComposer.return_value
             mock_instance.compose = AsyncMock(return_value=project_dir / "composed.mp4")
             mock_instance.render_final = AsyncMock(return_value=project_dir / "composed_final.mp4")

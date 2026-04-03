@@ -1016,11 +1016,34 @@ class DAGExecutor:
         project_dir = Path(self._config.projects_dir) / state.project_id
         composer = VideoComposer()
 
-        # 1. Collect video paths from completed shots
+        # 1. Scene-anchored video collection:
+        #    Match storyboard shots to scenes by ID to ensure correct ordering
+        #    and 1:1 correspondence even when some shots failed.
+        scenes = node.params.get("scenes", [])
         video_paths: list[Path] = []
-        for shot in state.storyboard:
-            if shot.asset_path and Path(shot.asset_path).exists():
-                video_paths.append(Path(shot.asset_path))
+        matched_scenes: list[dict] = []
+
+        if scenes:
+            # Build shot_id → shot lookup for O(1) matching
+            shot_map = {
+                s.shot_id: s for s in state.storyboard
+                if s.asset_path and Path(s.asset_path).exists()
+            }
+            for scene in scenes:
+                sid = scene.get("scene_id", "")
+                if sid in shot_map:
+                    video_paths.append(Path(shot_map[sid].asset_path))
+                    matched_scenes.append(scene)
+                else:
+                    logger.warning(
+                        "[compose] Scene %s has no completed video — skipping",
+                        sid,
+                    )
+        else:
+            # No scene data — fall back to ordered storyboard collection
+            for shot in state.storyboard:
+                if shot.asset_path and Path(shot.asset_path).exists():
+                    video_paths.append(Path(shot.asset_path))
 
         if not video_paths:
             raise ValueError("No video assets available for composition")
@@ -1028,15 +1051,14 @@ class DAGExecutor:
         # 2. Pre-compose alignment: probe actual durations and match to scenes
         composed_path = project_dir / "composed.mp4"
         transition = node.params.get("transition", "dissolve")
-        scenes = node.params.get("scenes", [])
 
         per_scene_transitions: list[str] | None = None
         clip_durations: list[float] | None = None
         alignment: AlignmentReport | None = None
 
-        if scenes and len(scenes) == len(video_paths):
+        if matched_scenes and len(matched_scenes) == len(video_paths):
             # Scene-anchored alignment: probe actual durations and compare
-            alignment = await align_clips(video_paths, scenes)
+            alignment = await align_clips(video_paths, matched_scenes)
 
             # ALWAYS use actual probed durations for xfade offset calculation
             # to prevent transition misalignment from Seedance duration drift
@@ -1050,18 +1072,7 @@ class DAGExecutor:
                     len(alignment.misaligned_scene_ids),
                     ", ".join(alignment.misaligned_scene_ids),
                 )
-        elif scenes:
-            # Fallback: video count != scene count — log and probe durations
-            logger.warning(
-                "[compose] Video count (%d) != scene count (%d), "
-                "cannot scene-anchor — probing actual durations",
-                len(video_paths), len(scenes),
-            )
-            per_scene_transitions = [
-                s.get("transition", "") or "" for s in scenes
-            ]
-            # clip_durations=None → compose() will probe via ffprobe
-        # else: no scenes — compose() probes durations automatically
+        # else: no scene data — compose() probes durations automatically
 
         await composer.compose(
             video_paths,

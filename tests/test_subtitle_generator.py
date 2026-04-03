@@ -595,6 +595,7 @@ class TestComposeReadsUpstreamSubtitles:
         project_dir.mkdir(parents=True, exist_ok=True)
 
         shot_mock = MagicMock()
+        shot_mock.shot_id = "s01"
         shot_mock.asset_path = str(project_dir / "shot.mp4")
         Path(shot_mock.asset_path).write_bytes(b"fake")
         state.storyboard = [shot_mock]
@@ -607,7 +608,7 @@ class TestComposeReadsUpstreamSubtitles:
         node = TaskNode(
             node_id="compose",
             task_type=TaskType.COMPOSE,
-            params={"scenes": [{"dialogue": "你好", "duration_seconds": 3.0,
+            params={"scenes": [{"scene_id": "s01", "dialogue": "你好", "duration_seconds": 3.0,
                                  "speaking_character": "", "transition": "cut"}]},
         )
 
