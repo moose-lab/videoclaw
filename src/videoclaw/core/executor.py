@@ -1003,7 +1003,13 @@ class DAGExecutor:
         import json as _json
         from pathlib import Path
 
-        from videoclaw.generation.compose import AudioTrack, AudioType, VideoComposer
+        from videoclaw.generation.compose import (
+            AlignmentReport,
+            AudioTrack,
+            AudioType,
+            VideoComposer,
+            align_clips,
+        )
 
         project_dir = Path(self._config.projects_dir) / state.project_id
         composer = VideoComposer()
@@ -1017,22 +1023,43 @@ class DAGExecutor:
         if not video_paths:
             raise ValueError("No video assets available for composition")
 
-        # 2. Concatenate videos with transitions
+        # 2. Pre-compose alignment: probe actual durations and match to scenes
         composed_path = project_dir / "composed.mp4"
         transition = node.params.get("transition", "dissolve")
+        scenes = node.params.get("scenes", [])
 
-        # Extract per-scene transitions and durations when available
         per_scene_transitions: list[str] | None = None
         clip_durations: list[float] | None = None
-        scenes = node.params.get("scenes", [])
-        if scenes:
+        alignment: AlignmentReport | None = None
+
+        if scenes and len(scenes) == len(video_paths):
+            # Scene-anchored alignment: probe actual durations and compare
+            alignment = await align_clips(video_paths, scenes)
+
+            # ALWAYS use actual probed durations for xfade offset calculation
+            # to prevent transition misalignment from Seedance duration drift
+            clip_durations = [c.actual_duration for c in alignment.clips]
+            per_scene_transitions = [c.transition for c in alignment.clips]
+
+            if not alignment.is_aligned:
+                logger.warning(
+                    "[compose] Duration misalignment detected in %d scenes: %s "
+                    "(using actual durations for transitions)",
+                    len(alignment.misaligned_scene_ids),
+                    ", ".join(alignment.misaligned_scene_ids),
+                )
+        elif scenes:
+            # Fallback: video count != scene count — log and probe durations
+            logger.warning(
+                "[compose] Video count (%d) != scene count (%d), "
+                "cannot scene-anchor — probing actual durations",
+                len(video_paths), len(scenes),
+            )
             per_scene_transitions = [
                 s.get("transition", "") or "" for s in scenes
             ]
-            # Extract clip durations from scene data if available
-            durations = [s.get("duration_seconds", 0.0) for s in scenes]
-            if all(d > 0 for d in durations):
-                clip_durations = durations
+            # clip_durations=None → compose() will probe via ffprobe
+        # else: no scenes — compose() probes durations automatically
 
         await composer.compose(
             video_paths,
@@ -1041,6 +1068,27 @@ class DAGExecutor:
             transitions=per_scene_transitions,
             clip_durations=clip_durations,
         )
+
+        # Store alignment report in state for downstream audit
+        if alignment:
+            import json as _alignment_json
+            state.assets["alignment_report"] = _alignment_json.dumps({
+                "is_aligned": alignment.is_aligned,
+                "total_scripted": alignment.total_scripted,
+                "total_actual": alignment.total_actual,
+                "total_drift": alignment.total_drift,
+                "misaligned_scene_ids": alignment.misaligned_scene_ids,
+                "clips": [
+                    {
+                        "scene_id": c.scene_id,
+                        "scripted": c.scripted_duration,
+                        "actual": c.actual_duration,
+                        "drift": c.drift,
+                    }
+                    for c in alignment.clips
+                ],
+            })
+
         logger.info("[compose] Composed %d clips -> %s", len(video_paths), composed_path)
 
         # 3. Read subtitles from upstream subtitle_gen node

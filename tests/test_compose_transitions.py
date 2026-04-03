@@ -12,7 +12,14 @@ from videoclaw.core.planner import DAG, TaskNode, TaskType
 from videoclaw.core.state import ProjectState, Shot, StateManager
 from videoclaw.drama.models import DramaScene, DramaSeries, Episode
 from videoclaw.drama.runner import build_episode_dag
-from videoclaw.generation.compose import VideoComposer, _SUPPORTED_TRANSITIONS
+from videoclaw.generation.compose import (
+    AlignedClip,
+    AlignmentReport,
+    VideoComposer,
+    _DURATION_TOLERANCE_SECONDS,
+    _SUPPORTED_TRANSITIONS,
+    align_clips,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -330,8 +337,8 @@ class TestHandleComposeTransitions:
     """Test that _handle_compose extracts per-scene transitions from scenes."""
 
     @pytest.mark.asyncio
-    async def test_handle_compose_passes_per_scene_transitions(self, tmp_path):
-        """_handle_compose should extract transition from each scene and pass to compose()."""
+    async def test_handle_compose_uses_actual_durations(self, tmp_path):
+        """_handle_compose should use actual probed durations via align_clips."""
         sm = StateManager(projects_dir=tmp_path)
 
         project_dir = tmp_path / "test_project"
@@ -355,15 +362,75 @@ class TestHandleComposeTransitions:
         )
 
         dag = DAG()
+        scenes_data = [
+            {"scene_id": "s01", "dialogue": "", "duration_seconds": 5.0, "transition": "fade"},
+            {"scene_id": "s02", "dialogue": "", "duration_seconds": 5.0, "transition": "wipeleft"},
+            {"scene_id": "s03", "dialogue": "", "duration_seconds": 5.0, "transition": ""},
+        ]
+        node = TaskNode(
+            node_id="compose",
+            task_type=TaskType.COMPOSE,
+            params={"transition": "dissolve", "scenes": scenes_data},
+        )
+        dag.add_node(node)
+
+        executor = DAGExecutor(dag=dag, state=state, state_manager=sm)
+        executor._config = type(executor._config).model_construct(
+            **{**executor._config.model_dump(), "projects_dir": tmp_path},
+        )
+
+        # Mock align_clips to return actual (slightly different) durations
+        mock_report = AlignmentReport(
+            clips=[
+                AlignedClip("s01", shots_dir / "s01.mp4", 5.0, 5.2, "fade"),
+                AlignedClip("s02", shots_dir / "s02.mp4", 5.0, 4.8, "wipeleft"),
+                AlignedClip("s03", shots_dir / "s03.mp4", 5.0, 5.1, ""),
+            ],
+            misaligned_scene_ids=[],
+            total_scripted=15.0,
+            total_actual=15.1,
+        )
+
+        with patch("videoclaw.generation.compose.align_clips", new_callable=AsyncMock, return_value=mock_report), \
+             patch("videoclaw.generation.compose.VideoComposer") as MockComposer:
+            mock_instance = MockComposer.return_value
+            mock_instance.compose = AsyncMock(return_value=project_dir / "composed.mp4")
+            mock_instance.render_final = AsyncMock(return_value=project_dir / "composed_final.mp4")
+
+            await executor._handle_compose(node, state)
+
+            # compose() should use ACTUAL probed durations, not scripted
+            compose_call = mock_instance.compose.call_args
+            assert compose_call.kwargs.get("transitions") == ["fade", "wipeleft", ""]
+            assert compose_call.kwargs.get("clip_durations") == [5.2, 4.8, 5.1]
+
+    @pytest.mark.asyncio
+    async def test_handle_compose_stores_alignment_report(self, tmp_path):
+        """_handle_compose should store alignment report in state.assets."""
+        sm = StateManager(projects_dir=tmp_path)
+
+        project_dir = tmp_path / "test_project"
+        shots_dir = project_dir / "shots"
+        shots_dir.mkdir(parents=True)
+        (shots_dir / "s01.mp4").write_bytes(b"fake_video_1")
+        (project_dir / "composed.mp4").write_bytes(b"composed")
+
+        state = ProjectState(
+            project_id="test_project",
+            prompt="test",
+            storyboard=[
+                Shot(shot_id="s01", asset_path=str(shots_dir / "s01.mp4")),
+            ],
+        )
+
+        dag = DAG()
         node = TaskNode(
             node_id="compose",
             task_type=TaskType.COMPOSE,
             params={
                 "transition": "dissolve",
                 "scenes": [
-                    {"scene_id": "s01", "dialogue": "", "duration_seconds": 5.0, "transition": "fade"},
-                    {"scene_id": "s02", "dialogue": "", "duration_seconds": 5.0, "transition": "wipeleft"},
-                    {"scene_id": "s03", "dialogue": "", "duration_seconds": 5.0, "transition": ""},
+                    {"scene_id": "s01", "dialogue": "", "duration_seconds": 5.0, "transition": ""},
                 ],
             },
         )
@@ -374,17 +441,24 @@ class TestHandleComposeTransitions:
             **{**executor._config.model_dump(), "projects_dir": tmp_path},
         )
 
-        with patch("videoclaw.generation.compose.VideoComposer") as MockComposer:
+        mock_report = AlignmentReport(
+            clips=[AlignedClip("s01", shots_dir / "s01.mp4", 5.0, 5.0, "")],
+            misaligned_scene_ids=[],
+            total_scripted=5.0,
+            total_actual=5.0,
+        )
+
+        with patch("videoclaw.generation.compose.align_clips", new_callable=AsyncMock, return_value=mock_report), \
+             patch("videoclaw.generation.compose.VideoComposer") as MockComposer:
             mock_instance = MockComposer.return_value
             mock_instance.compose = AsyncMock(return_value=project_dir / "composed.mp4")
-            mock_instance.render_final = AsyncMock(return_value=project_dir / "composed_final.mp4")
 
             await executor._handle_compose(node, state)
 
-            # compose() should have been called with transitions and clip_durations kwargs
-            compose_call = mock_instance.compose.call_args
-            assert compose_call.kwargs.get("transitions") == ["fade", "wipeleft", ""]
-            assert compose_call.kwargs.get("clip_durations") == [5.0, 5.0, 5.0]
+            # alignment_report should be stored in state.assets
+            assert "alignment_report" in state.assets
+            report_data = json.loads(state.assets["alignment_report"])
+            assert report_data["is_aligned"] is True
 
     @pytest.mark.asyncio
     async def test_handle_compose_no_scenes_passes_none(self, tmp_path):
@@ -471,3 +545,147 @@ class TestRunnerScenesDataTransition:
         scenes = compose_node.params["scenes"]
 
         assert scenes[0]["transition"] == ""
+
+
+# ---------------------------------------------------------------------------
+# align_clips — pre-compose duration alignment
+# ---------------------------------------------------------------------------
+
+
+class TestAlignClips:
+    """Test the pre-compose duration alignment function."""
+
+    @pytest.mark.asyncio
+    async def test_aligned_clips_within_tolerance(self):
+        """Clips within tolerance should report as aligned."""
+        paths = [Path("/a.mp4"), Path("/b.mp4"), Path("/c.mp4")]
+        scenes = [
+            {"scene_id": "s01", "duration_seconds": 5.0, "transition": "fade"},
+            {"scene_id": "s02", "duration_seconds": 8.0, "transition": "dissolve"},
+            {"scene_id": "s03", "duration_seconds": 6.0, "transition": ""},
+        ]
+
+        # Actual durations within tolerance (±1.0s)
+        with patch(
+            "videoclaw.generation.compose.get_video_duration",
+            new_callable=AsyncMock,
+            side_effect=[5.3, 7.8, 6.5],
+        ):
+            report = await align_clips(paths, scenes)
+
+        assert report.is_aligned
+        assert report.misaligned_scene_ids == []
+        assert len(report.clips) == 3
+        assert report.clips[0].actual_duration == 5.3
+        assert report.clips[1].actual_duration == 7.8
+        assert report.clips[2].actual_duration == 6.5
+
+    @pytest.mark.asyncio
+    async def test_misaligned_clips_beyond_tolerance(self):
+        """Clips beyond tolerance should be reported as misaligned."""
+        paths = [Path("/a.mp4"), Path("/b.mp4")]
+        scenes = [
+            {"scene_id": "s01", "duration_seconds": 10.0, "transition": "fade"},
+            {"scene_id": "s02", "duration_seconds": 8.0, "transition": ""},
+        ]
+
+        # s01: actual=7.5, drift=2.5 > 1.0 → misaligned
+        # s02: actual=8.3, drift=0.3 < 1.0 → aligned
+        with patch(
+            "videoclaw.generation.compose.get_video_duration",
+            new_callable=AsyncMock,
+            side_effect=[7.5, 8.3],
+        ):
+            report = await align_clips(paths, scenes)
+
+        assert not report.is_aligned
+        assert report.misaligned_scene_ids == ["s01"]
+        assert report.clips[0].is_misaligned
+        assert not report.clips[1].is_misaligned
+        assert report.clips[0].drift == pytest.approx(2.5)
+
+    @pytest.mark.asyncio
+    async def test_video_scene_count_mismatch_raises(self):
+        """Mismatched video/scene counts should raise ValueError."""
+        paths = [Path("/a.mp4"), Path("/b.mp4")]
+        scenes = [{"scene_id": "s01", "duration_seconds": 5.0, "transition": ""}]
+
+        with pytest.raises(ValueError, match="Video/scene count mismatch"):
+            await align_clips(paths, scenes)
+
+    @pytest.mark.asyncio
+    async def test_alignment_report_totals(self):
+        """AlignmentReport should compute correct totals."""
+        paths = [Path("/a.mp4"), Path("/b.mp4")]
+        scenes = [
+            {"scene_id": "s01", "duration_seconds": 5.0, "transition": ""},
+            {"scene_id": "s02", "duration_seconds": 10.0, "transition": ""},
+        ]
+
+        with patch(
+            "videoclaw.generation.compose.get_video_duration",
+            new_callable=AsyncMock,
+            side_effect=[5.0, 10.0],
+        ):
+            report = await align_clips(paths, scenes)
+
+        assert report.total_scripted == 15.0
+        assert report.total_actual == 15.0
+        assert report.total_drift == 0.0
+        assert report.is_aligned
+
+    @pytest.mark.asyncio
+    async def test_alignment_preserves_transition(self):
+        """AlignedClip should carry the scene's transition field."""
+        paths = [Path("/a.mp4")]
+        scenes = [{"scene_id": "s01", "duration_seconds": 5.0, "transition": "wipeleft"}]
+
+        with patch(
+            "videoclaw.generation.compose.get_video_duration",
+            new_callable=AsyncMock,
+            return_value=5.0,
+        ):
+            report = await align_clips(paths, scenes)
+
+        assert report.clips[0].transition == "wipeleft"
+
+
+class TestAlignedClipProperties:
+    """Test AlignedClip dataclass properties."""
+
+    def test_drift_calculation(self):
+        clip = AlignedClip("s01", Path("/a.mp4"), 5.0, 7.3, "")
+        assert clip.drift == pytest.approx(2.3)
+
+    def test_is_misaligned_true(self):
+        clip = AlignedClip("s01", Path("/a.mp4"), 5.0, 6.5, "")
+        assert clip.is_misaligned  # 1.5 > 1.0
+
+    def test_is_misaligned_false(self):
+        clip = AlignedClip("s01", Path("/a.mp4"), 5.0, 5.8, "")
+        assert not clip.is_misaligned  # 0.8 < 1.0
+
+    def test_is_misaligned_boundary(self):
+        clip = AlignedClip("s01", Path("/a.mp4"), 5.0, 6.0, "")
+        assert not clip.is_misaligned  # 1.0 == tolerance, not >
+
+
+class TestAlignmentReport:
+    """Test AlignmentReport properties."""
+
+    def test_aligned_report(self):
+        clips = [
+            AlignedClip("s01", Path("/a.mp4"), 5.0, 5.5, "fade"),
+            AlignedClip("s02", Path("/b.mp4"), 8.0, 7.6, ""),
+        ]
+        report = AlignmentReport(clips=clips, misaligned_scene_ids=[], total_scripted=13.0, total_actual=13.1)
+        assert report.is_aligned
+        assert report.total_drift == pytest.approx(0.1)
+
+    def test_misaligned_report(self):
+        clips = [
+            AlignedClip("s01", Path("/a.mp4"), 5.0, 8.0, ""),
+        ]
+        report = AlignmentReport(clips=clips, misaligned_scene_ids=["s01"], total_scripted=5.0, total_actual=8.0)
+        assert not report.is_aligned
+        assert report.total_drift == pytest.approx(3.0)

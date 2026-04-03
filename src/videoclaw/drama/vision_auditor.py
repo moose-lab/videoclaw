@@ -915,6 +915,7 @@ class VisionAuditor:
         video_path: Path,
         episode_number: int,
         total_duration: float | None = None,
+        alignment_report: dict | None = None,
     ) -> ShotAuditResult:
         """Audit a final composed video with duration-adaptive strategy.
 
@@ -922,6 +923,12 @@ class VisionAuditor:
         For medium videos (30-90s): extract 8 frames, full LLM audit.
         For long videos (> 90s): extract 10 frames, SSIM check only + LLM
             on first/last 2 frames (performance optimization).
+
+        Parameters
+        ----------
+        alignment_report:
+            Optional alignment report dict from pre-compose phase.
+            If present, misaligned scenes are surfaced as tolerables.
 
         Returns a ShotAuditResult with the composition-level verdict.
         """
@@ -953,9 +960,33 @@ class VisionAuditor:
         # Extract frames
         frames = extract_frames_as_arrays(video_path, n=n_frames)
 
-        # Layer 1: SSIM temporal check on ALL extracted frames
+        # Layer 0: Duration alignment check (from pre-compose alignment report)
         all_fatals: list[str] = []
         all_tolerables: list[str] = []
+
+        if alignment_report and not alignment_report.get("is_aligned", True):
+            total_drift = alignment_report.get("total_drift", 0.0)
+            misaligned_ids = alignment_report.get("misaligned_scene_ids", [])
+            for clip_info in alignment_report.get("clips", []):
+                if clip_info.get("drift", 0.0) > 1.0:
+                    label = (
+                        f"duration_drift_{clip_info['scene_id']}"
+                        f"_scripted{clip_info['scripted']:.1f}s"
+                        f"_actual{clip_info['actual']:.1f}s"
+                    )
+                    # Drift > 3s is fatal (severe misalignment), else tolerable
+                    if clip_info["drift"] > 3.0:
+                        all_fatals.append(label)
+                    else:
+                        all_tolerables.append(label)
+            logger.info(
+                "[audit] Duration alignment: %d misaligned scenes, "
+                "total drift %.1fs: %s",
+                len(misaligned_ids), total_drift,
+                ", ".join(misaligned_ids),
+            )
+
+        # Layer 1: SSIM temporal check on ALL extracted frames
 
         breaks = detect_temporal_breaks(
             frames,

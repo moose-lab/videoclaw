@@ -17,6 +17,129 @@ from videoclaw.utils.ffmpeg import check_ffmpeg, get_video_duration, run_ffmpeg
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Duration tolerance — how much a clip can deviate from the scripted duration
+# before we flag it as misaligned.
+# ---------------------------------------------------------------------------
+_DURATION_TOLERANCE_SECONDS = 1.0
+
+
+# ---------------------------------------------------------------------------
+# Alignment data model
+# ---------------------------------------------------------------------------
+
+@dataclass
+class AlignedClip:
+    """A video clip matched to its scene with actual and scripted durations."""
+
+    scene_id: str
+    video_path: Path
+    scripted_duration: float
+    actual_duration: float
+    transition: str  # transition to NEXT clip (empty for last)
+
+    @property
+    def drift(self) -> float:
+        """Absolute difference between actual and scripted duration."""
+        return abs(self.actual_duration - self.scripted_duration)
+
+    @property
+    def is_misaligned(self) -> bool:
+        return self.drift > _DURATION_TOLERANCE_SECONDS
+
+
+@dataclass
+class AlignmentReport:
+    """Result of pre-compose alignment check."""
+
+    clips: list[AlignedClip]
+    misaligned_scene_ids: list[str]
+    total_scripted: float
+    total_actual: float
+
+    @property
+    def is_aligned(self) -> bool:
+        return len(self.misaligned_scene_ids) == 0
+
+    @property
+    def total_drift(self) -> float:
+        return abs(self.total_actual - self.total_scripted)
+
+
+async def align_clips(
+    video_paths: list[Path],
+    scenes: list[dict],
+) -> AlignmentReport:
+    """Probe actual video durations and align them with scene data.
+
+    Maps each video path to its corresponding scene by index (scene-anchored).
+    Returns an :class:`AlignmentReport` with per-clip alignment info and a list
+    of scene IDs that are misaligned beyond tolerance.
+
+    Parameters
+    ----------
+    video_paths:
+        Ordered list of video clip paths (must match scenes 1:1).
+    scenes:
+        Scene dicts with at least ``scene_id``, ``duration_seconds``,
+        and ``transition`` keys.
+    """
+    if len(video_paths) != len(scenes):
+        raise ValueError(
+            f"Video/scene count mismatch: {len(video_paths)} videos vs "
+            f"{len(scenes)} scenes — cannot align"
+        )
+
+    clips: list[AlignedClip] = []
+    misaligned: list[str] = []
+
+    for i, (vp, scene) in enumerate(zip(video_paths, scenes)):
+        scene_id = scene.get("scene_id", f"scene_{i}")
+        scripted = float(scene.get("duration_seconds", 0.0))
+        transition = scene.get("transition", "") or ""
+
+        actual = await get_video_duration(vp)
+
+        clip = AlignedClip(
+            scene_id=scene_id,
+            video_path=vp,
+            scripted_duration=scripted,
+            actual_duration=actual,
+            transition=transition,
+        )
+        clips.append(clip)
+
+        if clip.is_misaligned:
+            misaligned.append(scene_id)
+            logger.warning(
+                "[align] Scene %s duration drift: scripted=%.1fs, actual=%.1fs (Δ%.1fs)",
+                scene_id, scripted, actual, clip.drift,
+            )
+
+    total_scripted = sum(c.scripted_duration for c in clips)
+    total_actual = sum(c.actual_duration for c in clips)
+
+    report = AlignmentReport(
+        clips=clips,
+        misaligned_scene_ids=misaligned,
+        total_scripted=total_scripted,
+        total_actual=total_actual,
+    )
+
+    if report.is_aligned:
+        logger.info(
+            "[align] All %d clips aligned (total %.1fs actual vs %.1fs scripted)",
+            len(clips), total_actual, total_scripted,
+        )
+    else:
+        logger.warning(
+            "[align] %d/%d clips misaligned (total drift %.1fs): %s",
+            len(misaligned), len(clips), report.total_drift,
+            ", ".join(misaligned),
+        )
+
+    return report
+
+# ---------------------------------------------------------------------------
 # Data models
 # ---------------------------------------------------------------------------
 

@@ -611,7 +611,17 @@ class TestComposeReadsUpstreamSubtitles:
                                  "speaking_character": "", "transition": "cut"}]},
         )
 
-        with patch("videoclaw.generation.compose.VideoComposer") as MockComposer:
+        from videoclaw.generation.compose import AlignedClip, AlignmentReport
+
+        mock_report = AlignmentReport(
+            clips=[AlignedClip("s0", Path(shot_mock.asset_path), 3.0, 3.0, "cut")],
+            misaligned_scene_ids=[],
+            total_scripted=3.0,
+            total_actual=3.0,
+        )
+
+        with patch("videoclaw.generation.compose.align_clips", new_callable=AsyncMock, return_value=mock_report), \
+             patch("videoclaw.generation.compose.VideoComposer") as MockComposer:
             mock_composer = AsyncMock()
             MockComposer.return_value = mock_composer
 
