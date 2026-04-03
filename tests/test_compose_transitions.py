@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -556,6 +556,86 @@ class TestHandleComposeTransitions:
             # s02 should start at actual_s01 - transition = 6.0 - 0.5 = 5.5
             # (not the scripted 5.0)
             assert audio_tracks[1].start_time == 5.5
+
+    @pytest.mark.asyncio
+    async def test_handle_compose_regens_subtitles_when_misaligned(self, tmp_path):
+        """When alignment is misaligned, subtitles should be re-generated with actual durations."""
+        sm = StateManager(projects_dir=tmp_path)
+
+        project_dir = tmp_path / "test_project"
+        shots_dir = project_dir / "shots"
+        shots_dir.mkdir(parents=True)
+        (shots_dir / "s01.mp4").write_bytes(b"fake_video_1")
+        (shots_dir / "s02.mp4").write_bytes(b"fake_video_2")
+        (project_dir / "composed.mp4").write_bytes(b"composed")
+
+        # Create an upstream subtitle file
+        subtitle_file = project_dir / "subtitles.srt"
+        subtitle_file.write_text("1\n00:00:00,000 --> 00:00:05,000\nOriginal\n", encoding="utf-8")
+
+        state = ProjectState(
+            project_id="test_project",
+            prompt="test",
+            storyboard=[
+                Shot(shot_id="s01", asset_path=str(shots_dir / "s01.mp4")),
+                Shot(shot_id="s02", asset_path=str(shots_dir / "s02.mp4")),
+            ],
+            assets={"subtitles": str(subtitle_file)},
+        )
+
+        dag = DAG()
+        node = TaskNode(
+            node_id="compose",
+            task_type=TaskType.COMPOSE,
+            params={
+                "transition": "dissolve",
+                "scenes": [
+                    {"scene_id": "s01", "dialogue": "Hello", "duration_seconds": 5.0,
+                     "speaking_character": "Alice", "transition": "dissolve"},
+                    {"scene_id": "s02", "dialogue": "World", "duration_seconds": 5.0,
+                     "speaking_character": "Bob", "transition": ""},
+                ],
+            },
+        )
+        dag.add_node(node)
+
+        executor = DAGExecutor(dag=dag, state=state, state_manager=sm)
+        executor._config = type(executor._config).model_construct(
+            **{**executor._config.model_dump(), "projects_dir": tmp_path},
+        )
+
+        # s01 has significant drift → triggers subtitle re-generation
+        mock_report = AlignmentReport(
+            clips=[
+                AlignedClip("s01", shots_dir / "s01.mp4", 5.0, 8.0, "dissolve"),
+                AlignedClip("s02", shots_dir / "s02.mp4", 5.0, 5.0, ""),
+            ],
+            misaligned_scene_ids=["s01"],
+            total_scripted=10.0,
+            total_actual=13.0,
+        )
+        mock_validation = {"ok": True, "expected": 12.5, "actual": 12.5, "drift": 0.0}
+
+        mock_sub_gen = MagicMock()
+
+        with patch("videoclaw.generation.compose.align_clips", new_callable=AsyncMock, return_value=mock_report), \
+             patch("videoclaw.generation.compose.validate_composed_duration", new_callable=AsyncMock, return_value=mock_validation), \
+             patch("videoclaw.generation.compose.VideoComposer") as MockComposer, \
+             patch("videoclaw.generation.subtitle.SubtitleGenerator", return_value=mock_sub_gen):
+            mock_instance = MockComposer.return_value
+            mock_instance.compose = AsyncMock(return_value=project_dir / "composed.mp4")
+            mock_instance.render_final = AsyncMock(return_value=project_dir / "composed_final.mp4")
+
+            await executor._handle_compose(node, state)
+
+            # SubtitleGenerator.generate_srt should have been called (subtitle is .srt)
+            mock_sub_gen.generate_srt.assert_called_once()
+            call_args = mock_sub_gen.generate_srt.call_args
+            corrected_scenes = call_args[0][0]
+            # s01's duration should be corrected from 5.0 to 8.0
+            assert corrected_scenes[0]["duration_seconds"] == 8.0
+            # s02 stays at 5.0
+            assert corrected_scenes[1]["duration_seconds"] == 5.0
 
     @pytest.mark.asyncio
     async def test_handle_compose_no_scenes_passes_none(self, tmp_path):
