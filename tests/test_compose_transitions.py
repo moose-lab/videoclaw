@@ -389,6 +389,7 @@ class TestHandleComposeTransitions:
                 AlignedClip("s03", shots_dir / "s03.mp4", 5.0, 5.1, ""),
             ],
             misaligned_scene_ids=[],
+            invalid_scene_ids=[],
             total_scripted=15.0,
             total_actual=15.1,
         )
@@ -662,10 +663,12 @@ class TestAlignClips:
         ]
 
         # Actual durations within tolerance (±1.0s)
+        def _info(dur):
+            return {"format": {"duration": str(dur)}, "streams": [{"codec_type": "video"}]}
         with patch(
-            "videoclaw.generation.compose.get_video_duration",
+            "videoclaw.generation.compose.get_video_info",
             new_callable=AsyncMock,
-            side_effect=[5.3, 7.8, 6.5],
+            side_effect=[_info(5.3), _info(7.8), _info(6.5)],
         ):
             report = await align_clips(paths, scenes)
 
@@ -687,10 +690,12 @@ class TestAlignClips:
 
         # s01: actual=7.5, drift=2.5 > 1.0 → misaligned
         # s02: actual=8.3, drift=0.3 < 1.0 → aligned
+        def _info(dur):
+            return {"format": {"duration": str(dur)}, "streams": [{"codec_type": "video"}]}
         with patch(
-            "videoclaw.generation.compose.get_video_duration",
+            "videoclaw.generation.compose.get_video_info",
             new_callable=AsyncMock,
-            side_effect=[7.5, 8.3],
+            side_effect=[_info(7.5), _info(8.3)],
         ):
             report = await align_clips(paths, scenes)
 
@@ -718,10 +723,12 @@ class TestAlignClips:
             {"scene_id": "s02", "duration_seconds": 10.0, "transition": ""},
         ]
 
+        def _info(dur):
+            return {"format": {"duration": str(dur)}, "streams": [{"codec_type": "video"}]}
         with patch(
-            "videoclaw.generation.compose.get_video_duration",
+            "videoclaw.generation.compose.get_video_info",
             new_callable=AsyncMock,
-            side_effect=[5.0, 10.0],
+            side_effect=[_info(5.0), _info(10.0)],
         ):
             report = await align_clips(paths, scenes)
 
@@ -736,14 +743,35 @@ class TestAlignClips:
         paths = [Path("/a.mp4")]
         scenes = [{"scene_id": "s01", "duration_seconds": 5.0, "transition": "wipeleft"}]
 
+        def _info(dur):
+            return {"format": {"duration": str(dur)}, "streams": [{"codec_type": "video"}]}
         with patch(
-            "videoclaw.generation.compose.get_video_duration",
+            "videoclaw.generation.compose.get_video_info",
             new_callable=AsyncMock,
-            return_value=5.0,
+            return_value=_info(5.0),
         ):
             report = await align_clips(paths, scenes)
 
         assert report.clips[0].transition == "wipeleft"
+
+    @pytest.mark.asyncio
+    async def test_invalid_clip_detected(self):
+        """Clips without video streams should be flagged as invalid."""
+        paths = [Path("/a.mp4")]
+        scenes = [{"scene_id": "s01", "duration_seconds": 5.0, "transition": ""}]
+
+        # No video stream in the file
+        with patch(
+            "videoclaw.generation.compose.get_video_info",
+            new_callable=AsyncMock,
+            return_value={"format": {"duration": "5.0"}, "streams": [{"codec_type": "audio"}]},
+        ):
+            report = await align_clips(paths, scenes)
+
+        assert not report.all_valid
+        assert report.invalid_scene_ids == ["s01"]
+        assert not report.clips[0].is_valid
+        assert report.clips[0].integrity_error == "no video stream"
 
 
 class TestAlignedClipProperties:

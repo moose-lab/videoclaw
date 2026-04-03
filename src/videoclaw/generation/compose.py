@@ -8,11 +8,11 @@ subtitle overlay, and a one-call ``render_final`` pipeline.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
-from videoclaw.utils.ffmpeg import check_ffmpeg, get_video_duration, run_ffmpeg
+from videoclaw.utils.ffmpeg import check_ffmpeg, get_video_duration, get_video_info, run_ffmpeg
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,8 @@ class AlignedClip:
     scripted_duration: float
     actual_duration: float
     transition: str  # transition to NEXT clip (empty for last)
+    has_video_stream: bool = True
+    integrity_error: str | None = None
 
     @property
     def drift(self) -> float:
@@ -46,6 +48,11 @@ class AlignedClip:
     def is_misaligned(self) -> bool:
         return self.drift > _DURATION_TOLERANCE_SECONDS
 
+    @property
+    def is_valid(self) -> bool:
+        """True if the clip is a valid, playable video with a video stream."""
+        return self.has_video_stream and self.integrity_error is None
+
 
 @dataclass
 class AlignmentReport:
@@ -55,10 +62,15 @@ class AlignmentReport:
     misaligned_scene_ids: list[str]
     total_scripted: float
     total_actual: float
+    invalid_scene_ids: list[str] = field(default_factory=list)
 
     @property
     def is_aligned(self) -> bool:
         return len(self.misaligned_scene_ids) == 0
+
+    @property
+    def all_valid(self) -> bool:
+        return len(self.invalid_scene_ids) == 0
 
     @property
     def total_drift(self) -> float:
@@ -91,13 +103,30 @@ async def align_clips(
 
     clips: list[AlignedClip] = []
     misaligned: list[str] = []
+    invalid: list[str] = []
 
     for i, (vp, scene) in enumerate(zip(video_paths, scenes)):
         scene_id = scene.get("scene_id", f"scene_{i}")
         scripted = float(scene.get("duration_seconds", 0.0))
         transition = scene.get("transition", "") or ""
 
-        actual = await get_video_duration(vp)
+        # Probe duration and validate integrity
+        has_video = True
+        integrity_error: str | None = None
+        try:
+            info = await get_video_info(vp)
+            actual = float(info.get("format", {}).get("duration", 0))
+            # Check for video stream
+            streams = info.get("streams", [])
+            has_video = any(s.get("codec_type") == "video" for s in streams)
+            if not has_video:
+                integrity_error = "no video stream"
+            elif actual <= 0:
+                integrity_error = f"invalid duration ({actual}s)"
+        except Exception as exc:
+            actual = 0.0
+            has_video = False
+            integrity_error = str(exc)
 
         clip = AlignedClip(
             scene_id=scene_id,
@@ -105,10 +134,18 @@ async def align_clips(
             scripted_duration=scripted,
             actual_duration=actual,
             transition=transition,
+            has_video_stream=has_video,
+            integrity_error=integrity_error,
         )
         clips.append(clip)
 
-        if clip.is_misaligned:
+        if not clip.is_valid:
+            invalid.append(scene_id)
+            logger.error(
+                "[align] Scene %s INVALID: %s (%s)",
+                scene_id, integrity_error, vp,
+            )
+        elif clip.is_misaligned:
             misaligned.append(scene_id)
             logger.warning(
                 "[align] Scene %s duration drift: scripted=%.1fs, actual=%.1fs (Δ%.1fs)",
@@ -121,13 +158,19 @@ async def align_clips(
     report = AlignmentReport(
         clips=clips,
         misaligned_scene_ids=misaligned,
+        invalid_scene_ids=invalid,
         total_scripted=total_scripted,
         total_actual=total_actual,
     )
 
-    if report.is_aligned:
+    if invalid:
+        logger.error(
+            "[align] %d/%d clips INVALID (not playable): %s",
+            len(invalid), len(clips), ", ".join(invalid),
+        )
+    elif report.is_aligned:
         logger.info(
-            "[align] All %d clips aligned (total %.1fs actual vs %.1fs scripted)",
+            "[align] All %d clips valid & aligned (total %.1fs actual vs %.1fs scripted)",
             len(clips), total_actual, total_scripted,
         )
     else:
@@ -182,18 +225,24 @@ async def validate_composed_duration(
 
 
 def scenes_needing_regen(alignment: AlignmentReport) -> list[str]:
-    """Return scene IDs that should be regenerated due to duration drift.
+    """Return scene IDs that should be regenerated due to integrity or drift issues.
 
-    Prioritizes scenes with the largest drift (sorted descending).
-    Only includes scenes that exceed the tolerance threshold.
+    Invalid clips (no video stream, corrupt) are listed first,
+    then misaligned clips sorted by drift descending.
     """
+    # Invalid clips take highest priority
+    invalid_ids = set(alignment.invalid_scene_ids)
+    result = list(alignment.invalid_scene_ids)
+
+    # Then drifted clips (excluding already-listed invalid ones)
     drifted = [
         (c.scene_id, c.drift)
         for c in alignment.clips
-        if c.is_misaligned
+        if c.is_misaligned and c.scene_id not in invalid_ids
     ]
     drifted.sort(key=lambda x: x[1], reverse=True)
-    return [sid for sid, _ in drifted]
+    result.extend(sid for sid, _ in drifted)
+    return result
 
 
 # ---------------------------------------------------------------------------

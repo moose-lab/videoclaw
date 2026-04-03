@@ -1092,10 +1092,12 @@ class DAGExecutor:
 
             state.assets["alignment_report"] = _json.dumps({
                 "is_aligned": alignment.is_aligned,
+                "all_valid": alignment.all_valid,
                 "total_scripted": alignment.total_scripted,
                 "total_actual": alignment.total_actual,
                 "total_drift": alignment.total_drift,
                 "misaligned_scene_ids": alignment.misaligned_scene_ids,
+                "invalid_scene_ids": alignment.invalid_scene_ids,
                 "compose_validation": compose_validation,
                 "scenes_needing_regen": regen_ids,
                 "clips": [
@@ -1104,6 +1106,8 @@ class DAGExecutor:
                         "scripted": c.scripted_duration,
                         "actual": c.actual_duration,
                         "drift": c.drift,
+                        "valid": c.is_valid,
+                        "integrity_error": c.integrity_error,
                     }
                     for c in alignment.clips
                 ],
