@@ -1119,6 +1119,22 @@ class DAGExecutor:
                     ", ".join(regen_ids),
                 )
 
+            # Log alignment summary for operator visibility
+            logger.info(
+                "[compose] Alignment summary: %d clips | "
+                "scripted=%.1fs actual=%.1fs drift=%.1fs | "
+                "valid=%d misaligned=%d invalid=%d | "
+                "compose_ok=%s",
+                len(alignment.clips),
+                alignment.total_scripted,
+                alignment.total_actual,
+                alignment.total_drift,
+                sum(1 for c in alignment.clips if c.is_valid),
+                len(alignment.misaligned_scene_ids),
+                len(alignment.invalid_scene_ids),
+                compose_validation.get("ok", "?"),
+            )
+
         logger.info("[compose] Composed %d clips -> %s", len(video_paths), composed_path)
 
         # 3. Read subtitles from upstream subtitle_gen node
