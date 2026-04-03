@@ -360,3 +360,130 @@ def test_scene_and_prop_refs_passed_to_shots(tmp_path):
     assert "poolside_night" in shot.scene_reference_urls
     assert hasattr(shot, "prop_reference_urls")
     assert "brochure" in shot.prop_reference_urls
+
+
+# ---------------------------------------------------------------------------
+# Alignment regen loop
+# ---------------------------------------------------------------------------
+
+
+class TestAlignmentRegenLoop:
+    """Test the _alignment_regen_loop in DramaRunner."""
+
+    @pytest.mark.asyncio
+    async def test_skips_when_no_alignment_report(self):
+        """Should return state unchanged when no alignment_report exists."""
+        import json
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from videoclaw.core.state import ProjectState
+        from videoclaw.drama.runner import DramaRunner
+
+        runner = DramaRunner.__new__(DramaRunner)
+        runner.drama_mgr = MagicMock()
+        runner.state_mgr = MagicMock()
+        runner.max_concurrency = 1
+        runner.budget_usd = None
+
+        state = ProjectState(project_id="test", prompt="test")
+        state.status = MagicMock()
+        state.status.value = "completed"
+        # No alignment_report
+
+        series = DramaSeries(title="Test", model_id="mock")
+        ep = Episode(number=1, scenes=[DramaScene(scene_id="s01", visual_prompt="a")])
+
+        result = await runner._alignment_regen_loop(series, ep, state)
+        assert result is state
+
+    @pytest.mark.asyncio
+    async def test_skips_when_aligned(self):
+        """Should return state unchanged when all clips are aligned."""
+        import json
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from videoclaw.core.state import ProjectState
+        from videoclaw.drama.runner import DramaRunner
+
+        runner = DramaRunner.__new__(DramaRunner)
+        runner.drama_mgr = MagicMock()
+        runner.state_mgr = MagicMock()
+        runner.max_concurrency = 1
+        runner.budget_usd = None
+
+        state = ProjectState(project_id="test", prompt="test")
+        state.status = MagicMock()
+        state.status.value = "completed"
+        state.assets["alignment_report"] = json.dumps({
+            "is_aligned": True,
+            "scenes_needing_regen": [],
+            "total_scripted": 10.0,
+            "total_actual": 10.2,
+        })
+
+        series = DramaSeries(title="Test", model_id="mock")
+        ep = Episode(number=1, scenes=[DramaScene(scene_id="s01", visual_prompt="a")])
+
+        result = await runner._alignment_regen_loop(series, ep, state)
+        assert result is state
+
+    @pytest.mark.asyncio
+    async def test_regens_worst_drifted_scene(self):
+        """Should regenerate the worst-drifted scene and recompose."""
+        import json
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from videoclaw.core.state import ProjectState, Shot
+        from videoclaw.drama.runner import DramaRunner
+
+        runner = DramaRunner.__new__(DramaRunner)
+        runner.drama_mgr = MagicMock()
+        runner.state_mgr = MagicMock()
+        runner.max_concurrency = 1
+        runner.budget_usd = None
+
+        state = ProjectState(project_id="test", prompt="test")
+        state.status = MagicMock()
+        state.status.value = "completed"
+        state.storyboard = [Shot(shot_id="s01"), Shot(shot_id="s02")]
+        state.assets["alignment_report"] = json.dumps({
+            "is_aligned": False,
+            "scenes_needing_regen": ["s02", "s01"],
+            "total_scripted": 10.0,
+            "total_actual": 14.0,
+        })
+
+        series = DramaSeries(title="Test", model_id="mock")
+        ep = Episode(
+            number=1,
+            scenes=[
+                DramaScene(scene_id="s01", visual_prompt="a", duration_seconds=5.0),
+                DramaScene(scene_id="s02", visual_prompt="b", duration_seconds=5.0),
+            ],
+        )
+
+        # After regen, alignment is OK
+        post_regen_state = ProjectState(project_id="test", prompt="test")
+        post_regen_state.status = MagicMock()
+        post_regen_state.status.value = "completed"
+        post_regen_state.assets["alignment_report"] = json.dumps({
+            "is_aligned": True,
+            "scenes_needing_regen": [],
+        })
+
+        with patch("videoclaw.drama.runner.build_scene_regen_dag") as mock_regen_dag, \
+             patch("videoclaw.drama.runner.DAGExecutor") as MockExecutor:
+
+            mock_regen_dag.return_value = MagicMock()
+            mock_exec_instance = AsyncMock()
+            mock_exec_instance.run = AsyncMock(return_value=post_regen_state)
+            MockExecutor.return_value = mock_exec_instance
+
+            result = await runner._alignment_regen_loop(series, ep, state)
+
+            # Should have called build_scene_regen_dag for s02 (worst drift)
+            mock_regen_dag.assert_called_once()
+            call_args = mock_regen_dag.call_args
+            assert call_args[0][2] == "s02"  # scene_id
+            assert call_args[1]["recompose"] is True
+            assert result is post_regen_state

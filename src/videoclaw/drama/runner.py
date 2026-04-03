@@ -777,6 +777,11 @@ class DramaRunner:
 
         state = await executor.run()
 
+        # -- Post-pipeline: alignment-based auto-regen loop --
+        state = await self._alignment_regen_loop(
+            series, episode, state, max_shots=max_shots,
+        )
+
         # Update episode status based on pipeline result
         if state.status.value == "completed":
             episode.status = EpisodeStatus.COMPLETED
@@ -785,6 +790,70 @@ class DramaRunner:
             episode.status = EpisodeStatus.FAILED
 
         self.drama_mgr.save(series)
+        return state
+
+    async def _alignment_regen_loop(
+        self,
+        series: DramaSeries,
+        episode: Episode,
+        state: ProjectState,
+        *,
+        max_shots: int | None = None,
+        max_regen_rounds: int = 2,
+    ) -> ProjectState:
+        """Check alignment report and auto-regenerate misaligned scenes.
+
+        Runs up to *max_regen_rounds* regen cycles.  Each cycle regenerates
+        the most-drifted scene, then recomposes.  Stops early if alignment
+        is acceptable or pipeline is not in completed state.
+        """
+        import json as _regen_json
+
+        for regen_round in range(1, max_regen_rounds + 1):
+            if state.status.value != "completed":
+                break
+
+            raw_report = state.assets.get("alignment_report")
+            if not raw_report:
+                break
+
+            report = _regen_json.loads(raw_report)
+            regen_ids: list[str] = report.get("scenes_needing_regen", [])
+            if not regen_ids:
+                logger.info("[regen] Alignment OK — no scenes need regen")
+                break
+
+            # Only regen the worst-drifted scene per round
+            target_id = regen_ids[0]
+            logger.info(
+                "[regen] Round %d/%d — regenerating scene %s (worst drift)",
+                regen_round, max_regen_rounds, target_id,
+            )
+
+            regen_dag = build_scene_regen_dag(
+                episode, series, target_id, state, recompose=True,
+            )
+
+            tracker = CostTracker(
+                project_id=state.project_id,
+                budget_usd=self.budget_usd,
+            )
+
+            executor = DAGExecutor(
+                dag=regen_dag,
+                state=state,
+                state_manager=self.state_mgr,
+                bus=event_bus,
+                max_concurrency=self.max_concurrency,
+                cost_tracker=tracker,
+            )
+            state = await executor.run()
+
+            logger.info(
+                "[regen] Round %d complete — checking alignment again",
+                regen_round,
+            )
+
         return state
 
     async def run_series(
